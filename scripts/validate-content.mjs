@@ -43,8 +43,10 @@ const moduleIds = new Set(
   walk(join(CONTENT, 'modules'), '.yaml').map((f) => idOf(join(CONTENT, 'modules'), f)),
 );
 const moduleOrders = new Map();
+const moduleParts = new Map(); // id de módulo -> parte (fundamentos, rag, agentes, profesional)
 for (const f of walk(join(CONTENT, 'modules'), '.yaml')) {
-  const { order } = parseYaml(readFileSync(f, 'utf8'));
+  const { order, part } = parseYaml(readFileSync(f, 'utf8'));
+  moduleParts.set(idOf(join(CONTENT, 'modules'), f), part);
   if (moduleOrders.has(order))
     err(rel(f), `order ${order} repetido (también en ${moduleOrders.get(order)})`);
   moduleOrders.set(order, rel(f));
@@ -119,6 +121,40 @@ for (const [id, { file, data, body }] of lessons) {
   if (words > 3200) warn(f, `${words} palabras (el plan recomienda ≤ 3000)`);
 }
 
+// --- Laboratorios ------------------------------------------------------------
+const labsDir = join(CONTENT, 'labs');
+const labIds = new Set();
+if (existsSync(labsDir)) {
+  for (const entry of readdirSync(labsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const id = entry.name;
+    labIds.add(id);
+    const f = `src/content/labs/${id}`;
+    for (const name of ['index.mdx', 'starter.py', 'solution.py', 'test_lab.py'])
+      if (!existsSync(join(labsDir, id, name))) err(f, `falta ${name}`);
+    const index = join(labsDir, id, 'index.mdx');
+    const fm = existsSync(index) ? splitFrontmatter(readFileSync(index, 'utf8')) : null;
+    if (!fm) continue;
+    // Un ": " dentro de un texto YAML sin comillas lo convierte en un diccionario: hay que citarlo.
+    for (const field of ['hints', 'concepts', 'packages', 'relatedLessons'])
+      if ((fm.data[field] ?? []).some((v) => typeof v !== 'string'))
+        err(
+          f,
+          `${field}: todos los elementos deben ser texto (¿falta citar uno que contiene ": "?)`,
+        );
+    if (!moduleIds.has(fm.data.module)) err(f, `el módulo "${fm.data.module}" no existe`);
+    else if (moduleParts.get(fm.data.module) !== fm.data.part)
+      err(
+        f,
+        `part "${fm.data.part}" no coincide con la parte del módulo (${moduleParts.get(fm.data.module)})`,
+      );
+    for (const l of fm.data.relatedLessons ?? [])
+      if (!lessons.has(l)) err(f, `lección relacionada inexistente: ${l}`);
+    if (!/^[a-z]+-\d{2}-[a-z0-9-]+$/.test(id))
+      err(f, 'el id debe ser <parte>-<NN>-<slug> (p. ej. rag-05-bm25)');
+  }
+}
+
 // --- Quizzes -----------------------------------------------------------------
 const quizzesDir = join(CONTENT, 'quizzes');
 const questionIds = new Map();
@@ -185,7 +221,7 @@ for (const [id, { data }] of lessons) {
 
 // --- Informe -----------------------------------------------------------------
 console.log(
-  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size}`,
+  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size} · Labs: ${labIds.size}`,
 );
 for (const w of warnings) console.warn(`  aviso  ${w}`);
 for (const e of errors) console.error(`  ERROR  ${e}`);

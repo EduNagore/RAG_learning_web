@@ -3,6 +3,7 @@
 RAG & Multi-Agent Academy: web para aprender y practicar RAG y sistemas multi-agente (teoría, tests y laboratorios de código).
 
 - Especificación completa: [`docs/PLAN.md`](docs/PLAN.md)
+- Estado de la implementación (punto de reanudación): [`docs/PROGRESS.md`](docs/PROGRESS.md)
 - Decisiones de implementación: [`docs/DECISIONS.md`](docs/DECISIONS.md)
 - Sitio publicado: https://edunagore.github.io/RAG_learning_web/
 
