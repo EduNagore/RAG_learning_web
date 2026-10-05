@@ -767,6 +767,123 @@ MUTANTS = [
         "evaluate_retrieval(current, docs, high=high, low=low)",
         "evaluate_retrieval(current, docs)",
     ),
+    # --- rag-10-metricas-recuperacion ---
+    (
+        "rag-10-metricas-recuperacion",
+        "hit mira un resultado de más",
+        "any(d in relevant for d in ranked[:k])",
+        "any(d in relevant for d in ranked[: k + 1])",
+    ),
+    (
+        "rag-10-metricas-recuperacion",
+        "recall divide entre k",
+        "len(set(ranked[:k]) & set(relevant)) / len(relevant)",
+        "len(set(ranked[:k]) & set(relevant)) / k",
+    ),
+    ("rag-10-metricas-recuperacion", "recall sin None", "if not relevant:", "if False:"),
+    (
+        "rag-10-metricas-recuperacion",
+        "precision divide entre los devueltos",
+        "if d in relevant]) / k",
+        "if d in relevant]) / max(len(ranked[:k]), 1)",
+    ),
+    (
+        "rag-10-metricas-recuperacion",
+        "posición desde 0",
+        "enumerate(ranked[:k], start=1)",
+        "enumerate(ranked[:k], start=0)",
+    ),
+    (
+        "rag-10-metricas-recuperacion",
+        "nDCG ideal sin recortar a k",
+        "range(min(len(relevant), k))",
+        "range(len(relevant))",
+    ),
+    (
+        "rag-10-metricas-recuperacion",
+        "nDCG sin recortar a k",
+        "enumerate(ranked[:k]) if d in relevant",
+        "enumerate(ranked) if d in relevant",
+    ),
+    (
+        "rag-10-metricas-recuperacion",
+        "nDCG sin guarda de ideal cero",
+        "return dcg / ideal if ideal else 0.0",
+        "return dcg / ideal",
+    ),
+    (
+        "rag-10-metricas-recuperacion",
+        "evaluate cuenta preguntas sin relevantes",
+        'rows = [q for q in golden if q["relevant_ids"]]',
+        "rows = list(golden)",
+    ),
+    (
+        "rag-10-metricas-recuperacion",
+        "evaluate falla si falta un ranking",
+        'run.get(q["id"], [])',
+        'run[q["id"]]',
+    ),
+    # --- rag-19-faithfulness ---
+    (
+        "rag-19-faithfulness",
+        "la abstención cuenta como afirmación",
+        'if answer.strip() == "NO_LO_SE":',
+        "if False:",
+    ),
+    (
+        "rag-19-faithfulness",
+        "no quita las citas",
+        'claims = [" ".join(_CITA.sub("", s).split()) for s in sentences]',
+        'claims = [" ".join(s.split()) for s in sentences]',
+    ),
+    (
+        "rag-19-faithfulness",
+        "deja espacio antes de la puntuación",
+        'claims = [re.sub(r"\\s+([.!?])", r"\\1", c) for c in claims]',
+        "claims = list(claims)",
+    ),
+    (
+        "rag-19-faithfulness",
+        "conserva frases vacías",
+        'return [c for c in claims if re.search(r"\\w", c)]',
+        "return claims",
+    ),
+    (
+        "rag-19-faithfulness",
+        "ignora los números",
+        "if any(n not in _NUMERO.findall(context) for n in _NUMERO.findall(claim)):",
+        "if False:",
+    ),
+    (
+        "rag-19-faithfulness",
+        "raíz de 4 letras",
+        "{t[:5] for t in tokenize(claim)}",
+        "{t[:4] for t in tokenize(claim)}",
+    ),
+    (
+        "rag-19-faithfulness",
+        "umbral exclusivo",
+        "len(words & available) / len(words) >= threshold",
+        "len(words & available) / len(words) > threshold",
+    ),
+    (
+        "rag-19-faithfulness",
+        "afirmación sin palabras respaldada",
+        "if not words:\n        return False",
+        "if not words:\n        return True",
+    ),
+    (
+        "rag-19-faithfulness",
+        "score 0 si no hay afirmaciones",
+        "if results else None",
+        "if results else 0.0",
+    ),
+    (
+        "rag-19-faithfulness",
+        "context_recall sin umbral",
+        "claim_supported(c, context_texts, threshold) for c in claims) / len(claims)",
+        "claim_supported(c, context_texts) for c in claims) / len(claims)",
+    ),
 ]
 
 survivors = []

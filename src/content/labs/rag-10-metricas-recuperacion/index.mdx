@@ -1,0 +1,56 @@
+---
+title: Métricas de recuperación
+description: Implementa hit rate, recall@k, precision@k, MRR y nDCG@k y un evaluador que los promedia sobre un conjunto dorado, para comparar de forma objetiva dos sistemas de recuperación.
+part: rag
+module: m08-evaluacion-rag
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - hit rate
+  - recall@k y precision@k
+  - MRR
+  - nDCG
+  - evaluación con conjunto dorado
+packages: []
+hints:
+  - 'Para recall usa la intersección: `len(set(ranked[:k]) & set(relevant)) / len(relevant)`; si `relevant` está vacío devuelve `None`.'
+  - 'Precision divide siempre entre `k`, aunque el ranking tenga menos de `k` documentos.'
+  - 'En nDCG binario, DCG suma `1 / log2(i + 2)` por cada relevante en la posición `i` (desde 0). El ideal usa `min(len(relevant), k)` posiciones consecutivas.'
+  - 'En `evaluate`, ignora las preguntas sin `relevant_ids` y usa `run.get(id, [])` por si falta algún ranking.'
+relatedLessons:
+  - m08-evaluacion-rag/01-metricas-de-recuperacion
+---
+
+## Objetivo
+
+No puedes mejorar lo que no mides. Para decidir si la búsqueda híbrida, un reranker o un nuevo tamaño de chunk **mejoran** tu sistema necesitas métricas de recuperación sobre un conjunto dorado. Vas a implementar las cinco habituales y un evaluador que las promedia.
+
+Todas reciben `ranked` (lista de ids del mejor al peor), `relevant` (conjunto de ids relevantes) y `k`.
+
+## Qué tienes que hacer
+
+- `hit_at_k(ranked, relevant, k)`: `1.0` si algún relevante está entre los `k` primeros y `0.0` si no.
+- `recall_at_k(ranked, relevant, k)`: fracción de los relevantes que aparecen entre los `k` primeros. `None` si no hay relevantes.
+- `precision_at_k(ranked, relevant, k)`: relevantes entre los `k` primeros dividido entre `k`.
+- `reciprocal_rank(ranked, relevant, k=None)`: `1 / posición` del primer relevante dentro de los `k` primeros (todos si `k` es `None`); `0.0` si no aparece.
+- `ndcg_at_k(ranked, relevant, k)`: nDCG con relevancia binaria. `0.0` si no hay relevantes.
+- `evaluate(run, golden, k=3)`: `run` es un diccionario `id_pregunta → ranking`; `golden` es una lista de diccionarios con `id` y `relevant_ids`. Devuelve un diccionario con `n` (preguntas evaluadas, solo las que tienen relevantes) y las medias `hit`, `recall`, `precision`, `mrr` y `ndcg`.
+
+$$
+\text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}_q} \qquad \text{nDCG@k} = \frac{\sum_{i=1}^{k} \text{rel}_i/\log_2(i+1)}{\sum_{i=1}^{\min(|R|,k)} 1/\log_2(i+1)}
+$$
+
+## Un ejemplo para comprobar a mano
+
+```python
+ranking, relevantes = ["d3", "d1", "d9", "d2"], {"d1", "d2"}
+hit_at_k(ranking, relevantes, 1)        # 0.0 (el primero no es relevante)
+recall_at_k(ranking, relevantes, 2)     # 0.5 (solo d1 de los dos relevantes)
+reciprocal_rank(ranking, relevantes)    # 0.5 (primer relevante en la posición 2)
+```
+
+<Callout type="nota" title="Cada métrica cuenta una historia distinta">
+
+Hit rate pregunta «¿lo encontré?», recall «¿encontré todo?», precision «¿cuánto ruido hay?», MRR «¿qué tan arriba?» y nDCG «¿está bien ordenado?». Un cambio puede mejorar una y empeorar otra (como viste con la búsqueda híbrida): por eso se miran varias.
+
+</Callout>

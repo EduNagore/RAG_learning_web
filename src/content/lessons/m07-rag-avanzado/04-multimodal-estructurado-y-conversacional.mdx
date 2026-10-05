@@ -1,0 +1,172 @@
+---
+title: RAG multimodal, sobre datos estructurados y conversacional
+description: Tres extensiones del RAG más allá del texto plano, con recuperación de páginas como imágenes (ColPali), consultas a bases de datos con text-to-SQL y diálogos con memoria, y los riesgos específicos de cada una.
+module: m07-rag-avanzado
+order: 4
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Explicar por qué la extracción de texto pierde información en documentos visuales y cómo ColPali la evita.
+  - Diseñar un RAG sobre datos estructurados con text-to-SQL y las salvaguardas necesarias (solo lectura, esquema acotado, validación).
+  - Describir cómo gestionar el historial en un RAG conversacional (reescritura, memoria, ventana).
+  - Elegir entre estas extensiones según el tipo de dato y la pregunta.
+prerequisites:
+  - m07-rag-avanzado/03-agentic-rag
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: "ColPali: Efficient Document Retrieval with Vision Language Models"
+    url: https://arxiv.org/abs/2407.01449
+    type: paper
+    authors: Faysse, Sibille, Wu et al.
+    year: 2024
+  - title: "Next-Generation Database Interfaces: A Survey of LLM-based Text-to-SQL"
+    url: https://arxiv.org/abs/2406.08426
+    type: paper
+    authors: Hong et al.
+    year: 2024
+  - title: Query Rewriting for Retrieval-Augmented Large Language Models
+    url: https://arxiv.org/abs/2305.14283
+    type: paper
+    authors: Ma, Gong, He, Zhao, Duan
+    year: 2023
+---
+
+## Intuición: no todo el conocimiento es un párrafo de texto
+
+Hasta aquí el corpus eran documentos de texto. En una empresa real, el conocimiento está también en **PDF con tablas y gráficos**, **presentaciones**, **hojas de cálculo**, **bases de datos** y **conversaciones** donde cada pregunta depende de la anterior. Tres variantes del RAG cubren estos casos:
+
+- **RAG multimodal:** recuperar información que está en imágenes, esquemas o páginas con diseño complejo.
+- **RAG sobre datos estructurados:** responder preguntas que en realidad son **consultas a una base de datos** («¿cuántas incidencias hubo en marzo?»).
+- **RAG conversacional:** mantener el hilo de un diálogo sin que cada turno parta de cero.
+
+En los tres, la recuperación sigue siendo el corazón, pero **qué se indexa y cómo se consulta** cambia.
+
+## Cómo funciona
+
+### RAG multimodal: recuperar páginas como imágenes
+
+La tubería habitual para un PDF es: extraer el texto (OCR o análisis de diseño), dividirlo en fragmentos y vectorizarlo. Ese proceso **pierde** lo que no es texto lineal: la estructura de una tabla, un gráfico, el diseño de una página, un diagrama. Los autores de ColPali (Faysse et al., 2024) señalan que los sistemas de recuperación de documentos dependen mucho del texto extraído y tienen dificultades para aprovechar elementos visuales como **figuras, diseños de página, tablas o incluso tipos de letra**, y que ese proceso de extracción es largo y frágil.
+
+Su propuesta es **no extraer el texto**: un modelo de visión y lenguaje genera **embeddings multivectoriales directamente a partir de la imagen de cada página** y usa **interacción tardía** (la misma idea de ColBERT de la lección de reranking) para compararlos con la consulta. Los autores crearon también **ViDoRe**, un benchmark de recuperación visual de documentos con tareas a nivel de página en varios dominios e idiomas, y afirman que su enfoque supera en gran medida a los pipelines modernos de recuperación de documentos siendo mucho más simple, rápido y entrenable de extremo a extremo.
+
+Para usarlo en RAG hay otra pieza: el modelo generativo debe **aceptar imágenes** para leer las páginas recuperadas; si solo acepta texto, hay que extraer texto de ellas en ese punto, con la pérdida correspondiente. Las alternativas son:
+
+- **Describir las imágenes con un modelo de visión** y indexar la descripción como texto (simple, pero pierde detalle y añade un modelo al proceso de ingesta).
+- **Embeddings multimodales** que representan texto e imágenes en el mismo espacio.
+- **Recuperación visual de páginas** (ColPali), que evita la extracción pero genera un vector por trozo de imagen, con un índice mayor.
+
+### RAG sobre datos estructurados: text-to-SQL
+
+Si la respuesta está en una tabla, **un buscador semántico no es la herramienta**: «¿cuántos pedidos se entregaron tarde en marzo?» es una agregación, no un pasaje. La solución habitual es **text-to-SQL**: un LLM traduce la pregunta a una consulta SQL, se ejecuta y el resultado se entrega al modelo (o al usuario) para formular la respuesta. Hong et al. (2024), en su revisión de text-to-SQL con LLM, identifican tres obstáculos: **entender la pregunta del usuario, comprender el esquema de la base de datos y generar SQL correcto en sintaxis y en semántica**.
+
+Un pipeline razonable:
+
+1. **Dar al modelo solo el esquema relevante** (tablas y columnas, con descripciones y algún valor de ejemplo), no toda la base de datos.
+2. **Generar la consulta** y **validarla** antes de ejecutarla.
+3. **Ejecutar con un usuario de solo lectura**, con límite de filas y de tiempo.
+4. **Devolver el resultado y la consulta** para que sea comprobable, y generar la respuesta a partir del resultado real, no de la memoria del modelo.
+
+El peligro principal es que **el SQL lo escribe un modelo a partir de texto controlado por un usuario**. Una pregunta maliciosa o un dato contaminado pueden provocar una consulta destructiva o una fuga de datos. Las salvaguardas no se delegan en el prompt («no borres nada»): se aplican en código y en la base de datos, con permisos mínimos.
+
+El siguiente ejemplo monta una tabla con los metadatos del corpus Nimbus y un ejecutor que **solo admite una sentencia `SELECT`**, sin palabras de escritura, con un máximo de filas. Las tres consultas están escritas a mano (como si las hubiera generado el modelo).
+
+```python
+import re
+import sqlite3
+
+from ragkit.data import load_corpus
+
+# Una tabla estructurada con los metadatos del corpus Nimbus.
+con = sqlite3.connect(":memory:")
+con.execute("CREATE TABLE docs (id TEXT, title TEXT, department TEXT, kind TEXT, access TEXT)")
+con.executemany(
+    "INSERT INTO docs VALUES (?, ?, ?, ?, ?)",
+    [(d["id"], d["title"], d["department"], d["kind"], d["access"]) for d in load_corpus()],
+)
+
+
+def ejecutar_sql_seguro(sql, max_filas=5):
+    """Solo SELECT, una única sentencia, sin escritura; devuelve un máximo de filas."""
+    limpia = sql.strip().rstrip(";")
+    if ";" in limpia:
+        raise ValueError("solo se permite una sentencia")
+    if not re.match(r"(?is)^select\b", limpia):
+        raise ValueError("solo se permiten consultas SELECT")
+    if re.search(r"(?i)\b(insert|update|delete|drop|alter|attach|pragma)\b", limpia):
+        raise ValueError("sentencia no permitida")
+    return con.execute(limpia).fetchmany(max_filas)
+
+
+# El SQL lo escribiría un LLM; aquí hay tres ejemplos escritos a mano.
+for sql in (
+    "SELECT department, COUNT(*) FROM docs WHERE access = 'public' GROUP BY department ORDER BY 2 DESC",
+    "SELECT title FROM docs WHERE kind = 'incident'",
+    "DROP TABLE docs",
+):
+    try:
+        print("OK  ", ejecutar_sql_seguro(sql))
+    except ValueError as e:
+        print("RECHAZADA:", e)
+```
+
+Salida:
+
+```text
+OK   [('Envíos', 8), ('Devoluciones', 6), ('Facturación', 5), ('Legal', 3), ('Atención al cliente', 3)]
+OK   [('Incidencia INC-2026-0417: caída del seguimiento',)]
+RECHAZADA: solo se permiten consultas SELECT
+```
+
+Este validador es **una capa**, no la defensa completa: una lista de palabras prohibidas es fácil de rodear y de equivocar (rechaza una columna llamada `update_date`, y no controla qué tablas se leen). La defensa real es de **permisos**: un usuario de base de datos de solo lectura, con acceso únicamente a las vistas necesarias y con el filtro de filas del usuario aplicado por la base de datos (no por el modelo). Fíjate además en que la primera consulta cuenta solo documentos **públicos**: los permisos son parte del diseño, igual que en la recuperación vectorial.
+
+### RAG conversacional: reescribir, recordar y acotar
+
+En un diálogo, el último mensaje rara vez es una consulta completa: «¿y para empresas?» no se puede buscar. Hay tres técnicas, que suelen combinarse:
+
+- **Reescritura de la pregunta con el historial.** Un LLM convierte el mensaje en una pregunta autocontenida («¿cuál es el plazo de devolución para clientes empresa?») antes de recuperar. Es la aplicación directa de la reformulación de la lección de transformación de consulta (Ma et al., 2023, y su esquema Rewrite-Retrieve-Read).
+- **Ventana de historial.** Se entregan al generador los últimos turnos (con un límite de tokens) para que mantenga el hilo.
+- **Memoria resumida o con recuperación.** Cuando la conversación es larga, se resume lo anterior o se guarda en un almacén y se **recupera** lo relevante, igual que un documento más. La memoria de agentes se estudia en un módulo propio de la parte de agentes.
+
+Dos detalles de calidad: **recupera con la pregunta reescrita, no con el mensaje crudo**, y **no mezcles recuperaciones antiguas con nuevas** sin criterio: si el usuario cambia de tema, el contexto del turno anterior es ruido.
+
+## Trade-offs
+
+| Extensión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Texto extraído + embeddings | Maduro, barato | Pierde tablas, gráficos y diseño |
+| Descripción de imágenes con un modelo | Simple de integrar | Pierde detalle; coste de ingesta |
+| Recuperación visual (ColPali) | Evita la extracción; aprovecha el diseño | Índice mayor; el generador debe leer imágenes |
+| Text-to-SQL | Respuestas exactas y agregaciones | Riesgo de seguridad; errores de esquema y de semántica |
+| Reescritura con historial | Hace buscables los mensajes de seguimiento | Una llamada extra; puede inventar contexto |
+| Memoria resumida | Conversaciones largas con coste acotado | El resumen pierde detalles y puede arrastrar errores |
+
+## Errores comunes en producción
+
+- **Indexar PDF visuales solo con texto extraído** y no revisar qué se perdió: tablas aplanadas y gráficos ausentes dan respuestas incompletas sin que nadie lo note.
+- **Ejecutar SQL generado con una cuenta de escritura.** Aplica permisos mínimos y solo lectura en la base de datos, no solo en el prompt.
+- **Dar todo el esquema al modelo.** Empeora la precisión y expone tablas que no vienen al caso; entrega solo lo relevante.
+- **Responder desde la memoria del modelo en lugar del resultado de la consulta.** La respuesta debe construirse con las filas devueltas; muestra también la consulta.
+- **No limitar filas ni tiempo.** Una consulta mal formada puede devolver millones de filas o bloquear la base de datos.
+- **Reescribir sin contexto suficiente.** Una reescritura que inventa un tema equivocado lleva la búsqueda al sitio erróneo; incluye los turnos relevantes y registra la pregunta reescrita.
+- **Historial infinito.** Entregar toda la conversación en cada turno dispara coste y ruido; usa ventana y resumen.
+- **Olvidar los permisos entre turnos.** Si un usuario cambia de rol a mitad de sesión, la memoria y las recuperaciones previas pueden contener datos que ya no debería ver.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo harías RAG sobre PDF con tablas y gráficos?"_ Pista: análisis de diseño y extracción cuidadosa, descripción de imágenes o recuperación visual de páginas tipo ColPali con un generador que lea imágenes; evaluar qué se pierde.
+- _"¿Cómo respondes preguntas sobre datos tabulares?"_ Pista: text-to-SQL con esquema acotado, validación, solo lectura, límite de filas, y respuesta basada en el resultado real.
+- _"¿Cómo evitas que un text-to-SQL sea peligroso?"_ Pista: permisos mínimos en la base de datos (no en el prompt), validación de la consulta, límites y filtro de filas por usuario.
+- _"¿Cómo manejas el historial en un chatbot RAG?"_ Pista: reescribir la pregunta autocontenida, ventana de turnos y memoria resumida o recuperada.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Extraer texto de documentos visuales **pierde** tablas, gráficos y diseño; **ColPali** recupera páginas como imágenes con interacción tardía (ViDoRe es su benchmark).
+- Las preguntas de **datos estructurados** se resuelven con **text-to-SQL**; las salvaguardas (solo lectura, esquema acotado, límites) van en **código y permisos**, no en el prompt.
+- Responde desde el **resultado de la consulta** y muéstrala para que se pueda comprobar.
+- En un **RAG conversacional**, recupera con la **pregunta reescrita** y acota el historial con ventana y resumen.
+- Cada extensión añade coste y riesgos propios; adóptala cuando el tipo de dato lo exija.
+
+</KeyTakeaways>

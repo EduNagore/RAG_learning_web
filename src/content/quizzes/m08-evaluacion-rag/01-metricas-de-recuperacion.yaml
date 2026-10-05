@@ -1,0 +1,99 @@
+lesson: m08-evaluacion-rag/01-metricas-de-recuperacion
+questions:
+  - id: m08-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Por qué se evalúa la recuperación por separado de la generación?'
+    options:
+      - 'Porque la generación no se puede evaluar.'
+      - 'Para saber en cuál de las dos etapas falla el sistema: no traer la evidencia o no usarla bien.'
+      - 'Porque las métricas de recuperación no necesitan datos.'
+      - 'Porque la recuperación no afecta a la respuesta.'
+    answer: [1]
+    explanation: 'Mirar solo la respuesta final no distingue si falló la recuperación o la generación. Evaluar cada etapa permite localizar el problema.'
+    ref: '#intuición-evaluar-la-recuperación-por-separado'
+
+  - id: m08-01-q2
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código?'
+    code: |-
+      ranked = ["d3", "d1", "d9", "d2"]
+      relevant = {"d1", "d2"}
+      print(len(set(ranked[:2]) & relevant) / len(relevant))
+    options:
+      - '1.0'
+      - '0.25'
+      - '0.5'
+      - '2.0'
+    answer: [2]
+    explanation: 'Entre los dos primeros solo está d1 (de los dos relevantes), así que el recall@2 es 1/2 = 0,5.'
+    ref: '#recallk-cobertura'
+
+  - id: m08-01-q3
+    type: single
+    difficulty: 2
+    prompt: 'Cada pregunta del conjunto dorado tiene un único documento relevante y se mide con k = 3. ¿Cuál es el máximo posible de precision@3?'
+    options:
+      - '1,0'
+      - '0,33 aproximadamente (1/3), aunque el sistema sea perfecto.'
+      - '0,5'
+      - '0,0'
+    answer: [1]
+    explanation: 'Con un solo relevante, como mucho uno de los tres resultados lo es. Precision@k tiene el techo (número de relevantes)/k, por eso no debe interpretarse sin él.'
+    ref: '#precisionk-ruido'
+
+  - id: m08-01-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Cuándo es más adecuado MRR que hit rate?'
+    options:
+      - 'Cuando solo importa si hay algún relevante, sin importar la posición.'
+      - 'Cuando importa qué tan arriba aparece el primer relevante, por ejemplo porque el generador atiende más a lo primero.'
+      - 'Cuando no hay documentos relevantes.'
+      - 'Cuando se quiere medir la latencia.'
+    answer: [1]
+    explanation: 'MRR premia que el primer relevante esté arriba (1,0 en primera posición frente a 0,33 en tercera). Hit rate solo mira si está dentro de los k primeros.'
+    ref: '#mrr-rango-recíproco-medio'
+
+  - id: m08-01-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, RRF ganaba en hit@3 y BM25 en MRR y nDCG@3. ¿Qué conclusión es correcta?'
+    options:
+      - 'Hay un único «mejor sistema» independiente de la métrica.'
+      - 'Las métricas pueden discrepar: la fusión encontró algo más pero colocó los relevantes más abajo; hay que decidir qué importa antes de mirar los números.'
+      - 'Las métricas están mal calculadas.'
+      - 'BM25 es siempre mejor que cualquier fusión.'
+    answer: [1]
+    explanation: 'Cada métrica cuenta una historia distinta (cobertura frente a posición). Por eso se reportan varias y el criterio de decisión se fija antes.'
+    ref: '#un-experimento-tres-sistemas-cinco-métricas'
+
+  - id: m08-01-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué prácticas hacen más fiable la evaluación de la recuperación? Marca todas las correctas.'
+    options:
+      - 'Medir con el mismo k que se entrega al generador.'
+      - 'Reservar preguntas de validación que no se usen para ajustar parámetros.'
+      - 'Aplicar los filtros de permisos reales al evaluar.'
+      - 'Confiar en una mejora de 3 puntos medida con 28 preguntas sin revisar qué preguntas cambian.'
+    answer: [0, 1, 2]
+    explanation: 'Medir con el mismo k, reservar preguntas de validación y aplicar los filtros reales reducen sesgos. Con 28 preguntas, 3 puntos pueden ser una sola pregunta: hay que revisar los cambios o usar intervalos de confianza.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m08-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'nDCG es la única de las cinco métricas de la lección que admite relevancia graduada.'
+    answer: [0]
+    explanation: 'Es verdadero. Hit rate, recall, precision y MRR usan relevancia binaria; nDCG puede ponderar con grados (0, 1, 2, 3).'
+    ref: '#ndcgk-ganancia-acumulada-descontada-normalizada'
+
+  - id: m08-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un modelo que lidera el promedio de MTEB será necesariamente el mejor en tu dominio.'
+    answer: [1]
+    explanation: 'Es falso. MTEB concluye que ningún método domina en todas las tareas, y tu dominio puede diferir. Los benchmarks preseleccionan; la decisión se valida con tu conjunto dorado.'
+    ref: '#más-allá-de-tu-corpus-benchmarks-públicos'
