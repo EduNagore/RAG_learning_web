@@ -1,0 +1,86 @@
+lesson: m04-indices-vectoriales/02-metricas-y-filtrado
+questions:
+  - id: m04-02-q1
+    type: single
+    difficulty: 2
+    prompt: 'Con vectores **normalizados** (norma 1), ¿cómo se comparan el coseno, el producto escalar y la distancia euclídea?'
+    options:
+      - 'Producen el mismo orden de resultados.'
+      - 'El coseno siempre da el orden contrario al producto escalar.'
+      - 'Solo la euclídea es válida.'
+      - 'No se pueden usar con vectores normalizados.'
+    answer: [0]
+    explanation: 'Con norma 1 las tres métricas son equivalentes para ordenar. Por eso se recomienda normalizar y usar producto escalar, que es más barato de calcular.'
+    ref: '#métricas-de-distancia'
+
+  - id: m04-02-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué el **postfiltrado** puede devolver menos de k resultados o ninguno?'
+    options:
+      - 'Porque primero se buscan los k mejores en todo el índice y después se descartan los que no cumplen el filtro.'
+      - 'Porque filtra antes de buscar.'
+      - 'Porque desactiva el índice.'
+      - 'Porque solo funciona con vectores binarios.'
+    answer: [0]
+    explanation: 'Si los mejores resultados globales no cumplen la condición, el filtro los descarta todos aunque existan vectores válidos más lejos. En el ejemplo de la lección devolvió una lista vacía frente a los cinco resultados del prefiltrado.'
+    ref: '#el-problema-del-filtrado'
+
+  - id: m04-02-q3
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código, que simula un postfiltrado?'
+    code: |-
+      top_global = ["a", "b", "c", "d", "e"]   # los 5 más cercanos de todo el índice
+      validos = {"x", "y"}                      # los únicos que cumplen el filtro
+      print(len([r for r in top_global if r in validos]))
+    options:
+      - '0'
+      - '2'
+      - '5'
+      - '1'
+    answer: [0]
+    explanation: 'Ninguno de los cinco mejores globales cumple el filtro, así que el postfiltrado los descarta todos y queda una lista vacía, aunque existan vectores válidos (x e y) menos cercanos.'
+    ref: '#el-problema-del-filtrado'
+
+  - id: m04-02-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Dónde debe aplicarse el filtro de **permisos** por usuario en un sistema RAG?'
+    options:
+      - 'Dentro de la recuperación, antes de que el modelo vea ningún fragmento.'
+      - 'Sobre la respuesta ya generada.'
+      - 'Solo en la interfaz de usuario.'
+      - 'No hace falta aplicarlo.'
+    answer: [0]
+    explanation: 'Si el modelo ya ha recibido contenido restringido en su contexto, puede filtrarlo en la respuesta. El permiso debe aplicarse al recuperar, igual que cualquier otro filtro, o mediante particiones por inquilino.'
+    ref: '#un-ejemplo-real'
+
+  - id: m04-02-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué estrategias ayudan a que los filtros no rompan la recuperación? Marca todas las correctas.'
+    options:
+      - 'Filtrado durante la búsqueda con un índice de metadatos sobre el grafo.'
+      - 'Prefiltrado del subconjunto válido cuando el filtro es muy restrictivo.'
+      - 'Particiones o namespaces para aislar datos de cada inquilino.'
+      - 'Postfiltrar siempre sin comprobar cuántos resultados quedan.'
+    answer: [0, 1, 2]
+    explanation: 'El filtrado durante la búsqueda, el prefiltrado y las particiones son estrategias reales (Qdrant extiende HNSW con un índice de payload, el prefiltrado garantiza resultados válidos y los namespaces aíslan datos). Postfiltrar a ciegas es justamente el problema.'
+    ref: '#el-problema-del-filtrado'
+
+  - id: m04-02-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Filtrar por un campo de metadatos que no está indexado no afecta al rendimiento de la consulta.'
+    answer: [1]
+    explanation: 'Es falso. Un filtro sobre un campo sin índice obliga a recorrer todo el conjunto. Por eso conviene crear índices sobre los campos que se usan para filtrar.'
+    ref: '#diseñar-los-metadatos-y-las-particiones'
+
+  - id: m04-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Los metadatos deben ser consistentes en formato (mayúsculas, fechas), porque si no el filtro puede no encontrar lo que debería.'
+    answer: [0]
+    explanation: 'Es verdadero. Un departamento escrito de dos formas o fechas en formatos distintos hacen que un filtro de igualdad deje fuera documentos válidos. Conviene definir un esquema pequeño y estable.'
+    ref: '#errores-comunes-en-producción'

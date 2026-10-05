@@ -1,0 +1,164 @@
+---
+title: Métricas de distancia y filtrado por metadatos
+description: Qué métrica elegir (coseno, producto escalar, euclídea), por qué el filtrado por metadatos interactúa con los índices aproximados y qué estrategias existen para que los filtros no rompan la recuperación.
+module: m04-indices-vectoriales
+order: 2
+level: avanzado
+estimatedMinutes: 17
+objectives:
+  - Elegir la métrica de distancia adecuada y entender cuándo coseno, producto escalar y euclídea ordenan igual.
+  - Explicar el problema del postfiltrado y las alternativas, prefiltrado y filtrado durante la búsqueda.
+  - Diseñar un esquema de metadatos y de particiones (namespaces) para filtros y permisos.
+  - Reconocer los límites del filtrado en índices aproximados y cómo se mitigan.
+prerequisites:
+  - m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: "ACORN: Performant and Predicate-Agnostic Search Over Vector Embeddings and Structured Data"
+    url: https://arxiv.org/abs/2403.04871
+    type: paper
+    authors: Patel, Kraft, Guestrin, Zaharia
+    year: 2024
+  - title: pgvector (repositorio y documentación)
+    url: https://github.com/pgvector/pgvector
+    type: docs
+    authors: pgvector
+    year: 2026
+  - title: Qdrant, visión general de la documentación
+    url: https://qdrant.tech/documentation/overview/
+    type: docs
+    authors: Qdrant
+    year: 2026
+  - title: Vector embeddings (documentación de OpenAI)
+    url: https://developers.openai.com/api/docs/guides/embeddings
+    type: docs
+    authors: OpenAI
+    year: 2026
+relatedLabs:
+  - rag-06-indice-vectorial
+---
+
+## Intuición: «los mejores, pero solo de Facturación»
+
+Una consulta real casi nunca es solo «los vectores más cercanos». Es «los más cercanos **que además** sean de este departamento, de este año, de este cliente y que el usuario tenga permiso de ver». Esa combinación de **similitud más condiciones estructuradas** es la norma en producción, y es mucho más delicada de lo que parece, porque los índices aproximados están diseñados para recorrer el espacio vectorial, no para respetar condiciones sobre otros campos.
+
+Esta lección cubre las dos mitades: la métrica con la que se mide «lo cercano» y el filtrado por metadatos.
+
+## Cómo funciona
+
+### Métricas de distancia
+
+Las tres métricas habituales ya las conoces de la lección de intuición de embeddings: **coseno**, **producto escalar** y **distancia euclídea**. Lo que importa en la práctica:
+
+- **Usa la que recomiende el modelo de embeddings.** Se entrenó con una similitud concreta; usar otra puede degradar el resultado.
+- **Con vectores normalizados (norma 1) las tres ordenan igual.** La documentación de OpenAI lo expresa así para sus embeddings, que vienen normalizados: el coseno se puede calcular algo más rápido con un simple producto escalar y el coseno y la distancia euclídea producen **rankings idénticos**. Y recomienda el coseno, señalando que la elección de la función de distancia normalmente importa poco.
+- **El producto escalar sin normalizar** depende de la magnitud de los vectores: útil en algunos modelos de recomendación, peligroso si no sabes si tus vectores están normalizados.
+- **Otras métricas** como Hamming o Jaccard se usan con vectores binarios (cuantizados) o conjuntos; la extensión pgvector de PostgreSQL, por ejemplo, soporta L2, producto escalar, coseno, L1, Hamming y Jaccard.
+
+La regla práctica: **normaliza tus vectores** y usa producto escalar o coseno; es la combinación más rápida y la menos propensa a errores.
+
+### El problema del filtrado
+
+Supón que buscas los 5 fragmentos más cercanos a una consulta, pero solo entre los del departamento de **Facturación**. Hay tres estrategias, con consecuencias muy distintas:
+
+**1. Postfiltrado:** buscar primero los _k_ más cercanos **en todo el índice** y **después** descartar los que no cumplen la condición. Es lo más simple y lo que hacen muchos sistemas por defecto, pero tiene un fallo grave: si los mejores resultados globales no cumplen el filtro, **se descartan todos y devuelves pocos o ningún resultado**, aunque existan vectores válidos más lejos. La documentación de pgvector lo reconoce expresamente: con índices aproximados, el filtrado se aplica **después** de recorrer el índice, lo que produce menos resultados que la búsqueda exacta; ofrece un modo de _escaneo iterativo_ para seguir recorriendo el índice hasta reunir los resultados que se piden.
+
+**2. Prefiltrado:** aplicar primero el filtro para obtener el subconjunto válido y buscar **solo dentro de él**. Garantiza devolver _k_ resultados válidos, pero si el índice es un grafo ya construido sobre **todos** los vectores, filtrar antes puede dejar el grafo «desconectado» o forzar una búsqueda exacta sobre el subconjunto (lenta si es grande).
+
+**3. Filtrado durante la búsqueda:** el índice conoce los metadatos y aplica la condición **mientras recorre** el grafo o las listas. Es lo más robusto, pero exige diseño específico. Qdrant, por ejemplo, documenta que se crea un **índice de _payload_ (metadatos)** sobre los campos de filtrado, que extiende el grafo HNSW para que los criterios se apliquen **durante la fase de búsqueda semántica**. Y la investigación se ocupa del problema: ACORN (Patel et al., 2024) propone una búsqueda híbrida **agnóstica al predicado** construida sobre HNSW, con un recorrido por el subgrafo que cumple el predicado, y reporta, según sus autores, un rendimiento superior a los métodos previos con un caudal entre 2 y 1 000 veces mayor a igual recall.
+
+### Un ejemplo real
+
+Con el corpus de Nimbus Logística, comparemos las dos primeras estrategias para la consulta «¿cuánto tarda y cuánto cuesta un envío?» con k = 5, filtrando por el departamento **Facturación** (que tiene 5 documentos):
+
+```python
+import numpy as np
+from ragkit.data import load_corpus
+from ragkit.embeddings import HashingEmbedder
+
+corpus = load_corpus()
+emb = HashingEmbedder(dim=512)
+matriz = emb.embed_many([d["title"] + " " + d["text"] for d in corpus])
+puntuaciones = matriz @ emb.embed("¿cuánto tarda y cuánto cuesta un envío?")
+
+def mejores(indices, k):
+    return [corpus[i]["id"] for i in sorted(indices, key=lambda i: -puntuaciones[i])[:k]]
+
+k = 5
+cumple = lambda i: corpus[i]["department"] == "Facturación"
+
+global_top = mejores(range(len(corpus)), k)
+post = [d for d in global_top if next(c for c in corpus if c["id"] == d)["department"] == "Facturación"]
+pre = mejores([i for i in range(len(corpus)) if cumple(i)], k)
+
+print("top-5 global:", global_top)   # ['doc-008', 'doc-007', 'doc-005', 'doc-002', 'doc-033']
+print("postfiltro:", post, len(post))  # [] 0
+print("prefiltro:", pre, len(pre))     # ['doc-018', 'doc-019', 'doc-017', 'doc-015', 'doc-016'] 5
+```
+
+El resultado es contundente: los 5 documentos más parecidos a la consulta son de envíos y devoluciones, así que el **postfiltrado descarta los cinco y devuelve una lista vacía**, mientras que el prefiltrado devuelve los cinco documentos de Facturación. Los segundos no son especialmente relevantes (la pregunta era sobre envíos), pero **el sistema responde con lo que se le pidió** en lugar de quedarse sin resultados. Lo importante es la diferencia de **comportamiento**, no la relevancia de este caso concreto.
+
+<Callout type="aviso" title="El filtro de permisos es el filtro más importante">
+
+Un filtro por nivel de acceso no es un asunto de calidad sino de **seguridad**. Si un postfiltrado descarta los fragmentos restringidos **después** de la búsqueda, el sistema puede quedarse sin resultados (un problema de calidad), pero lo grave es el caso inverso: aplicar el permiso **después de generar** la respuesta. El filtro debe aplicarse **dentro de la recuperación**, antes de que el modelo vea ningún fragmento.
+
+</Callout>
+
+## Diseñar los metadatos y las particiones
+
+Para que el filtrado sea eficiente y correcto:
+
+- **Define un esquema pequeño y estable.** Campos como `departamento`, `tipo`, `acceso`, `fecha` e `idioma`, con tipos claros (cadena, número, fecha).
+- **Indexa los campos que filtras.** Un filtro sobre un campo sin índice obliga a recorrer todo. Qdrant lo recomienda explícitamente; Pinecone indexa por defecto todos los campos de metadatos.
+- **Mantén los metadatos planos y pequeños.** Pinecone, por ejemplo, documenta metadatos de pares clave-valor planos con un límite por registro.
+- **Usa particiones para el aislamiento fuerte.** Pinecone las llama _namespaces_: los registros de un índice se dividen en espacios de nombres y **toda operación apunta a uno solo**, lo que sirve para multiinquilino (cada cliente en el suyo) y acelera las consultas al reducir el espacio de búsqueda. Otros sistemas ofrecen colecciones, particiones o esquemas equivalentes.
+- **Piensa en la cardinalidad del filtro.** Un filtro que deja una fracción minúscula de los datos (un solo cliente entre millones) favorece particiones o prefiltrado exacto; uno que deja casi todo se resuelve bien con el índice normal.
+
+## Cómo elegir según la selectividad del filtro
+
+La mejor estrategia depende de **cuánto recorta el filtro**, lo que se llama su selectividad:
+
+- **Filtro poco restrictivo** (deja, por ejemplo, la mitad de los datos): casi cualquier enfoque funciona. El postfiltrado con algo de sobremuestreo (pedir 3 o 4 veces más candidatos de los necesarios y quedarse con los que cumplen) suele bastar, y el índice normal se aprovecha por completo.
+- **Filtro moderado** (un 1 % a un 10 %): aquí se rompe el postfiltrado simple. Conviene un motor que filtre durante la búsqueda o un esquema de particiones por la dimensión más usada (cliente, departamento, año).
+- **Filtro muy restrictivo** (decenas o cientos de documentos entre millones): lo más eficaz y exacto suele ser **aplicar el filtro primero con un índice de metadatos y calcular la similitud por fuerza bruta** sobre el pequeño subconjunto. Recorrer un grafo construido sobre todos los vectores sería más lento y menos fiable.
+
+La consecuencia práctica es que **una buena prueba de concepto incluye filtros de varias selectividades**, no solo el caso promedio. Un sistema puede ir perfecto con un filtro amplio y devolver listas vacías con el filtro de un único cliente.
+
+## Trade-offs
+
+| Estrategia | Ventaja | Inconveniente | Cuándo encaja |
+| --- | --- | --- | --- |
+| Postfiltrado | Simple | Puede devolver pocos o ningún resultado | Filtros muy poco restrictivos |
+| Postfiltrado con sobremuestreo | Mitiga la pérdida | Hay que adivinar cuánto sobremuestrear | Solución rápida y barata |
+| Prefiltrado + búsqueda exacta | Resultados correctos garantizados | Lento si el subconjunto es grande | Filtros muy restrictivos |
+| Filtrado durante la búsqueda | Robusto y eficiente | Depende del motor; más complejidad | Producción con filtros variados |
+| Particiones / namespaces | Aislamiento y velocidad | Más estructuras que gestionar | Multiinquilino y permisos fuertes |
+
+## Errores comunes en producción
+
+- **Postfiltrar sin comprobarlo** y descubrir que consultas con filtros devuelven listas vacías.
+- **Aplicar los permisos después de generar la respuesta** en lugar de dentro de la recuperación.
+- **Filtros sobre campos sin índice**, que obligan a recorrer todo el conjunto.
+- **Métrica incorrecta para el modelo:** usar distancia euclídea sobre vectores sin normalizar cuando el modelo se entrenó con coseno.
+- **Mezclar vectores normalizados y sin normalizar** en el mismo índice.
+- **No probar filtros con poca selectividad.** Un filtro que deja 20 documentos entre un millón se comporta distinto que uno que deja la mitad.
+- **Metadatos inconsistentes** (mayúsculas, formatos de fecha distintos) que hacen que el filtro no encuentre lo que debería.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué el postfiltrado puede devolver menos de k resultados?"_ Pista: se buscan primero los k mejores globales y luego se descartan los que no cumplen el filtro; si ninguno cumple, queda vacío.
+- _"¿Cómo implementarías permisos por usuario en un RAG?"_ Pista: metadato de acceso/propietario y filtro aplicado dentro de la recuperación (o particiones por inquilino), nunca sobre la respuesta ya generada.
+- _"Con vectores normalizados, ¿importa elegir coseno o producto escalar?"_ Pista: ordenan igual y el producto escalar es algo más barato.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Con **vectores normalizados**, coseno, producto escalar y euclídea ordenan igual: normaliza y usa producto escalar.
+- El **postfiltrado** puede devolver pocos o **ningún** resultado; en nuestro ejemplo con el corpus, devolvió 0 frente a los 5 del prefiltrado.
+- Mejores opciones: **filtrado durante la búsqueda** (índices de metadatos sobre HNSW, como en Qdrant o ACORN) o **prefiltrado** con particiones.
+- Los **permisos** se aplican **dentro de la recuperación**, no sobre la respuesta generada.
+- Diseña un esquema de metadatos **pequeño, indexado y consistente**.
+
+</KeyTakeaways>

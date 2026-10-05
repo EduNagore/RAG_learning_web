@@ -260,18 +260,148 @@ MUTANTS = [
         "chunks.extend(paragraph[i : i + max_chars] for i in range(0, len(paragraph), max_chars))",
         "chunks.append(paragraph)",
     ),
+    # --- rag-06-indice-vectorial ---
+    (
+        "rag-06-indice-vectorial",
+        "postfiltrado en lugar de prefiltrado",
+        (
+            "if not where or _cumple(meta, where)",
+            (
+                'orden = np.argsort(-scores, kind="stable")[:k]\n'
+                "        return [(ids[i], float(scores[i])) for i in orden]"
+            ),
+        ),
+        (
+            "if True",
+            (
+                'orden = np.argsort(-scores, kind="stable")[:k]\n'
+                "        return [(ids[i], float(scores[i])) for i in orden"
+                " if not where or _cumple(self._entries[ids[i]][1], where)]"
+            ),
+        ),
+    ),
+    (
+        "rag-06-indice-vectorial",
+        "no normaliza al añadir",
+        "self._entries[id] = (v / norm, dict(metadata or {}))",
+        "self._entries[id] = (v, dict(metadata or {}))",
+    ),
+    (
+        "rag-06-indice-vectorial",
+        "las condiciones se combinan con OR",
+        (
+            "            if valor not in esperado:\n                return False\n"
+            "        elif valor != esperado:\n            return False\n    return True"
+        ),
+        (
+            "            if valor in esperado:\n                return True\n"
+            "        elif valor == esperado:\n            return True\n    return False"
+        ),
+    ),
+    (
+        "rag-06-indice-vectorial",
+        "where no admite listas",
+        "if isinstance(esperado, (list, tuple, set, frozenset)):",
+        "if False:",
+    ),
+    (
+        "rag-06-indice-vectorial",
+        "delete no elimina",
+        "return self._entries.pop(id, None) is not None",
+        "return id in self._entries",
+    ),
+    (
+        "rag-06-indice-vectorial",
+        "add no reemplaza un id existente",
+        "self._entries[id] = (v / norm, dict(metadata or {}))",
+        "self._entries.setdefault(id, (v / norm, dict(metadata or {})))",
+    ),
+    (
+        "rag-06-indice-vectorial",
+        "los empates favorecen al insertado después",
+        'np.argsort(-scores, kind="stable")',
+        "np.lexsort((-np.arange(len(scores)), -scores))",
+    ),
+    (
+        "rag-06-indice-vectorial",
+        "no valida la dimensión",
+        "if v.shape != (self.dim,):",
+        "if False:",
+    ),
+    ("rag-06-indice-vectorial", "modifica la consulta", "q = q / norm", "q /= norm"),
+    (
+        "rag-06-indice-vectorial",
+        "acepta el vector cero",
+        'if norm == 0:\n            raise ValueError("no se puede indexar el vector cero")',
+        "if norm == 0:\n            norm = 1",
+    ),
+    # --- rag-07-mini-ivf ---
+    ("rag-07-mini-ivf", "n_probe ignorado (siempre 1)", "[:n_probe]", "[:1]"),
+    (
+        "rag-07-mini-ivf",
+        "visita los centroides más lejanos",
+        'np.argsort(-(index["centroids"] @ q), kind="stable")[:n_probe]',
+        'np.argsort((index["centroids"] @ q), kind="stable")[:n_probe]',
+    ),
+    (
+        "rag-07-mini-ivf",
+        "solo mira la primera lista",
+        'np.concatenate([index["lists"][j] for j in nearest_lists])',
+        'index["lists"][nearest_lists[0]]',
+    ),
+    (
+        "rag-07-mini-ivf",
+        "centroides sin normalizar",
+        "                    centroids[j] = mean / norm",
+        "                    centroids[j] = mean",
+    ),
+    (
+        "rag-07-mini-ivf",
+        "resultado sin ordenar por similitud",
+        'order = np.argsort(-(X[candidates] @ q), kind="stable")[:k]',
+        "order = np.arange(len(candidates))[:k]",
+    ),
+    (
+        "rag-07-mini-ivf",
+        "recall con denominador erróneo",
+        "return len(exact & {int(i) for i in approx_ids}) / len(exact)",
+        "return len(exact & {int(i) for i in approx_ids}) / max(len(approx_ids), 1)",
+    ),
+    (
+        "rag-07-mini-ivf",
+        "las listas pierden un vector",
+        "lists = [np.flatnonzero(assignment == j) for j in range(n_lists)]",
+        "lists = [np.flatnonzero(assignment[:-1] == j) for j in range(n_lists)]",
+    ),
+    (
+        "rag-07-mini-ivf",
+        "devuelve un número de candidatos falso",
+        "return candidates[order], len(candidates)",
+        "return candidates[order], len(X)",
+    ),
+    (
+        "rag-07-mini-ivf",
+        "ignora la semilla",
+        "    rng = np.random.default_rng(seed)\n    centroids = _normalize_rows",
+        "    rng = np.random.default_rng()\n    centroids = _normalize_rows",
+    ),
 ]
 
 survivors = []
 for lab, desc, old, new in MUTANTS:
     source = (LABS / lab / "solution.py").read_text(encoding="utf-8")
-    if old not in source:
+    # `old`/`new` pueden ser textos o tuplas de textos (varias sustituciones en una mutación).
+    pairs = list(zip(old, new)) if isinstance(old, tuple) else [(old, new)]
+    # El texto debe aparecer UNA sola vez: si aparece también en un docstring, la mutación podría
+    # aplicarse a un comentario y no al código, y el mutante sería ineficaz sin avisar.
+    if any(source.count(o) != 1 for o, _ in pairs):
         print(f"!! NO SE PUDO APLICAR  [{lab}] {desc}")
         survivors.append((lab, desc, "no aplicable"))
         continue
-    report = run_lab(
-        source.replace(old, new, 1), (LABS / lab / "test_lab.py").read_text(encoding="utf-8")
-    )
+    mutated = source
+    for o, n in pairs:
+        mutated = mutated.replace(o, n, 1)
+    report = run_lab(mutated, (LABS / lab / "test_lab.py").read_text(encoding="utf-8"))
     failed = [r["name"] for r in report["results"] if not r["passed"]]
     killed = bool(report["load_error"]) or bool(failed)
     status = "detectado " if killed else "SOBREVIVE "

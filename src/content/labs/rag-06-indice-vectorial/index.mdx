@@ -1,0 +1,58 @@
+---
+title: Un índice vectorial con filtro de metadatos
+description: Construye un índice vectorial en memoria con alta, baja, actualización y búsqueda por coseno, y haz que el filtro por metadatos se aplique antes de buscar.
+part: rag
+module: m04-indices-vectoriales
+difficulty: 2
+estimatedMinutes: 40
+concepts:
+  - índice vectorial
+  - prefiltrado
+  - metadatos
+  - upsert
+packages:
+  - numpy
+hints:
+  - 'Guarda cada entrada en un diccionario `id -> (vector_normalizado, metadatos)`. Un diccionario de Python conserva el orden de inserción y reemplazar una clave mantiene su posición.'
+  - Normaliza el vector al añadirlo (`v / np.linalg.norm(v)`). Así el producto escalar con la consulta normalizada es directamente el coseno.
+  - 'Para el filtro, escribe una función auxiliar `cumple(metadatos, where)` que devuelva `True` si para cada `clave, valor` de `where` el metadato coincide. Si `valor` es una lista, tupla o conjunto, basta con que el metadato esté dentro.'
+  - 'Aplica el filtro ANTES de calcular similitudes: construye la lista de candidatos que cumplen `where` y haz el top-k solo sobre ellos. Con `np.argsort(-puntuaciones, kind="stable")` los empates conservan el orden de inserción.'
+relatedLessons:
+  - m04-indices-vectoriales/02-metricas-y-filtrado
+  - m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq
+---
+
+## Objetivo
+
+Una base de datos vectorial, en esencia, es esto: guardar vectores con metadatos y devolver los más parecidos a una consulta **entre los que cumplen una condición**. Aquí lo construyes en memoria y compruebas en carne propia por qué el filtro debe aplicarse **antes** de buscar y no después.
+
+## Qué tienes que hacer
+
+Implementa la clase `VectorIndex(dim)` con estos métodos:
+
+- `add(id, vector, metadata=None)`: añade un vector. Si ya existe ese `id`, **lo reemplaza** (vector y metadatos). El vector se guarda **normalizado**. Lanza `ValueError` si su longitud no es `dim` o si es el vector cero.
+- `delete(id)`: elimina la entrada y devuelve `True`; si no existía, devuelve `False`.
+- `len(index)`: número de entradas.
+- `search(query, k=3, where=None)`: devuelve una lista de `(id, similitud_coseno)` ordenada de mayor a menor, con **como máximo `k`** resultados.
+  - `where` es un diccionario `{campo: valor}`. Una entrada **cumple** si, para **todos** los campos, su metadato coincide con el valor. Si el valor es una lista, tupla o conjunto, basta con que el metadato sea **uno de ellos**.
+  - El filtro se aplica **antes** de buscar: si hay al menos `k` entradas que cumplen, devuelves `k` resultados, aunque no sean las más cercanas de todo el índice.
+  - Ante empates de similitud, va primero la entrada insertada antes.
+  - Sin entradas que cumplan, devuelve `[]`. La consulta también debe tener `dim` componentes.
+
+## Ejemplo
+
+```python
+index = VectorIndex(dim=2)
+index.add("a", [1, 0], {"dep": "envíos"})
+index.add("b", [0.9, 0.1], {"dep": "envíos"})
+index.add("c", [0, 1], {"dep": "facturación"})
+
+index.search([1, 0], k=2)                          # [('a', 1.0), ('b', 0.99...)]
+index.search([1, 0], k=2, where={"dep": "facturación"})   # [('c', 0.0)]
+```
+
+<Callout type="aviso" title="El error que este laboratorio te hace evitar">
+
+Si implementas el filtro **después** de calcular el top-k (primero los 2 mejores globales y luego descartar), la segunda consulta devolvería una lista vacía, porque `c` no está entre los 2 más cercanos. Es el postfiltrado que viste en la lección: los tests lo detectan.
+
+</Callout>
