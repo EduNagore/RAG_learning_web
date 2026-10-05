@@ -1,0 +1,106 @@
+lesson: m00-fundamentos-llm/06-embeddings-intuicion
+questions:
+  - id: m00-06-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es un **embedding** de un texto?'
+    options:
+      - 'Un resumen del texto en lenguaje natural.'
+      - 'Un vector de números de tamaño fijo, de modo que textos de significado parecido quedan cerca.'
+      - 'La lista de palabras clave del texto.'
+      - 'El número de tokens del texto.'
+    answer: [1]
+    explanation: 'Un embedding convierte texto en un vector donde la cercanía refleja similitud de significado, lo que convierte la búsqueda semántica en un problema geométrico. No es un resumen, ni una lista de palabras clave, ni un contador de tokens.'
+    ref: '#intuición-búsqueda-por-significado'
+
+  - id: m00-06-q2
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código?'
+    code: |-
+      import numpy as np
+
+      a = np.array([1.0, 1.0])
+      b = np.array([2.0, 2.0])
+      print(round(float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b))), 2))
+    options:
+      - '0.5'
+      - '1.0'
+      - '2.0'
+      - '4.0'
+    answer: [1]
+    explanation: 'Es la similitud coseno. Los dos vectores apuntan en la misma dirección (b es 2·a), así que el ángulo es 0 y el coseno vale 1, ignorando que b es más largo. El producto escalar sin normalizar (4) sí depende de la longitud.'
+    ref: '#medir-cercanía-coseno-producto-escalar-y-distancia'
+
+  - id: m00-06-q3
+    type: single
+    difficulty: 2
+    prompt: 'Si los vectores están **normalizados** (norma 1), ¿qué relación hay entre el coseno y el producto escalar?'
+    options:
+      - 'El coseno es siempre el doble del producto escalar.'
+      - 'Coinciden: el producto escalar da el mismo valor que el coseno.'
+      - 'No tienen ninguna relación.'
+      - 'El producto escalar es siempre cero.'
+    answer: [1]
+    explanation: 'El coseno es el producto escalar dividido por las normas, y con norma 1 el divisor vale 1. Por eso muchos sistemas normalizan los embeddings y usan el producto escalar, que es más barato.'
+    ref: '#medir-cercanía-coseno-producto-escalar-y-distancia'
+
+  - id: m00-06-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué los **bi-encoders** permiten buscar en millones de documentos?'
+    options:
+      - 'Porque son siempre más precisos que los cross-encoders.'
+      - 'Porque codifican cada texto por separado: los vectores de los documentos se calculan una sola vez y solo se compara con un cálculo barato.'
+      - 'Porque no necesitan un modelo de lenguaje.'
+      - 'Porque descartan la mitad de los documentos al azar.'
+    answer: [1]
+    explanation: 'La precomputación es la clave de la escala. Los cross-encoders suelen ser más precisos, pero exigen ejecutar la red por cada par consulta-documento, por lo que se usan para reordenar unos pocos candidatos.'
+    ref: '#por-qué-los-bi-encoders-hacen-posible-la-búsqueda-a-escala'
+
+  - id: m00-06-q5
+    type: truefalse
+    difficulty: 1
+    prompt: 'Puedes guardar en el mismo índice vectores calculados con dos modelos de embeddings distintos y compararlos entre sí.'
+    answer: [1]
+    explanation: 'Es falso. Los vectores de modelos distintos viven en espacios distintos y no son comparables. Documentos y consultas deben codificarse con el mismo modelo, y cambiar de modelo obliga a reindexar todo.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m00-06-q6
+    type: multiple
+    difficulty: 2
+    prompt: '¿Cuáles de estas prácticas son **errores** al usar embeddings en producción? Marca todos.'
+    options:
+      - 'Mezclar vectores de modelos distintos en el mismo índice.'
+      - 'Ignorar el límite de longitud del modelo, de modo que el texto sobrante se trunca.'
+      - 'Asumir que "cercano" significa "verdadero".'
+      - 'Recalcular todos los embeddings al cambiar de modelo.'
+    answer: [0, 1, 2]
+    explanation: 'Mezclar modelos, ignorar el límite de longitud y asumir que cercano significa verdadero son errores típicos. Recalcular todo al cambiar de modelo, en cambio, es lo correcto: los vectores antiguos dejan de ser comparables con los nuevos.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m00-06-q7
+    type: single
+    difficulty: 2
+    prompt: 'La búsqueda por palabras clave (por ejemplo BM25) es una representación...'
+    options:
+      - 'Densa, porque todas las dimensiones tienen valor.'
+      - 'Dispersa: cada dimensión es una palabra y la mayoría valen cero.'
+      - 'Imposible de combinar con embeddings.'
+      - 'Idéntica a un embedding denso.'
+    answer: [1]
+    explanation: 'BM25 es una representación dispersa que captura palabras exactas; los embeddings densos capturan significado. No compiten: se complementan, y la búsqueda híbrida combina ambas.'
+    ref: '#denso-frente-a-disperso'
+
+  - id: m00-06-q8
+    type: single
+    difficulty: 3
+    prompt: '"El pedido llegó a tiempo" y "El pedido no llegó a tiempo" pueden tener embeddings muy próximos. ¿Por qué?'
+    options:
+      - 'Porque el modelo no sabe leer la palabra "no".'
+      - 'Porque la cercanía es estadística: las frases comparten casi todo su vocabulario y tema, y el embedding no razona sobre si son compatibles.'
+      - 'Porque los embeddings solo representan el primer token.'
+      - 'Porque el coseno ignora el significado.'
+    answer: [1]
+    explanation: 'Los embeddings agrupan textos que aparecen en contextos parecidos; no evalúan la lógica entre ellos. Por eso cercanía no es veracidad ni compatibilidad. No es que ignoren una palabra concreta ni que representen solo un token.'
+    ref: '#de-dónde-sale-el-significado'

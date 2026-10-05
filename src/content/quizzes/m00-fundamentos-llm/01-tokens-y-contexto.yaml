@@ -1,0 +1,100 @@
+lesson: m00-fundamentos-llm/01-tokens-y-contexto
+questions:
+  - id: m00-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es un **token** en un modelo de lenguaje?'
+    options:
+      - 'Siempre una palabra completa del texto.'
+      - 'Un fragmento de texto (una subpalabra, a veces una palabra entera o un solo carácter) que se convierte en un número entero.'
+      - 'Una letra del alfabeto, sin excepción.'
+      - 'Una frase completa separada por puntos.'
+    answer: [1]
+    explanation: 'Los tokenizadores modernos trocean el texto en subpalabras: palabras frecuentes como ` delivery` son un token, pero otras se parten (`retras` + `ó`). No son siempre palabras completas, ni letras sueltas, ni frases.'
+    ref: '#tokenización-por-subpalabras'
+
+  - id: m00-01-q2
+    type: multiple
+    difficulty: 2
+    prompt: 'En una petición a una API de chat con herramientas, ¿qué cuenta dentro de la **ventana de contexto**? Marca todas las correctas.'
+    options:
+      - 'El system prompt.'
+      - 'Las definiciones de las herramientas.'
+      - 'Los resultados que devuelven las herramientas.'
+      - 'La respuesta que genera el modelo en ese turno.'
+      - 'Todo el corpus con el que se entrenó el modelo.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Todo lo que viaja en la petición (system prompt, mensajes, resultados y definiciones de herramientas) y lo que el modelo genera cuentan para la ventana. El corpus de entrenamiento no: es la base de su conocimiento, no su memoria de trabajo en esa petición.'
+    ref: '#la-ventana-de-contexto'
+
+  - id: m00-01-q3
+    type: truefalse
+    difficulty: 1
+    prompt: 'Con un mismo tokenizador, un texto en español puede ocupar más tokens que su traducción al inglés.'
+    answer: [0]
+    explanation: 'Es verdadero. En el ejemplo de la lección, la frase en español ocupaba 21 tokens con `cl100k_base` frente a 12 de la inglesa, porque el vocabulario se construyó con más texto en inglés. Por eso un fragmento de 500 tokens contiene menos texto en español.'
+    ref: '#tokenización-por-subpalabras'
+
+  - id: m00-01-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es la forma más fiable de saber cuántos tokens ocupará una petición a un modelo concreto?'
+    options:
+      - 'Contar las palabras y multiplicar por 1,3.'
+      - 'Dividir el número de caracteres entre 4.'
+      - 'Usar el contador de tokens del proveedor de ese modelo.'
+      - 'Usar siempre `tiktoken`, valga para el modelo que sea.'
+    answer: [2]
+    explanation: 'Cada familia de modelos tiene su propio tokenizador, así que solo el contador del proveedor da el recuento real. Las reglas de palabras o caracteres son aproximaciones que varían por idioma, y `tiktoken` solo corresponde a los modelos de OpenAI.'
+    ref: '#tokenización-por-subpalabras'
+
+  - id: m00-01-q5
+    type: single
+    difficulty: 2
+    prompt: 'Un modelo tiene una ventana de 200 000 tokens y la entrada de tu petición ya ocupa 150 000. ¿Cuántos tokens puede generar como máximo sin desbordar la ventana?'
+    options:
+      - '200 000'
+      - '50 000'
+      - '150 000'
+      - '350 000'
+    answer: [1]
+    explanation: 'La condición es n_entrada + n_generados ≤ C, así que quedan 200 000 − 150 000 = 50 000 tokens. La salida comparte ventana con la entrada: no se suma a ella (350 000) ni dispone de la ventana entera (200 000).'
+    ref: '#la-ventana-de-contexto'
+
+  - id: m00-01-q6
+    type: order
+    difficulty: 2
+    prompt: 'Ordena lo que ocurre desde que envías un texto hasta que el siguiente turno de la conversación.'
+    options:
+      - 'El tokenizador trocea el texto en tokens y los convierte en enteros.'
+      - 'El modelo procesa la secuencia dentro de su ventana de contexto.'
+      - 'El modelo genera los tokens de la respuesta.'
+      - 'La respuesta se añade al historial que se reenvía en el turno siguiente.'
+    explanation: 'Primero se tokeniza, después el modelo trabaja sobre esos tokens dentro de la ventana, luego genera la salida y esta pasa a formar parte del historial. Por eso el contexto (y el coste) crece turno a turno.'
+    ref: '#la-ventana-de-contexto'
+
+  - id: m00-01-q7
+    type: single
+    difficulty: 2
+    prompt: '¿Qué describe el término **context rot**?'
+    options:
+      - 'Que el modelo se detiene cuando la ventana se llena.'
+      - 'Que la precisión y el recuerdo del modelo se degradan a medida que crece el número de tokens en el contexto.'
+      - 'Que el modelo olvida lo que aprendió durante el entrenamiento.'
+      - 'Que los tokens del historial se corrompen al reenviarse.'
+    answer: [1]
+    explanation: 'Context rot es una degradación gradual (no un precipicio): con más tokens el modelo recupera información y razona a larga distancia con menos precisión. Que la ventana se llene y el modelo se detenga es otro problema, y el context rot ni afecta al entrenamiento ni corrompe los tokens.'
+    ref: '#más-contexto-no-es-mejor-contexto'
+
+  - id: m00-01-q8
+    type: single
+    difficulty: 3
+    prompt: 'Según el estudio *Lost in the Middle*, ¿en qué parte de un contexto largo aprovechan mejor la información los modelos?'
+    options:
+      - 'En el centro del contexto.'
+      - 'Al principio o al final del contexto.'
+      - 'Solo en la última frase.'
+      - 'Da igual: la posición no influye.'
+    answer: [1]
+    explanation: 'El rendimiento es mejor cuando la información relevante está al principio o al final y empeora cuando está en medio. Por eso importa en qué orden colocas los fragmentos recuperados en un prompt RAG; no es cierto que la posición no influya.'
+    ref: '#más-contexto-no-es-mejor-contexto'

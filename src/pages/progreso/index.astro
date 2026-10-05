@@ -1,9 +1,25 @@
 ---
-import ComingSoon from '../../components/layout/ComingSoon.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProgressPanel from '../../components/progress/ProgressPanel';
+import { getLessonsByModule, getModules } from '../../lib/content';
+
+const [modules, byModule] = await Promise.all([getModules(), getLessonsByModule()]);
+const panelModules = modules.map((m) => ({
+  id: m.id,
+  title: m.data.title,
+  lessonIds: (byModule.get(m.id) ?? []).map((l) => l.id),
+}));
+const titles: Record<string, string> = {};
+for (const lessons of byModule.values()) for (const l of lessons) titles[l.id] = l.data.title;
+for (const m of modules) titles[`module:${m.id}`] = `Módulo: ${m.data.title}`;
 ---
 
-<ComingSoon
+<BaseLayout
   title="Progreso"
-  description="Panel de progreso con exportación e importación de tu avance."
-  phase="F2"
-/>
+  description="Tu avance: lecciones, notas, exámenes y copia de seguridad."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Mi progreso</h1>
+  <div class="mt-6">
+    <ProgressPanel client:only="react" modules={panelModules} lessonTitles={titles} />
+  </div>
+</BaseLayout>

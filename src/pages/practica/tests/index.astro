@@ -1,0 +1,62 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs.astro';
+import { PART_LABELS, getModules, groupByPart } from '../../../lib/content';
+import { getRenderedQuestions } from '../../../lib/quiz-data';
+import { url } from '../../../lib/url';
+
+const [modules, questions] = await Promise.all([getModules(), getRenderedQuestions()]);
+const countByModule = new Map<string, number>();
+for (const q of questions) countByModule.set(q.moduleId, (countByModule.get(q.moduleId) ?? 0) + 1);
+---
+
+<BaseLayout title="Tests por módulo" description="Tests tipo test de cada módulo del curso.">
+  <Breadcrumbs items={[{ label: 'Práctica', href: url('/practica/') }, { label: 'Tests' }]} />
+  <h1 class="text-3xl font-bold tracking-tight">Tests por módulo</h1>
+  <p class="mt-2 text-slate-600 dark:text-slate-400">
+    Apruebas con un 80 % o más. Puedes repetirlos tantas veces como quieras: se guarda tu mejor
+    nota.
+  </p>
+
+  {groupByPart(modules).map(([part, mods]) => (
+    <section class="mt-8">
+      <h2 class="text-xl font-semibold">{PART_LABELS[part]}</h2>
+      <ul class="mt-3 grid gap-3 md:grid-cols-2">
+        {mods.map((mod) => {
+          const n = countByModule.get(mod.id) ?? 0;
+          return (
+            <li
+              class="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
+              data-quiz-id={`module:${mod.id}`}
+            >
+              {n > 0 ? (
+                <a
+                  class="font-medium text-indigo-700 hover:underline dark:text-indigo-300"
+                  href={url(`/practica/tests/${mod.id}/`)}
+                >
+                  {mod.data.title}
+                </a>
+              ) : (
+                <span class="font-medium">{mod.data.title}</span>
+              )}
+              <p class="mt-1 text-xs text-slate-500">
+                {n > 0 ? `${n} preguntas` : 'Próximamente'}
+                <span data-best class="ml-2 font-medium text-emerald-700 dark:text-emerald-400" />
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  ))}
+</BaseLayout>
+
+<script>
+  import { loadProgress } from '../../../lib/progress';
+  const { quizScores } = loadProgress();
+  document.querySelectorAll<HTMLElement>('[data-quiz-id]').forEach((el) => {
+    const s = quizScores[el.dataset.quizId ?? ''];
+    const best = el.querySelector<HTMLElement>('[data-best]');
+    if (s && best) best.textContent = `· Mejor nota: ${s.best} %${s.best >= 80 ? ' ✓' : ''}`;
+  });
+</script>

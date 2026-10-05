@@ -1,0 +1,106 @@
+lesson: m00-fundamentos-llm/02-sampling
+questions:
+  - id: m00-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué efecto tiene una temperatura **T menor que 1** sobre la distribución de probabilidad del siguiente token?'
+    options:
+      - 'La aplana: los tokens poco probables ganan opciones.'
+      - 'La afila: el token más probable gana aún más masa.'
+      - 'No la cambia, solo altera el vocabulario.'
+      - 'Elimina los tokens menos probables de forma permanente.'
+    answer: [1]
+    explanation: 'Dividir los logits entre T < 1 acentúa las diferencias y concentra la masa en el más probable. T > 1 hace lo contrario: la aplana. La temperatura reescala, no elimina tokens: eso lo hacen top-k y top-p.'
+    ref: '#de-logits-a-probabilidades'
+
+  - id: m00-02-q2
+    type: code-output
+    difficulty: 3
+    prompt: '¿Qué imprime este código?'
+    code: |-
+      import numpy as np
+
+      z = np.array([2.0, 0.0])
+      p = np.exp(z) / np.exp(z).sum()
+      print(round(float(p[0]), 2))
+    options:
+      - '0.5'
+      - '0.88'
+      - '0.73'
+      - '0.12'
+    answer: [1]
+    explanation: 'Es un softmax con T = 1: e^2 / (e^2 + e^0) = 7,389 / 8,389 ≈ 0,88. 0,5 saldría si los dos logits fueran iguales, y 0,12 es la probabilidad del segundo token, no del primero.'
+    ref: '#de-logits-a-probabilidades'
+
+  - id: m00-02-q3
+    type: single
+    difficulty: 2
+    prompt: 'Con **top-p = 0,9**, ¿qué tokens se conservan antes de muestrear?'
+    options:
+      - 'Los 9 tokens más probables.'
+      - 'El conjunto más pequeño de tokens cuya probabilidad acumulada alcanza 0,9.'
+      - 'Todos los tokens con probabilidad superior a 0,9.'
+      - 'El 90 % de los tokens del vocabulario elegidos al azar.'
+    answer: [1]
+    explanation: 'Top-p (nucleus sampling) conserva el núcleo mínimo con masa acumulada ≥ p, así que el número de candidatos se adapta a la confianza del modelo. Fijar un número concreto de tokens es top-k.'
+    ref: '#truncar-la-cola-top-k-y-top-p'
+
+  - id: m00-02-q4
+    type: truefalse
+    difficulty: 1
+    prompt: 'Poner la temperatura a 0 elimina las alucinaciones del modelo.'
+    answer: [1]
+    explanation: 'Es falso. La temperatura controla la variación entre ejecuciones, no la veracidad: un modelo que cree algo erróneo lo repetirá de forma consistente. Para reducir alucinaciones se usa recuperación de evidencia, citas y verificación.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m00-02-q5
+    type: multiple
+    difficulty: 2
+    prompt: 'Marca las afirmaciones **correctas** sobre decodificación.'
+    options:
+      - 'Top-p adapta el número de candidatos a la confianza del modelo.'
+      - 'Top-k conserva siempre un número fijo de tokens.'
+      - 'Cuando T tiende a 0 se aproxima a elegir siempre el token más probable (greedy).'
+      - 'Con T mayor que 1 el token más probable gana más probabilidad que con T = 1.'
+    answer: [0, 1, 2]
+    explanation: 'Las afirmaciones sobre top-p, top-k y el límite greedy son correctas. La que dice que con T mayor que 1 el más probable gana probabilidad es al revés: con T > 1 la distribución se aplana y el más probable pierde masa.'
+    ref: '#de-logits-a-probabilidades'
+
+  - id: m00-02-q6
+    type: single
+    difficulty: 2
+    prompt: 'Algunos modelos recientes de ciertos proveedores ya no permiten fijar la temperatura. ¿Cuál es la mejor consecuencia de diseño?'
+    options:
+      - 'No hacer nada: el sistema funcionará igual.'
+      - 'Construir el sistema sin depender de ese parámetro: conseguir consistencia con instrucciones claras, salida estructurada y verificación.'
+      - 'Cambiar de proveedor en cuanto ocurra.'
+      - 'Repetir la petición hasta que la respuesta salga igual dos veces.'
+    answer: [1]
+    explanation: 'La robustez viene del prompt, las salidas estructuradas y la verificación, no de un parámetro que puede desaparecer. Ignorarlo o repetir peticiones hasta que la respuesta coincida no resuelve la causa y encarece el sistema.'
+    ref: '#otras-estrategias-brevemente'
+
+  - id: m00-02-q7
+    type: single
+    difficulty: 2
+    prompt: '¿Qué observaron Holtzman et al. al estudiar la generación de texto abierta?'
+    options:
+      - 'Que maximizar la probabilidad (greedy, beam search) produce texto repetitivo y soso, distinto del texto humano.'
+      - 'Que la temperatura 0 siempre da el mejor texto.'
+      - 'Que muestrear de toda la distribución sin truncar es siempre lo mejor.'
+      - 'Que top-k y top-p producen el mismo resultado.'
+    answer: [0]
+    explanation: 'Su hallazgo central es contraintuitivo: buscar la secuencia más probable empeora el texto en generación abierta, y por eso propusieron muestrear de forma truncada (nucleus sampling). Muestrear sin truncar tampoco es lo mejor, porque la cola poco fiable acumula masa.'
+    ref: '#truncar-la-cola-top-k-y-top-p'
+
+  - id: m00-02-q8
+    type: single
+    difficulty: 2
+    prompt: 'Ejecutas la misma pregunta de clasificación 10 veces y 8 respuestas coinciden con la más frecuente. ¿Qué mide el valor 0,8?'
+    options:
+      - 'La probabilidad de que la respuesta sea correcta.'
+      - 'La temperatura efectiva del modelo.'
+      - 'La consistencia: la fracción de ejecuciones que coinciden con la respuesta más frecuente.'
+      - 'La confianza que tiene el modelo en su respuesta.'
+    answer: [2]
+    explanation: 'Mide consistencia, no acierto: las 8 pueden coincidir y estar todas equivocadas. Tampoco es la temperatura ni la confianza interna del modelo; es una medida sobre las salidas observadas.'
+    ref: '#medir-la-variación-de-tu-sistema-en-lugar-de-suponerla'

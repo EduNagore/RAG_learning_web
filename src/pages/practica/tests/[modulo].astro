@@ -1,0 +1,46 @@
+---
+import { getEntry } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs.astro';
+import ModuleTest from '../../../components/quiz/ModuleTest';
+import { getModules } from '../../../lib/content';
+import { getRenderedQuestions } from '../../../lib/quiz-data';
+import { url } from '../../../lib/url';
+
+export async function getStaticPaths() {
+  const [modules, questions] = await Promise.all([getModules(), getRenderedQuestions()]);
+  return modules
+    .filter((m) => questions.some((q) => q.moduleId === m.id))
+    .map((m) => ({
+      params: { modulo: m.id },
+      props: { questions: questions.filter((q) => q.moduleId === m.id) },
+    }));
+}
+
+const { modulo } = Astro.params;
+const { questions } = Astro.props;
+const mod = (await getEntry('modules', modulo!))!;
+---
+
+<BaseLayout
+  title={`Test: ${mod.data.title}`}
+  description={`Test tipo test del módulo ${mod.data.title}.`}
+>
+  <Breadcrumbs
+    items={[
+      { label: 'Práctica', href: url('/practica/') },
+      { label: 'Tests', href: url('/practica/tests/') },
+      { label: mod.data.title },
+    ]}
+  />
+  <h1 class="mb-6 text-3xl font-bold tracking-tight">{mod.data.title}</h1>
+  <ModuleTest client:only="react" moduleId={mod.id} title={mod.data.title} questions={questions} />
+  <p class="mt-8 text-sm">
+    <a
+      class="text-indigo-700 hover:underline dark:text-indigo-300"
+      href={url(`/teoria/#${mod.id}`)}
+    >
+      ← Repasar la teoría de este módulo
+    </a>
+  </p>
+</BaseLayout>

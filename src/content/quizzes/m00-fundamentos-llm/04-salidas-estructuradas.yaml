@@ -1,0 +1,99 @@
+lesson: m00-fundamentos-llm/04-salidas-estructuradas
+questions:
+  - id: m00-04-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué garantiza el **modo JSON** de un proveedor, a diferencia de las salidas estructuradas con esquema?'
+    options:
+      - 'Que la salida cumple tu esquema.'
+      - 'Solo que la salida es JSON sintácticamente válido.'
+      - 'Que todos los valores son ciertos.'
+      - 'Que la respuesta nunca será rechazada.'
+    answer: [1]
+    explanation: 'El modo JSON asegura la sintaxis, no que se cumpla tu esquema (campos, tipos, obligatorios): eso lo hacen las salidas estructuradas. Ninguno de los dos garantiza que los valores sean ciertos ni evitan los rechazos.'
+    ref: '#tres-niveles-de-garantía'
+
+  - id: m00-04-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Cómo logra la **decodificación restringida** que la salida cumpla el esquema?'
+    options:
+      - 'Revisando el texto después de generarlo y reintentando si falla.'
+      - 'Enmascarando, antes de muestrear, los tokens que harían imposible cumplir el esquema.'
+      - 'Entrenando un modelo distinto para cada esquema.'
+      - 'Pidiéndole al modelo en el prompt que se esfuerce más.'
+    answer: [1]
+    explanation: 'En cada paso solo pueden elegirse tokens válidos para el estado actual de la gramática, así que la forma queda garantizada por construcción. Revisar el texto después de generarlo y reintentar es validar a posteriori, y pedirlo solo en el prompt no garantiza nada.'
+    ref: '#decodificación-restringida'
+
+  - id: m00-04-q3
+    type: multiple
+    difficulty: 2
+    prompt: '¿En cuáles de estos casos puede **no** cumplirse el esquema aunque uses salidas estructuradas? Marca todas.'
+    options:
+      - 'El modelo rechaza la petición por motivos de seguridad.'
+      - 'La respuesta se corta por alcanzar `max_tokens`.'
+      - 'La capitalización de los valores de un `enum`.'
+      - 'El esquema declara `additionalProperties: false`.'
+    answer: [0, 1, 2]
+    explanation: 'Un rechazo, un corte por `max_tokens` y la capitalización de enums son excepciones documentadas. Declarar `additionalProperties: false` es, en cambio, un requisito del esquema, no una causa de incumplimiento.'
+    ref: '#cuando-la-garantía-se-rompe'
+
+  - id: m00-04-q4
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una salida puede cumplir el esquema y, aun así, contener valores falsos.'
+    answer: [0]
+    explanation: 'Es verdadero. El esquema asegura la forma (por ejemplo, que `quote` sea una cadena), no que la cita exista en el documento. La verificación semántica es responsabilidad de tu código.'
+    ref: '#cuando-la-garantía-se-rompe'
+
+  - id: m00-04-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Qué debe comprobar tu código **antes** de parsear la respuesta de una salida estructurada?'
+    options:
+      - 'El número de palabras de la respuesta.'
+      - 'El motivo de parada (por ejemplo, rechazo o `max_tokens`).'
+      - 'Que la respuesta empiece por una llave.'
+      - 'Nada: el esquema siempre se cumple.'
+    answer: [1]
+    explanation: 'Un rechazo o un corte llegan con apariencia de respuesta normal y rompen el parseo, así que hay que mirar el motivo de parada primero. Comprobar la llave inicial o asumir que siempre se cumple no cubre esos casos.'
+    ref: '#cuando-la-garantía-se-rompe'
+
+  - id: m00-04-q6
+    type: order
+    difficulty: 3
+    prompt: 'Ordena un patrón robusto para tratar una salida que no sirve.'
+    options:
+      - 'Validar la salida (esquema y reglas de negocio) y comprobar el motivo de parada.'
+      - 'Reintentar, con más margen o añadiendo el error concreto, un número limitado de veces.'
+      - 'Si sigue fallando, degradar con elegancia: responder que no se ha podido o escalar a una persona.'
+      - 'Registrar los reintentos para detectar si el esquema, el prompt o el modelo no son adecuados.'
+    explanation: 'Primero se detecta el problema, luego se reintenta de forma acotada y, si no hay solución, se degrada en lugar de mostrar un dato dudoso. Registrar los reintentos cierra el ciclo: una tasa alta indica un problema de diseño.'
+    ref: '#qué-hacer-cuando-la-salida-no-sirve'
+
+  - id: m00-04-q7
+    type: single
+    difficulty: 1
+    prompt: '¿Para qué es útil usar un `enum` en un esquema?'
+    options:
+      - 'Para permitir cualquier cadena de texto.'
+      - 'Para limitar un campo a un conjunto cerrado de valores y evitar que el modelo invente etiquetas.'
+      - 'Para reducir el número de tokens de la respuesta.'
+      - 'Para que el campo sea opcional.'
+    answer: [1]
+    explanation: 'Un enum define las únicas etiquetas válidas (categorías, estados). No permite cualquier cadena de texto, no está pensado para ahorrar tokens ni hace opcional el campo.'
+    ref: '#trade-offs-y-buenas-prácticas'
+
+  - id: m00-04-q8
+    type: single
+    difficulty: 2
+    prompt: 'Según la lección, ¿cuándo usarías salidas estructuradas y cuándo *function calling*?'
+    options:
+      - 'Salidas estructuradas para dar forma a la respuesta final; function calling para conectar el modelo con funciones de tu sistema.'
+      - 'Function calling para dar forma a la respuesta final; salidas estructuradas para ejecutar funciones.'
+      - 'Son exactamente lo mismo y siempre intercambiables.'
+      - 'Salidas estructuradas solo para clasificación; function calling solo para búsqueda web.'
+    answer: [0]
+    explanation: 'Si estructuras la respuesta al usuario o extraes datos, usa el formato de respuesta; si conectas el modelo con herramientas de tu sistema, usa function calling. Aunque comparten tecnología, tienen propósitos distintos.'
+    ref: '#trade-offs-y-buenas-prácticas'

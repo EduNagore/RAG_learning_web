@@ -1,0 +1,18 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs.astro';
+import Review from '../../../components/quiz/Review';
+import { url } from '../../../lib/url';
+---
+
+<BaseLayout
+  title="Repaso espaciado"
+  description="Repasa las preguntas que fallaste con el sistema Leitner."
+>
+  <Breadcrumbs items={[{ label: 'Práctica', href: url('/practica/') }, { label: 'Repaso' }]} />
+  <h1 class="text-3xl font-bold tracking-tight">Repaso espaciado</h1>
+  <p class="mb-6 mt-2 max-w-3xl text-slate-600 dark:text-slate-400">
+    Repasar justo antes de olvidar es la forma más eficiente de recordar a largo plazo.
+  </p>
+  <Review client:only="react" />
+</BaseLayout>

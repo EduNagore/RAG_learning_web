@@ -6,6 +6,7 @@ import Diagram from '../../components/content/Diagram.astro';
 import KeyTakeaways from '../../components/content/KeyTakeaways.astro';
 import Snapshot from '../../components/content/Snapshot.astro';
 import { getOrderedLessons } from '../../lib/content';
+import { getQuestionsByLesson } from '../../lib/quiz-data';
 
 export async function getStaticPaths() {
   const ordered = await getOrderedLessons();
@@ -18,11 +19,12 @@ export async function getStaticPaths() {
 const { lesson, prev, next, ordered } = Astro.props;
 const module = (await getEntry('modules', lesson.data.module))!;
 const { Content, headings } = await render(lesson);
+const questions = await getQuestionsByLesson(lesson.id);
 const prerequisites = (lesson.data.prerequisites ?? [])
   .map((id) => ordered.find((l) => l.id === id))
   .filter((l) => l !== undefined);
 ---
 
-<LessonLayout {lesson} {module} {headings} {prev} {next} {prerequisites}>
+<LessonLayout {lesson} {module} {headings} {prev} {next} {prerequisites} {questions}>
   <Content components={{ Callout, Diagram, KeyTakeaways, Snapshot }} />
 </LessonLayout>

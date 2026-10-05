@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs.astro';
+import Exam from '../../../components/quiz/Exam';
+import { url } from '../../../lib/url';
+---
+
+<BaseLayout
+  title="Modo examen"
+  description="Examen con preguntas aleatorias de los módulos que elijas."
+>
+  <Breadcrumbs items={[{ label: 'Práctica', href: url('/practica/') }, { label: 'Examen' }]} />
+  <h1 class="text-3xl font-bold tracking-tight">Modo examen</h1>
+  <p class="mb-6 mt-2 max-w-3xl text-slate-600 dark:text-slate-400">
+    Sin ayudas ni correcciones hasta el final. Después verás tu resultado por módulo y las preguntas
+    falladas pasarán al repaso espaciado.
+  </p>
+  <Exam client:only="react" />
+</BaseLayout>

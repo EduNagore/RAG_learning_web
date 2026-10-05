@@ -122,6 +122,18 @@ for (const [id, { file, data, body }] of lessons) {
 // --- Quizzes -----------------------------------------------------------------
 const quizzesDir = join(CONTENT, 'quizzes');
 const questionIds = new Map();
+const tfByModule = new Map(); // módulo -> { v: nº verdaderas, f: nº falsas }
+const ORD = '(primera|segunda|tercera|cuarta|quinta)s?';
+const POSITIONAL = new RegExp(
+  [
+    `\\((la |las )?${ORD}( y ${ORD})?( opci[oó]n| respuesta)?\\)`, // "(la primera opción)", "(primera y tercera)"
+    `\\b(la|las|el|los) (${ORD}|última) (opci[oó]n|opciones|respuesta|respuestas)\\b`,
+    `\\blas (dos|tres|cuatro) primeras\\b`,
+    `\\bla última (es|dice|afirma)\\b`,
+    `\\btodas las anteriores\\b`,
+  ].join('|'),
+  'i',
+);
 for (const file of walk(quizzesDir, '.yaml')) {
   const f = rel(file);
   const quiz = parseYaml(readFileSync(file, 'utf8'));
@@ -142,7 +154,26 @@ for (const file of walk(quizzesDir, '.yaml')) {
       err(f, `${q.id}: ancla "${q.ref}" no existe en la lección`);
     if (!q.explanation || q.explanation.trim().length < 40)
       err(f, `${q.id}: explicación demasiado corta`);
+    // Las opciones se barajan al mostrarlas: "(la primera opción)" o "las tres primeras" no
+    // significan nada para quien las ve en otro orden. Hay que describir el contenido.
+    if (POSITIONAL.test(q.explanation))
+      err(f, `${q.id}: la explicación se refiere a opciones por su posición (se barajan)`);
+    if (q.type === 'truefalse') {
+      const t = tfByModule.get(lesson.data.module) ?? { v: 0, f: 0 };
+      if (q.answer[0] === 0) t.v++;
+      else t.f++;
+      tfByModule.set(lesson.data.module, t);
+    }
   }
+}
+// Si casi todas las verdadero/falso de un módulo tienen la misma respuesta, se acierta sin saber.
+for (const [mod, { v, f }] of tfByModule) {
+  const total = v + f;
+  if (total >= 4 && Math.max(v, f) / total >= 0.8)
+    err(
+      `quizzes/${mod}`,
+      `verdadero/falso desequilibradas (${v} verdaderas, ${f} falsas): reparte las respuestas`,
+    );
 }
 for (const [id, { data }] of lessons) {
   if (!existsSync(join(quizzesDir, `${id}.yaml`))) warn(`lessons/${id}`, 'sin quiz asociado');
