@@ -11,16 +11,21 @@
 | F0 Setup y despliegue | ✅ hecha, en `main` y desplegada | Astro 7, Tailwind 4, CI, deploy a Pages |
 | F1 Núcleo de teoría | ✅ hecha, en `main` y desplegada | Layouts, Pagefind, KaTeX, Mermaid, progreso, **M00 completo (8 lecciones)** |
 | F2 Motor de tests | ✅ hecha, en `main` y desplegada | Quiz, examen, Leitner, panel de progreso, **65 preguntas de M00** |
-| F3 Laboratorios | 🟡 **código completo y verificado; falta CI, fusionar a `main` y el resumen al usuario** (rama `fase-3-labs`) | Ver "F3: dónde me quedé" |
-| **Pausa de revisión tras F3** | ⏳ | **Detenerse y dar resumen al usuario antes de F4** (lo exige el prompt) |
+| F3 Laboratorios | ✅ hecha, en `main` y desplegada (verificada en producción) | 3 labs, Pyodide, CodeMirror, e2e en navegador real |
+| **Pausa de revisión tras F3** | ⏸️ **ACTIVA: esperando el visto bueno del usuario** | **No empezar F4 hasta que el usuario lo apruebe.** Ya se le dio el resumen de F3 |
 | F4 Contenido Parte I (RAG, M01–M09) | ⬜ | |
 | F5 Contenido Parte II (Agentes, M10–M17) | ⬜ | |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
-Contadores a fecha de hoy: 19 módulos definidos (solo M00 con lecciones), 8 lecciones, 65 preguntas, 3 labs, 51 tests unitarios, 27 e2e, 16 tests de labs + 23 mutantes, `main` = `49a01f5` (F3 aún sin fusionar).
+Contadores a fecha de hoy: 19 módulos definidos (solo M00 con lecciones), 8 lecciones, 65 preguntas, 3 labs, 51 tests unitarios, 27 e2e, 16 tests de labs + 23 mutantes, `main` = `5d3b107` + commit de cierre de F3.
 
-## F3: dónde me quedé
+## F3: HECHA (referencia histórica; para continuar ve a "Siguiente paso")
+
+### Siguiente paso
+Tras el visto bueno del usuario, empezar **F4** (contenido Parte I, M01–M09: lecciones, quizzes, labs 2–21 y widgets de M02/M03/M05 según PLAN §7 y §12), en la rama `fase-4-rag`. Ampliar el corpus de Nimbus (hoy 42 docs / 31 preguntas) cuando los labs lo pidan; añadir los mutantes de cada lab nuevo a `scripts/mutate_labs.py`. Recordar: las lecciones exigen fuentes verificadas abriéndolas, código/cálculos ejecutados, `pnpm validate` en verde y todas las reglas de CONTENT_GUIDELINES.
+
+### Detalle de F3 (histórico)
 
 Rama `fase-3-labs` (creada desde `main`). Archivos ya escritos (commit WIP):
 
