@@ -1,0 +1,63 @@
+---
+title: Reranking y nDCG
+description: Implementa la métrica nDCG para medir la calidad de un ranking y un reranker de dos etapas que reordena candidatos con una función de puntuación.
+part: rag
+module: m05-recuperacion-avanzada
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - nDCG
+  - reranking en dos etapas
+  - relevancia graduada
+packages: []
+hints:
+  - 'DCG suma `ganancia / log2(posicion + 1)` con posiciones desde 1. Con `enumerate` desde 0, el divisor es `math.log2(i + 2)`.'
+  - 'El DCG ideal se calcula ordenando las ganancias de todos los documentos relevantes de mayor a menor y aplicando el mismo corte `k`. Si es 0, devuelve 0.0 sin dividir.'
+  - 'Los documentos que no aparecen en `relevance` valen 0. Usa `relevance.get(doc_id, 0)`.'
+  - '`sorted` es estable: si dos candidatos empatan en puntuación se conserva su orden original, que es justo lo que pide el enunciado.'
+relatedLessons:
+  - m05-recuperacion-avanzada/02-reranking
+---
+
+## Objetivo
+
+Un reranker solo tiene valor si mejora el orden de los resultados, y para saberlo necesitas una métrica que premie poner lo relevante arriba. **nDCG** (*normalized Discounted Cumulative Gain*) lo hace admitiendo relevancia **graduada** (0, 1, 2, 3…) y descontando las posiciones bajas. Vas a implementarla y a construir el reranker de dos etapas de la lección.
+
+$$
+\text{DCG@k} = \sum_{i=1}^{k} \frac{g_i}{\log_2(i + 1)} \qquad \text{nDCG@k} = \frac{\text{DCG@k}}{\text{IDCG@k}}
+$$
+
+$g_i$ es la ganancia (relevancia) del documento en la posición $i$ e IDCG es el DCG del **mejor orden posible** (relevancias de mayor a menor).
+
+## Qué tienes que hacer
+
+### `dcg_at_k(gains, k)`
+
+Recibe una lista de ganancias en el orden del ranking y devuelve el DCG de las `k` primeras (o de todas si hay menos).
+
+### `ndcg_at_k(ranked_ids, relevance, k=10)`
+
+`ranked_ids` es el ranking producido; `relevance` es un diccionario `id → ganancia` (lo que no aparece vale 0). El IDCG se calcula con **todas** las ganancias de `relevance`, ordenadas de mayor a menor. Si el IDCG es 0, devuelve `0.0`.
+
+### `rerank(query, candidates, score_fn, top_k=None)`
+
+`candidates` es una lista de diccionarios con `id` y `text`. `score_fn(query, text)` devuelve la puntuación de relevancia. Devuelve los **ids** ordenados de mayor a menor puntuación; los empates conservan el orden original. Si `top_k` no es `None`, recorta.
+
+### `two_stage_search(query, first_stage, docs_by_id, score_fn, n_candidates=20, top_k=3)`
+
+`first_stage(query)` devuelve una lista de ids. Toma los `n_candidates` primeros, **ignora los ids que no estén en `docs_by_id`**, recupera sus documentos (diccionarios con `id` y `text`), los reordena con `rerank` y devuelve los `top_k` ids.
+
+## Un ejemplo para comprobar a mano
+
+```python
+ndcg_at_k(["c", "a", "b"], {"a": 3, "b": 2, "c": 1}, k=3)
+# DCG  = 1/1 + 3/1.585 + 2/2 = 3.8928
+# IDCG = 3/1 + 2/1.585 + 1/2 = 4.7619
+# nDCG ≈ 0.8175
+```
+
+<Callout type="nota" title="Por qué normalizar">
+
+Sin dividir por el IDCG, una consulta con muchos documentos muy relevantes tendría un DCG enorme y dominaría el promedio. Al normalizar, cada consulta vale entre 0 y 1 y se pueden promediar.
+
+</Callout>

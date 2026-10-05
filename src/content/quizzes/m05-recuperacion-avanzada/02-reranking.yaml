@@ -1,0 +1,95 @@
+lesson: m05-recuperacion-avanzada/02-reranking
+questions:
+  - id: m05-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Por qué se recupera primero un conjunto de candidatos y se reordena después, en lugar de aplicar el modelo preciso a todo el corpus?'
+    options:
+      - 'Porque el modelo preciso no puede leer texto en español.'
+      - 'Porque el coste del modelo preciso crece con cada documento y cada consulta, y la primera etapa lo reduce a unas decenas.'
+      - 'Porque así se evita tener que indexar los documentos.'
+      - 'Porque el reranker solo funciona con diez documentos exactos.'
+    answer: [1]
+    explanation: 'Un cross-encoder necesita una pasada por el modelo para cada par consulta-documento. Aplicarlo a millones de documentos en cada consulta es inviable; aplicarlo a 20-100 candidatos sí lo es.'
+    ref: '#intuición-leer-rápido-a-muchos-leer-despacio-a-pocos'
+
+  - id: m05-02-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué distingue a un cross-encoder de un bi-encoder?'
+    options:
+      - 'El cross-encoder codifica la consulta y el documento por separado para poder precalcular los vectores.'
+      - 'El cross-encoder procesa la consulta y el documento juntos en una misma entrada, más preciso pero sin precálculo posible.'
+      - 'El cross-encoder solo funciona con vectores binarios.'
+      - 'No hay diferencia, son nombres del mismo modelo.'
+    answer: [1]
+    explanation: 'El bi-encoder separa consulta y documento (y por eso se puede indexar). El cross-encoder los concatena, de modo que la atención relaciona cada palabra de la consulta con las del documento, a costa de recalcular en cada consulta.'
+    ref: '#bi-encoder-frente-a-cross-encoder'
+
+  - id: m05-02-q3
+    type: single
+    difficulty: 3
+    prompt: 'En ColBERT, ¿qué calcula la interacción tardía (MaxSim)?'
+    options:
+      - 'Un único vector por documento que se compara con el de la consulta.'
+      - 'La media de todas las similitudes entre cualquier par de tokens.'
+      - 'Para cada token de la consulta, su similitud máxima con los tokens del documento, y la suma de esos máximos.'
+      - 'La distancia de edición entre la consulta y el documento.'
+    answer: [2]
+    explanation: 'ColBERT guarda un vector por token precalculado y puntúa sumando, para cada token de la consulta, su mejor coincidencia en el documento. La interacción se retrasa a una operación barata sobre vectores ya calculados.'
+    ref: '#interacción-tardía-colbert'
+
+  - id: m05-02-q4
+    type: single
+    difficulty: 3
+    prompt: 'Si el recall@20 de la primera etapa es 0,96, ¿cuál es el máximo de hit@k que podría conseguir cualquier reranker aplicado a esos 20 candidatos?'
+    options:
+      - '1,0, porque un buen reranker encuentra cualquier documento.'
+      - '0,96, porque no puede reordenar documentos que no están entre los candidatos.'
+      - '0,5, porque los rerankers pierden la mitad de la información.'
+      - 'Depende solo del tamaño del modelo y no de la primera etapa.'
+    answer: [1]
+    explanation: 'El reranker solo reordena lo que recibe. El recall de la primera etapa marca un techo. En el experimento, una pregunta no aparecía ni entre los 20 primeros de BM25, y por eso hit@3 no pasó de 0,964.'
+    ref: '#un-experimento-lo-que-el-reranker-puede-y-no-puede-arreglar'
+
+  - id: m05-02-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué afirmaciones sobre los rerankers basados en LLM son correctas? Marca todas las correctas.'
+    options:
+      - 'Existen formatos pointwise, pairwise y listwise.'
+      - 'El formato listwise entrega la lista de candidatos al modelo y le pide un orden, a veces con una ventana deslizante.'
+      - 'Son flexibles porque aceptan instrucciones, pero suelen ser los más caros y lentos.'
+      - 'Su salida no necesita validarse porque siempre devuelve los identificadores correctos.'
+    answer: [0, 1, 2]
+    explanation: 'Los tres formatos existen (RankGPT usa el listwise con ventana deslizante) y la flexibilidad se paga con coste y latencia. La salida puede repetir, inventar o saltarse identificadores, así que hay que validarla.'
+    ref: '#rerankers-basados-en-llm'
+
+  - id: m05-02-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'El reranking puede mejorar el orden de los candidatos, pero no puede recuperar un documento relevante que la primera etapa no devolvió.'
+    answer: [0]
+    explanation: 'Es verdadero. El reranker opera sobre los N candidatos recibidos. Si el documento no está entre ellos, la única solución es mejorar la recuperación o aumentar N.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m05-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'La mejora que mostró el reranker de juguete en la lección es una estimación fiable de lo que lograría un modelo real en producción.'
+    answer: [1]
+    explanation: 'Es falso. El reranker se diseñó después de mirar qué preguntas fallaba BM25 y se evaluó con esas mismas 28 preguntas, así que la mejora está inflada. Sirve para ver el mecanismo; el rendimiento real se mide con preguntas reservadas.'
+    ref: '#un-experimento-lo-que-el-reranker-puede-y-no-puede-arreglar'
+
+  - id: m05-02-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Cuál es el principal precio que paga ColBERT a cambio de su baja latencia de consulta?'
+    options:
+      - 'Un índice mucho mayor, porque guarda un vector por token en lugar de uno por documento.'
+      - 'No puede indexar documentos largos.'
+      - 'Requiere una pasada del modelo por cada par consulta-documento.'
+      - 'Solo funciona en inglés.'
+    answer: [0]
+    explanation: 'Guardar un vector por token multiplica el almacenamiento. ColBERTv2 lo mitiga con compresión residual, que según sus autores reduce el espacio entre 6 y 10 veces.'
+    ref: '#interacción-tardía-colbert'

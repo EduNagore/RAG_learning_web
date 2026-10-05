@@ -1,0 +1,60 @@
+---
+title: Parent-document retrieval
+description: Indexa frases como hijos de sus documentos, busca con ellas y entrega los documentos padre sin repetirlos. Es la técnica small-to-big en su versión más simple.
+part: rag
+module: m05-recuperacion-avanzada
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - parent-document
+  - small-to-big
+  - deduplicación por padre
+packages: []
+hints:
+  - 'Cada hijo necesita saber de quién es: guarda `parent_id` y su posición dentro del documento (`pos`). `enumerate(split_sentences(...))` te da ambos.'
+  - 'El identificador del hijo puede ser `f"{doc_id}#{pos}"`.'
+  - 'Para deduplicar conservando el orden, recorre los hijos y añade el padre solo si no estaba en un conjunto `vistos`.'
+  - 'Puntúa los hijos con `score_fn(query, hijo["text"])`, descarta los de puntuación 0 u inferior y ordena con `sorted(..., key=lambda x: -x[0])` (es estable).'
+relatedLessons:
+  - m05-recuperacion-avanzada/04-parent-document-y-raptor
+---
+
+## Objetivo
+
+Los fragmentos pequeños se buscan mejor y los grandes responden mejor. **Parent-document retrieval** combina ambas ventajas: indexas pequeños («hijos»), buscas con ellos y entregas al generador el documento «padre» al que pertenecen, **sin repetir** un mismo padre.
+
+La función `split_sentences(text)` ya está escrita en el código inicial.
+
+## Qué tienes que hacer
+
+### `build_children(docs)`
+
+`docs` es una lista de diccionarios con `id` y `text`. Devuelve una lista de **hijos**, uno por frase, en el orden del corpus, cada uno un diccionario con:
+
+- `child_id`: `"<id del documento>#<posición>"` (la posición empieza en 0 dentro de cada documento),
+- `parent_id`: el `id` del documento,
+- `pos`: la posición de la frase en su documento,
+- `text`: el texto de la frase.
+
+### `to_parents(child_ids, children, docs_by_id, max_parents=None)`
+
+Recibe los ids de los hijos recuperados (del mejor al peor) y devuelve la lista de **padres** como diccionarios `{"id", "text"}` (los de `docs_by_id`), en el orden de la primera aparición, **sin repetir ninguno**. Si `max_parents` no es `None`, recorta. Un `child_id` desconocido se ignora.
+
+### `small_to_big_search(query, children, score_fn, docs_by_id, top_k_children=3, max_parents=None)`
+
+Puntúa cada hijo con `score_fn(query, texto_del_hijo)`, descarta los de puntuación **cero o negativa**, toma los `top_k_children` mejores (empate: orden original) y devuelve `to_parents` de ese resultado.
+
+## Un ejemplo para comprobar a mano
+
+```python
+docs = [{"id": "d1", "text": "Primera frase. Segunda frase."}]
+build_children(docs)
+# [{'child_id': 'd1#0', 'parent_id': 'd1', 'pos': 0, 'text': 'Primera frase.'},
+#  {'child_id': 'd1#1', 'parent_id': 'd1', 'pos': 1, 'text': 'Segunda frase.'}]
+```
+
+<Callout type="nota" title="¿Y la cita?">
+
+Entregar el padre da contexto al modelo, pero al usuario le conviene ver **qué frase** justificó la respuesta. En producción se conserva el `child_id` que casó para poder citarlo; aquí lo has dejado accesible en `children`.
+
+</Callout>

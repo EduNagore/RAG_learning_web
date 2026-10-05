@@ -1,0 +1,62 @@
+---
+title: Reciprocal Rank Fusion
+description: Implementa RRF con pesos y una búsqueda híbrida que fusiona varios buscadores. Es la pieza que combina la búsqueda léxica y la densa sin calibrar sus puntuaciones.
+part: rag
+module: m05-recuperacion-avanzada
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - fusión de rankings
+  - Reciprocal Rank Fusion
+  - constante k
+  - búsqueda híbrida
+packages: []
+hints:
+  - 'Recorre cada ranking con `enumerate(ranking, start=1)`: la posición empieza en 1, no en 0. Cada documento suma `peso / (k + posicion)`.'
+  - 'Guarda dos diccionarios: uno con las puntuaciones y otro con el orden de primera aparición (`orden.setdefault(doc, len(orden))`), que usarás para desempatar.'
+  - 'Si un documento se repite dentro del mismo ranking, solo cuenta su primera aparición. Un `set` de los ya vistos en ese ranking lo resuelve.'
+  - 'Ordena con `sorted(puntos.items(), key=lambda par: (-par[1], orden[par[0]]))` y en `hybrid_search` recorta cada lista a `candidates` antes de fusionar.'
+relatedLessons:
+  - m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf
+---
+
+## Objetivo
+
+La búsqueda híbrida necesita un fusionador que combine rankings de buscadores distintos sin depender de la escala de sus puntuaciones. Vas a implementar **Reciprocal Rank Fusion** tal como lo definieron Cormack, Clarke y Büttcher (2009), con la opción de dar más peso a unos buscadores que a otros.
+
+$$
+\text{RRF}(d) = \sum_{r \in R} w_r \cdot \frac{1}{k + r(d)}
+$$
+
+donde $r(d)$ es la posición de $d$ en el ranking $r$ (empezando en 1), $k$ la constante de suavizado y $w_r$ el peso del ranking.
+
+## Qué tienes que hacer
+
+### `rrf_fuse(rankings, k=60, weights=None)`
+
+Recibe una lista de rankings (cada uno es una lista de identificadores, del mejor al peor) y devuelve una lista de tuplas `(id, puntuación)` de mayor a menor puntuación.
+
+- `weights` es una lista con un peso por ranking; por defecto todos pesan 1. Si su longitud no coincide con el número de rankings, lanza `ValueError`.
+- Si `k` es negativo, lanza `ValueError`.
+- Un documento que aparece **repetido dentro del mismo ranking** solo cuenta una vez, con su primera posición.
+- Un documento que no aparece en un ranking simplemente no suma en ese término.
+- Ante un empate de puntuación, gana el documento que **apareció antes** al recorrer los rankings en orden (primero el ranking 0 de arriba abajo, luego el 1, etc.).
+- Sin rankings (o todos vacíos) devuelve una lista vacía.
+
+### `hybrid_search(query, retrievers, top_k=3, k=60, candidates=20)`
+
+Un *retriever* es una función `f(query) -> lista de ids` ordenada del mejor al peor. `hybrid_search` ejecuta todos los retrievers, se queda con los `candidates` primeros de cada uno, los fusiona con `rrf_fuse` y devuelve **solo los ids** de los `top_k` mejores.
+
+## Un ejemplo para comprobar a mano
+
+```python
+rrf_fuse([["a", "b", "c"], ["c", "a", "d"]])
+# a: 1/61 + 1/62 ≈ 0.03252 · c: 1/63 + 1/61 ≈ 0.03226 · b: 1/62 ≈ 0.01613 · d: 1/63 ≈ 0.01587
+# → [("a", 0.03252), ("c", 0.03226), ("b", 0.01613), ("d", 0.01587)]
+```
+
+<Callout type="nota" title="Fíjate en k">
+
+Prueba `rrf_fuse([["A", "B", "D"], ["C", "E", "B"]], k=0)` y luego con `k=60`. Con `k=0`, ser primero de una lista (A) vale tanto que supera a aparecer en ambas (B); con `k=60`, gana el consenso. Esa es la intuición detrás de la constante.
+
+</Callout>

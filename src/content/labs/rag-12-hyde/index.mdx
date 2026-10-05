@@ -1,0 +1,63 @@
+---
+title: HyDE con un LLM simulado
+description: Implementa Hypothetical Document Embeddings, que busca con el embedding de una respuesta hipotética en lugar de con la pregunta, con una mezcla opcional de ambos y un plan B si el modelo falla.
+part: rag
+module: m05-recuperacion-avanzada
+difficulty: 3
+estimatedMinutes: 35
+concepts:
+  - HyDE
+  - documento hipotético
+  - mezcla de embeddings
+  - degradación controlada
+packages:
+  - numpy
+hints:
+  - 'El texto del modelo está en `llm.generate([Message("user", prompt)]).text`. Puede ser `None` o contener solo espacios: en ese caso usa el embedding de la pregunta.'
+  - 'Para mezclar, `v = (1 - mix) * embed(hipotesis) + mix * embed(pregunta)`, y luego divide por su norma (si la norma es 0, deja el vector como está).'
+  - 'Las puntuaciones son `doc_vectors @ vector`. Ordena con `np.argsort(-puntuaciones, kind="stable")` para que los empates conserven el orden del corpus.'
+  - 'El prompt de HyDE debe contener la pregunta; pide una respuesta breve, como la que aparecería en un documento.'
+relatedLessons:
+  - m05-recuperacion-avanzada/03-transformacion-de-consulta
+---
+
+## Objetivo
+
+**HyDE** busca con el embedding de una **respuesta hipotética** generada por un LLM, no con el de la pregunta. La respuesta puede inventar datos, pero se parece en forma y vocabulario a los documentos reales. Vas a implementarlo con un `MockLLM` y con el `HashingEmbedder` del curso, y a añadirle dos protecciones de producción: una **mezcla** con la pregunta y un **plan B** cuando el modelo no devuelve nada útil.
+
+## Qué tienes que hacer
+
+### `hyde_prompt(question)`
+
+Devuelve el texto que se enviará al modelo. Debe **contener la pregunta** y pedir una respuesta breve, como la que aparecería en un documento.
+
+### `hyde_vector(question, llm, embed, mix=0.0)`
+
+1. Llama **una vez** a `llm.generate` con un mensaje de usuario con `hyde_prompt(question)`.
+2. Si la respuesta es `None`, vacía o solo espacios, devuelve `embed(question)` (plan B).
+3. Si no, el vector es `(1 - mix) * embed(hipotesis) + mix * embed(question)`, **normalizado** a norma 1 (si la norma es 0, se devuelve tal cual). Con `mix=0` se usa solo la hipótesis y con `mix=1`, solo la pregunta.
+
+`embed` es una función `texto -> vector` (por ejemplo `HashingEmbedder().embed`).
+
+### `hyde_search(question, llm, embed, doc_vectors, doc_ids, top_k=3, mix=0.0)`
+
+Calcula `hyde_vector`, puntúa todos los documentos con el producto escalar `doc_vectors @ vector` y devuelve los ids de los `top_k` mejores, de mayor a menor (los empates conservan el orden de `doc_ids`).
+
+## Un ejemplo para comprobar a mano
+
+```python
+import numpy as np
+from ragkit.embeddings import HashingEmbedder
+from ragkit.llm import MockLLM
+
+emb = HashingEmbedder()
+llm = MockLLM(script=["Las contraseñas deben tener al menos 14 caracteres."])
+v = hyde_vector("¿Cuál es la longitud mínima de una contraseña?", llm, emb.embed)
+print(round(float(np.linalg.norm(v)), 3))   # 1.0
+```
+
+<Callout type="nota" title="El plan B importa">
+
+Un modelo real puede fallar, agotar el tiempo o devolver una respuesta vacía. Un sistema que se cae en ese caso es peor que uno que simplemente busca con la pregunta. Degradar con elegancia es una de las diferencias entre un prototipo y un sistema en producción.
+
+</Callout>

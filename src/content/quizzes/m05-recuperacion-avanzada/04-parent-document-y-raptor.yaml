@@ -1,0 +1,95 @@
+lesson: m05-recuperacion-avanzada/04-parent-document-y-raptor
+questions:
+  - id: m05-04-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Cuál es la idea central de la recuperación small-to-big?'
+    options:
+      - 'Indexar documentos grandes y devolver solo la primera frase.'
+      - 'Usar siempre el modelo más pequeño posible.'
+      - 'Indexar fragmentos pequeños para buscar con precisión y entregar al generador unidades mayores (padres o ventanas).'
+      - 'Entrenar un modelo de embeddings pequeño y otro grande.'
+    answer: [2]
+    explanation: 'Lo que conviene para buscar (unidades pequeñas y específicas) no coincide con lo que conviene para responder (contexto suficiente). Se separan las dos cosas.'
+    ref: '#intuición-buscar-con-lupa-leer-con-la-página-entera'
+
+  - id: m05-04-q2
+    type: single
+    difficulty: 2
+    prompt: 'Tres fragmentos hijos recuperados pertenecen al mismo documento padre. ¿Qué debe hacerse al entregar el contexto?'
+    options:
+      - 'Entregar el padre tres veces para reforzarlo.'
+      - 'Entregar el padre una sola vez, deduplicando por padre.'
+      - 'Descartar el padre y entregar solo el hijo de menor puntuación.'
+      - 'Buscar de nuevo con otra consulta.'
+    answer: [1]
+    explanation: 'Repetir el padre desperdicia tokens y no aporta información nueva. Se sustituyen los hijos por sus padres sin repetirlos.'
+    ref: '#parent-document-small-to-big'
+
+  - id: m05-04-q3
+    type: single
+    difficulty: 2
+    prompt: 'En el experimento, ¿qué ocurrió con hit@3 al indexar frases sueltas sin contexto frente al documento entero?'
+    options:
+      - 'Subió de 0,893 a 0,95.'
+      - 'No cambió.'
+      - 'Bajó de 0,893 a 0,786, y anteponer el título lo devolvió a 0,893.'
+      - 'Bajó a cero.'
+    answer: [2]
+    explanation: 'Muchas frases no dicen de qué hablan («Pasado ese plazo no se aceptan devoluciones»). Añadir el título del documento les devuelve la información que les falta para encontrarse.'
+    ref: '#un-experimento-cuánto-contexto-necesita-la-respuesta'
+
+  - id: m05-04-q4
+    type: single
+    difficulty: 3
+    prompt: 'La ventana de ±1 frase alcanzó una cobertura del 79,9 % frente al 81,5 % del padre completo. ¿Qué conclusión es razonable?'
+    options:
+      - 'La ventana siempre es peor y no merece la pena.'
+      - 'El padre completo es inútil.'
+      - 'La ventana da casi la cobertura del padre con menos texto, lo que importa sobre todo cuando los padres son largos; hay que medir con los documentos propios.'
+      - 'La cobertura demuestra que las respuestas son correctas.'
+    answer: [2]
+    explanation: 'En Nimbus los padres son cortos, pero en corpus con documentos largos la ventana ahorra muchos tokens. Además la cobertura de palabras es solo un proxy: no valida la corrección de la respuesta.'
+    ref: '#un-experimento-cuánto-contexto-necesita-la-respuesta'
+
+  - id: m05-04-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué errores conviene evitar al implementar parent-document o ventanas? Marca todos los correctos.'
+    options:
+      - 'Que la ventana de una frase cruce a otro documento o a otra sección.'
+      - 'No fusionar ventanas solapadas y repetir frases.'
+      - 'Elegir padres tan grandes que el contexto se llene de texto irrelevante.'
+      - 'Deduplicar los padres antes de entregarlos.'
+    answer: [0, 1, 2]
+    explanation: 'Los tres son errores reales. Deduplicar por padre, en cambio, es justo la práctica recomendada.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m05-04-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'RAPTOR construye un árbol agrupando fragmentos similares y resumiéndolos con un LLM de forma recursiva.'
+    answer: [0]
+    explanation: 'Es verdadero. Se agrupan los fragmentos, se resume cada grupo, y los resúmenes forman la capa siguiente; se repite hasta la raíz. La consulta puede recuperar desde cualquier nivel.'
+    ref: '#raptor-un-árbol-de-resúmenes'
+
+  - id: m05-04-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'RAPTOR es la mejor opción por defecto para cualquier corpus, incluidas preguntas sobre un dato puntual de documentos que cambian a diario.'
+    answer: [1]
+    explanation: 'Es falso. Exige resumir con un LLM cada grupo de cada nivel y rehacer parte del árbol cuando cambian los documentos. Para preguntas factuales puntuales suele bastar un buen chunking con contexto y reranking.'
+    ref: '#raptor-un-árbol-de-resúmenes'
+
+  - id: m05-04-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Qué relación tienen el Contextual Retrieval y el parent-document según la lección?'
+    options:
+      - 'Son excluyentes: hay que elegir uno.'
+      - 'Contextual Retrieval mejora qué se encuentra (contexto en la indexación) y parent-document mejora qué se entrega; se pueden combinar.'
+      - 'Parent-document sustituye al reranking y Contextual Retrieval a BM25.'
+      - 'Ambos eliminan la necesidad de un conjunto dorado.'
+    answer: [1]
+    explanation: 'Actúan en momentos distintos: uno antes de indexar (qué se encuentra) y otro tras recuperar (qué se entrega al modelo). No se sustituyen entre sí.'
+    ref: '#contexto-añadido-al-fragmento'
