@@ -18,3 +18,4 @@ Desviaciones o elecciones respecto a `PLAN.md`, con fecha y motivo.
 - **README original en UTF-16** (lo creó PowerShell); Prettier lo corrompió, se reescribió en UTF-8 con el mismo título.
 - **`.gitattributes` con `eol=lf`** para evitar CRLF en lockfiles, YAML y `.py` que se sirven a Pyodide.
 - **CI se ejecuta en cada push** (cualquier rama), no en `pull_request`, para no duplicar ejecuciones; el repo lo usa una sola persona.
+- **`astral-sh/setup-uv` se fija a `v10.2.0`:** el proyecto no publica la etiqueta mayor flotante `v10`.
