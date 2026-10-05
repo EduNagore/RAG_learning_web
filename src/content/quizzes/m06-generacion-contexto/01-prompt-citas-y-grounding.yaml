@@ -1,0 +1,101 @@
+lesson: m06-generacion-contexto/01-prompt-citas-y-grounding
+questions:
+  - id: m06-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué significa «grounding» en un sistema RAG?'
+    options:
+      - 'Que cada afirmación de la respuesta esté respaldada por el contexto recuperado.'
+      - 'Que el modelo se ejecute en un servidor propio.'
+      - 'Que los documentos estén ordenados alfabéticamente.'
+      - 'Que la respuesta se genere sin ninguna instrucción.'
+    answer: [0]
+    explanation: 'Grounding es el anclaje de la respuesta a la evidencia. Las citas lo hacen comprobable y la métrica de fidelidad lo mide.'
+    ref: '#intuición-el-modelo-responde-con-lo-que-le-das-si-se-lo-pides-bien'
+
+  - id: m06-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué conviene envolver cada fragmento en etiquetas con un identificador estable y corto?'
+    options:
+      - 'Porque así el modelo ocupa menos memoria.'
+      - 'Porque separa instrucciones, documentos y pregunta, y da al modelo identificadores que citar de forma fiable.'
+      - 'Porque los modelos solo entienden XML.'
+      - 'Porque evita tener que indexar los documentos.'
+    answer: [1]
+    explanation: 'La delimitación evita confundir reglas con datos y los identificadores estables permiten citar y verificar. Los números por posición pueden apuntar al documento equivocado si se reordena el contexto.'
+    ref: '#anatomía-de-un-prompt-de-rag'
+
+  - id: m06-01-q3
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código, que detecta citas inventadas?'
+    code: |-
+      import re
+      permitidos = {"doc-001", "doc-002"}
+      respuesta = "El plazo es de 14 días [doc-001]. Se reembolsa en 3 días [doc-099]."
+      citas = re.findall(r"\[(doc-\d+)\]", respuesta)
+      print([c for c in citas if c not in permitidos])
+    options:
+      - "['doc-001']"
+      - "['doc-099']"
+      - "[]"
+      - "['doc-001', 'doc-099']"
+    answer: [1]
+    explanation: 'Se extraen las dos citas y solo doc-099 no está entre los documentos entregados al modelo, así que es una cita inventada.'
+    ref: '#verificación-automática-de-citas'
+
+  - id: m06-01-q4
+    type: single
+    difficulty: 3
+    prompt: 'Una respuesta cita [doc-002] y ese documento está en el contexto. ¿Qué se puede concluir?'
+    options:
+      - 'Que la afirmación está respaldada por el documento.'
+      - 'Que el puntero es válido, pero no que el texto del documento justifique la afirmación.'
+      - 'Que la respuesta es necesariamente correcta.'
+      - 'Que no hace falta evaluar la fidelidad.'
+    answer: [1]
+    explanation: 'Existencia no es soporte. Comprobar que el fragmento respalda la frase exige un modelo de inferencia o un juez. ALCE midió que incluso los mejores modelos no tienen apoyo completo en sus citas el 50 % de las veces en ELI5.'
+    ref: '#citas-y-qué-garantizan'
+
+  - id: m06-01-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué comprobaciones automáticas baratas se pueden aplicar a una respuesta con citas por prompt? Marca todas las correctas.'
+    options:
+      - 'Que todo identificador citado exista en el contexto entregado.'
+      - 'Que las frases que afirman hechos lleven alguna cita.'
+      - 'Que el número de citas coincida con el número de documentos recuperados.'
+      - 'Que la respuesta no contenga ninguna cita, para evitar errores.'
+    answer: [0, 1]
+    explanation: 'Existencia y cobertura se verifican con código. Que haya tantas citas como documentos no es un criterio válido (no hay que citar todos), y una respuesta sin citas es justo lo que se quiere evitar.'
+    ref: '#verificación-automática-de-citas'
+
+  - id: m06-01-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Las citas nativas de una API garantizan punteros válidos a los documentos, pero no garantizan que el texto citado justifique cada afirmación.'
+    answer: [0]
+    explanation: 'Es verdadero. La API extrae el texto citado directamente, por lo que el puntero es válido, pero la relación entre el texto y la frase sigue siendo responsabilidad del modelo y debe evaluarse.'
+    ref: '#citas-y-qué-garantizan'
+
+  - id: m06-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Si la verificación detecta una cita inventada, lo más seguro es mostrar la respuesta igualmente, porque el usuario no comprobará las fuentes.'
+    answer: [1]
+    explanation: 'Es falso. Una cita inventada da a la respuesta una autoridad que no tiene. Se debe descartar la frase, reintentar, abstenerse o escalar.'
+    ref: '#qué-hacer-cuando-la-verificación-falla'
+
+  - id: m06-01-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué conviene decir explícitamente en el prompt que los documentos son datos y no instrucciones?'
+    options:
+      - 'Para que el modelo los lea más rápido.'
+      - 'Porque un documento recuperado puede contener órdenes, y tratarlo como dato reduce el riesgo de inyección indirecta.'
+      - 'Porque la API lo exige para funcionar.'
+      - 'Porque así se pueden omitir las citas.'
+    answer: [1]
+    explanation: 'El contenido recuperado no es de confianza: un documento puede incluir texto como «ignora las instrucciones anteriores». Declararlo como dato, delimitarlo y aplicar mínimo privilegio ayuda, aunque no es una defensa completa.'
+    ref: '#anatomía-de-un-prompt-de-rag'

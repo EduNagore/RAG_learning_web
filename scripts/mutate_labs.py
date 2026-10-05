@@ -586,6 +586,89 @@ MUTANTS = [
         '" ".join(sentences[start:end])',
         '"\\n".join(sentences[start:end])',
     ),
+    # --- rag-13-prompt-con-citas ---
+    (
+        "rag-13-prompt-con-citas",
+        "no escapa el cierre de etiqueta",
+        'doc["text"].replace("</documento>", "&lt;/documento&gt;")',
+        'doc["text"]',
+    ),
+    (
+        "rag-13-prompt-con-citas",
+        "la pregunta va antes de los documentos",
+        'partes = [instructions, *bloques, f"Pregunta: {question}"]',
+        'partes = [instructions, f"Pregunta: {question}", *bloques]',
+    ),
+    (
+        "rag-13-prompt-con-citas",
+        "citas repetidas",
+        "            if doc_id not in vistas:\n                vistas.append(doc_id)",
+        "            vistas.append(doc_id)",
+    ),
+    (
+        "rag-13-prompt-con-citas",
+        "no admite grupos",
+        "(?:\\s*,\\s*doc-\\d+)*",
+        "(?:\\s*,\\s*doc-\\d+){0}",
+    ),
+    ("rag-13-prompt-con-citas", "no detecta inventadas", "if c not in allowed_ids", "if False"),
+    (
+        "rag-13-prompt-con-citas",
+        "ok ignora las frases sin cita",
+        "bool(citations) and not invented and not uncited",
+        "bool(citations) and not invented",
+    ),
+    (
+        "rag-13-prompt-con-citas",
+        "ok sin exigir una cita",
+        "bool(citations) and not invented and not uncited",
+        "not invented and not uncited",
+    ),
+    (
+        "rag-13-prompt-con-citas",
+        "la abstención no se reconoce",
+        'answer.strip() == "NO_LO_SE"',
+        'answer == "NO_LO_SE"',
+    ),
+    # --- rag-14-orden-del-contexto ---
+    ("rag-14-orden-del-contexto", "impares sin invertir", "ranking[1::2][::-1]", "ranking[1::2]"),
+    (
+        "rag-14-orden-del-contexto",
+        "solo pares",
+        "ranking[0::2] + ranking[1::2][::-1]",
+        "ranking[0::2]",
+    ),
+    (
+        "rag-14-orden-del-contexto",
+        "la evidencia no se acota",
+        "max(0, min(position, len(result)))",
+        "position",
+    ),
+    (
+        "rag-14-orden-del-contexto",
+        "modifica la entrada",
+        "result = list(distractors)",
+        "result = distractors",
+    ),
+    (
+        "rag-14-orden-del-contexto",
+        "se pasa del presupuesto",
+        "if used + cost <= budget_tokens:",
+        "if used <= budget_tokens:",
+    ),
+    (
+        "rag-14-orden-del-contexto",
+        "se detiene al primero que no cabe",
+        '            kept.append(doc["id"])\n            used += cost',
+        '            kept.append(doc["id"])\n            used += cost\n        else:\n            break',
+    ),
+    ("rag-14-orden-del-contexto", "zona inicio desplazada", "if i < n / 3:", "if i <= n / 3:"),
+    (
+        "rag-14-orden-del-contexto",
+        "zona final desplazada",
+        "if i >= 2 * n / 3:",
+        "if i > 2 * n / 3:",
+    ),
 ]
 
 survivors = []

@@ -1,0 +1,68 @@
+---
+title: Prompt con citas y verificación
+description: Construye un prompt de RAG con documentos delimitados e identificados y verifica automáticamente las citas de la respuesta, detectando identificadores inventados, frases sin cita y abstenciones.
+part: rag
+module: m06-generacion-contexto
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - prompt de RAG
+  - grounding y citas
+  - verificación de citas
+  - abstención
+packages: []
+hints:
+  - 'Cada documento va como `<documento id="..." titulo="...">` + salto de línea + texto + salto de línea + `</documento>`, y los bloques se separan con una línea en blanco.'
+  - 'Antes de insertar el texto de un documento, sustituye `</documento>` por `&lt;/documento&gt;` para que el contenido no pueda cerrar la etiqueta por su cuenta.'
+  - 'Para extraer citas usa `re.findall(r"\[(doc-\d+(?:\s*,\s*doc-\d+)*)\]", texto)` y separa cada grupo por comas con `re.split(r"\s*,\s*", grupo)`.'
+  - 'Divide las frases con `re.split(r"(?<=[.!?])\s+", respuesta.strip())`; una frase está sin cita si `extract_citations(frase)` devuelve una lista vacía.'
+relatedLessons:
+  - m06-generacion-contexto/01-prompt-citas-y-grounding
+---
+
+## Objetivo
+
+Un sistema RAG no debe mostrar una respuesta sin comprobar sus citas. Vas a construir las dos mitades: el **prompt** que entrega los documentos al modelo de forma segura y la **verificación** de que la respuesta cita solo lo que recibió y no deja afirmaciones sin respaldo declarado.
+
+## Qué tienes que hacer
+
+### `build_rag_prompt(question, docs, instructions=INSTRUCTIONS)`
+
+`docs` es una lista de diccionarios con `id`, `title` y `text`. Devuelve un único texto con este orden exacto:
+
+1. `instructions`,
+2. una línea en blanco y los documentos, **en el orden recibido**, cada uno como
+   `<documento id="ID" titulo="TITULO">` + salto de línea + texto + salto de línea + `</documento>`, separados entre sí por una línea en blanco,
+3. una línea en blanco y `Pregunta: ` seguida de la pregunta.
+
+El texto de cada documento debe llevar `</documento>` sustituido por `&lt;/documento&gt;` (para que un documento no pueda cerrar su propia etiqueta). Sin documentos, el prompt es `instructions`, una línea en blanco y la pregunta.
+
+### `extract_citations(text)`
+
+Devuelve la lista de identificadores citados con el formato `[doc-123]`, **en orden de aparición y sin repetir**. También debe aceptar grupos como `[doc-001, doc-002]`.
+
+### `check_answer(answer, allowed_ids)`
+
+Devuelve un diccionario con:
+
+- `abstained`: `True` si la respuesta, sin espacios en los extremos, es exactamente `NO_LO_SE`.
+- `citations`: lo que devuelve `extract_citations`.
+- `invented`: las citas que no están en `allowed_ids` (mismo orden).
+- `uncited_sentences`: las frases (separadas por `.`, `!` o `?` seguidos de espacio) que no contienen ninguna cita.
+- `ok`: `True` solo si **hay abstención**, o si la respuesta tiene al menos una cita, ninguna inventada y ninguna frase sin cita.
+
+Una abstención no tiene `citations`, `invented` ni `uncited_sentences`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+check_answer("El plazo es de 14 días [doc-001]. Se reembolsa en 3 días [doc-099].", {"doc-001"})
+# {'abstained': False, 'citations': ['doc-001', 'doc-099'], 'invented': ['doc-099'],
+#  'uncited_sentences': [], 'ok': False}
+```
+
+<Callout type="nota" title="Existencia no es soporte">
+
+Tu verificación comprueba que las citas **existen** y que no faltan, pero no que el fragmento citado respalde la frase. Eso lo mide la evaluación de fidelidad del módulo 8. Por eso un `ok: True` es una condición necesaria, no suficiente.
+
+</Callout>

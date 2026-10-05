@@ -1,0 +1,63 @@
+---
+title: Orden y presupuesto del contexto
+description: Reordena los fragmentos para que la mejor evidencia quede en los extremos, ajusta el contexto a un presupuesto de tokens y mide en qué zona del prompt queda la evidencia, para combatir lost in the middle.
+part: rag
+module: m06-generacion-contexto
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - lost in the middle
+  - ordenación en extremos
+  - presupuesto de contexto
+  - pruebas de posición
+packages: []
+hints:
+  - 'La ordenación en extremos es `ranking[0::2] + ranking[1::2][::-1]`: los de posición par van delante y los impares, invertidos, detrás.'
+  - '`insert_evidence` es un `list.insert` sobre una copia: `copia = list(distractors); copia.insert(position, evidence_id)`. Limita la posición entre 0 y `len(distractors)`.'
+  - 'Para `fit_to_budget` recorre los documentos en orden, suma `approx_tokens(doc["text"])` y conserva el documento solo si cabe; los que no caben se saltan, pero se sigue con los siguientes.'
+  - 'La zona se decide con el índice `i` y el total `n`: `i < n / 3` es inicio, `i >= 2 * n / 3` es final y el resto es medio.'
+relatedLessons:
+  - m06-generacion-contexto/02-posicion-compresion-y-cache
+---
+
+## Objetivo
+
+Los modelos suelen aprovechar mejor lo que está al **principio y al final** del contexto que lo que está en medio. No puedes controlar el modelo, pero sí el **orden** y la **cantidad** de lo que le entregas. Vas a implementar cuatro piezas pequeñas:
+
+- una ordenación que pone la mejor evidencia en los extremos,
+- una función para **mover la evidencia a una posición concreta** (la base de una prueba de posición con tu propio modelo),
+- un ajuste del contexto a un **presupuesto de tokens**,
+- un diagnóstico que dice en qué **zona** del prompt quedó la evidencia.
+
+`approx_tokens` (de `ragkit.llm`) estima los tokens como 1 por cada 4 caracteres y ya está importada.
+
+## Qué tienes que hacer
+
+### `edges_order(ranking)`
+
+Recibe una lista ordenada del mejor al peor y devuelve una lista nueva con el mejor al **principio**, el segundo al **final**, el tercero en la segunda posición, el cuarto en la penúltima, y así sucesivamente. Los peores quedan en el centro. No modifica la lista original.
+
+### `insert_evidence(distractors, evidence_id, position)`
+
+Devuelve una lista **nueva** con los `distractors` en su orden y `evidence_id` insertado en `position`. Si `position` es negativa se usa 0 y si supera la longitud, se coloca al final.
+
+### `fit_to_budget(docs, budget_tokens)`
+
+`docs` es una lista de diccionarios con `id` y `text`, ordenados por relevancia. Devuelve los **ids** de los documentos que caben en el presupuesto: se recorren en orden, se suman los tokens aproximados de cada `text` y un documento se conserva solo si, con él, no se supera el presupuesto; los que no caben se **saltan** y se sigue con los siguientes. Los ids salen en el orden original.
+
+### `position_zone(order, doc_id)`
+
+Devuelve `"inicio"`, `"medio"` o `"final"` según dónde esté `doc_id` en `order` (índice `i` y longitud `n`): `inicio` si `i < n / 3`, `final` si `i >= 2 * n / 3` y `medio` en otro caso. Si `doc_id` no está, lanza `ValueError`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+edges_order(["d1", "d2", "d3", "d4", "d5"])
+# ['d1', 'd3', 'd5', 'd4', 'd2']
+```
+
+<Callout type="nota" title="Cómo probarlo con tu modelo">
+
+`insert_evidence` te permite hacer la prueba de posición de la lección: toma una pregunta, pon el documento correcto en el inicio, el medio y el final de una lista de distractores, y mide con tu modelo real cuántas veces responde bien en cada caso. Así sabrás si lost in the middle te afecta y si merece la pena reordenar.
+
+</Callout>

@@ -1,0 +1,99 @@
+lesson: m06-generacion-contexto/03-abstencion-no-lo-se
+questions:
+  - id: m06-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Por qué es valioso que un sistema RAG sepa abstenerse?'
+    options:
+      - 'Porque reduce el coste de la recuperación a cero.'
+      - 'Porque un «no lo sé» correcto en una pregunta sin respuesta es el resultado adecuado y refuerza la confianza del usuario.'
+      - 'Porque evita tener que construir un índice.'
+      - 'Porque hace innecesarias las citas.'
+    answer: [1]
+    explanation: 'Contestar con seguridad a lo que no está en la base de conocimiento produce respuestas fluidas y falsas. Abstenerse bien las evita y enseña al usuario que, cuando el sistema responde, merece crédito.'
+    ref: '#intuición-la-mejor-respuesta-a-veces-es-no-lo-sé'
+
+  - id: m06-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál de estos casos es el más peligroso para un sistema que solo mira la puntuación de la recuperación?'
+    options:
+      - 'Una pregunta totalmente fuera del dominio, sin ninguna palabra en común con el corpus.'
+      - 'Una pregunta sin respuesta cuyos documentos recuperados comparten palabras y cifras con ella y puntúan alto.'
+      - 'Una pregunta con una respuesta clara en un documento.'
+      - 'Una pregunta vacía.'
+    answer: [1]
+    explanation: 'Los documentos próximos pero sin respuesta puntúan alto porque comparten palabras. En el experimento, q31 obtuvo 8,02, por encima de la mediana de las preguntas con respuesta.'
+    ref: '#cuatro-situaciones-que-piden-abstenerse'
+
+  - id: m06-03-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, un umbral de puntuación BM25 de 10 rechazaba las 3 preguntas sin respuesta. ¿Qué precio tenía?'
+    options:
+      - 'Ninguno, es el umbral ideal.'
+      - 'Rechazaba también 19 de las 28 preguntas que sí tenían respuesta.'
+      - 'Aumentaba la latencia al doble.'
+      - 'Obligaba a reindexar el corpus.'
+    answer: [1]
+    explanation: 'Para atrapar q31 (8,02) hay que subir tanto el umbral que se pierden el 68 % de las preguntas legítimas. La señal no separa bien los dos grupos: la puntuación mide parecido, no suficiencia.'
+    ref: '#señal-1-la-puntuación-de-la-recuperación-y-por-qué-es-débil'
+
+  - id: m06-03-q4
+    type: code-output
+    difficulty: 2
+    prompt: 'Con estas puntuaciones, ¿cuántas preguntas CON respuesta se rechazarían por falsa abstención con un umbral de 4?'
+    code: |-
+      con_respuesta = {"a": 1.9, "b": 3.0, "c": 3.5, "d": 7.8, "e": 12.0}
+      umbral = 4
+      print(sum(1 for s in con_respuesta.values() if s < umbral))
+    options:
+      - '1'
+      - '5'
+      - '2'
+      - '3'
+    answer: [3]
+    explanation: 'Las puntuaciones 1,9, 3,0 y 3,5 están por debajo de 4, así que se rechazan tres preguntas legítimas. Es el mismo cálculo que el de la tabla de falsas abstenciones del experimento.'
+    ref: '#señal-1-la-puntuación-de-la-recuperación-y-por-qué-es-débil'
+
+  - id: m06-03-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué señales pueden ayudar a decidir si abstenerse? Marca todas las correctas.'
+    options:
+      - 'Dar permiso explícito en el prompt para decir que no se sabe, con una respuesta literal que el código pueda detectar.'
+      - 'Evaluar si los documentos recuperados son suficientes antes de generar.'
+      - 'Verificar después de generar que cada afirmación tenga un fragmento que la respalde.'
+      - 'Confiar en que las probabilidades internas del modelo indican si el dato está en tus documentos.'
+    answer: [0, 1, 2]
+    explanation: 'El permiso explícito, la evaluación de la suficiencia de la evidencia y la verificación del soporte son señales prácticas. Las probabilidades internas de un modelo generativo no están calibradas como medida de que algo conste en tus documentos.'
+    ref: '#señal-2-pedirlo-en-el-prompt'
+
+  - id: m06-03-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Cuando el dato existe pero el usuario no tiene permiso, conviene responder «ese documento es confidencial», porque es lo más transparente.'
+    answer: [1]
+    explanation: 'Es falso. Esa respuesta confirma que el documento existe. Conviene una respuesta común («no tengo información accesible sobre eso») y registrar el motivo real solo en la traza interna.'
+    ref: '#cómo-redactar-la-abstención'
+
+  - id: m06-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un conjunto dorado sin preguntas sin respuesta no puede medir la calidad de la abstención.'
+    answer: [0]
+    explanation: 'Es verdadero. Si solo hay preguntas contestables, nunca se comprueba que el sistema rechace las que no lo son. Hacen falta preguntas sin respuesta de varios tipos (fuera de dominio, aproximadas, sin permiso).'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m06-03-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué conviene que la abstención sea un código o una plantilla y no texto libre improvisado?'
+    options:
+      - 'Porque los modelos no pueden escribir texto libre.'
+      - 'Porque así el código puede detectarla, contarla y probarla.'
+      - 'Porque evita tener que registrar las trazas.'
+      - 'Porque el texto libre no se puede traducir.'
+    answer: [1]
+    explanation: 'Un mensaje distinto cada vez no se puede contar ni analizar. Un código (NO_LO_SE, SIN_PERMISO) permite medir cuántas veces ocurre, por qué, y reaccionar con una plantilla útil.'
+    ref: '#cómo-redactar-la-abstención'

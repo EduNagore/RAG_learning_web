@@ -1,0 +1,251 @@
+---
+title: Posición del contexto, compresión y prompt caching
+description: Por qué el orden de los fragmentos afecta a la respuesta (lost in the middle), qué cuesta y qué aporta comprimir el contexto, cuándo mirar el contexto largo en vez de RAG y cómo el prompt caching abarata los prefijos repetidos.
+module: m06-generacion-contexto
+order: 2
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Explicar el fenómeno lost in the middle y aplicar una ordenación que coloque la mejor evidencia en los extremos.
+  - Comparar compresión extractiva y abstractiva de contexto y medir qué se pierde al comprimir.
+  - Decidir entre RAG, contexto largo y un enfoque híbrido con criterios de coste y calidad.
+  - Calcular el ahorro de coste del prompt caching con prefijos repetidos y reconocer sus límites.
+prerequisites:
+  - m06-generacion-contexto/01-prompt-citas-y-grounding
+  - m01-intro-rag/02-rag-frente-a-finetuning-y-contexto-largo
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: Lost in the Middle, How Language Models Use Long Contexts
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, Liang
+    year: 2023
+  - title: "LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models"
+    url: https://arxiv.org/abs/2310.05736
+    type: paper
+    authors: Jiang, Wu, Lin, Yang, Qiu
+    year: 2023
+  - title: Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach
+    url: https://arxiv.org/abs/2407.16833
+    type: paper
+    authors: Li et al.
+    year: 2024
+  - title: Prompt caching (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    type: docs
+    authors: Anthropic
+    year: 2026
+relatedLabs:
+  - rag-14-orden-del-contexto
+---
+
+## Intuición: no todo el contexto se lee igual
+
+Tienes los cinco mejores fragmentos y una ventana de contexto enorme. ¿Importa en qué orden los pones? Importa. Un modelo de lenguaje no lee su entrada como un humano que prestara la misma atención a cada línea: tiende a aprovechar mejor lo que está **al principio y al final** que lo que queda **en medio**. Y como cada token de contexto cuesta dinero, latencia y atención, la pregunta práctica no es «¿cuánto cabe?», sino **«¿qué es lo mínimo que necesita el modelo para responder bien, y dónde lo pongo?»**.
+
+Esta lección reúne cuatro herramientas para gestionar el contexto después de recuperar: **ordenarlo**, **comprimirlo**, **decidir si usar contexto largo en lugar de recuperar** y **abaratar lo que se repite** con prompt caching.
+
+## Cómo funciona
+
+### Lost in the middle
+
+Liu et al. (2023) estudiaron cómo usan los modelos de lenguaje los contextos largos con dos tareas: **pregunta-respuesta sobre varios documentos** y **recuperación de pares clave-valor**. Su hallazgo central es que el rendimiento suele ser **máximo cuando la información relevante está al principio o al final del contexto y empeora de forma significativa cuando está en medio**, y que esto ocurre incluso con modelos diseñados explícitamente para contextos largos. La curva tiene forma de U.
+
+Consecuencias para RAG:
+
+- **Más fragmentos no es siempre mejor.** Añadir un décimo documento puede enterrar al relevante en la zona débil.
+- **El orden de entrega importa.** El orden «natural» por relevancia (el mejor primero) deja al segundo, tercero y cuarto en una zona intermedia. Una ordenación habitual coloca los **mejores en los extremos** y los menos relevantes en el centro.
+- **Los resultados dependen del modelo.** El trabajo es de 2023 y los modelos han cambiado: el efecto puede ser menor en modelos recientes. No lo supongas ni lo descartes; **mide con tu modelo y tus preguntas**, moviendo la posición de la evidencia en una pequeña prueba.
+
+La ordenación en extremos es una función de unas pocas líneas: se reparten los documentos ordenados por relevancia alternando entre el principio y el final.
+
+### Compresión de contexto
+
+Si el contexto es largo, caro o ruidoso, se puede **comprimir** antes de entregarlo. Hay dos familias:
+
+- **Extractiva:** se conservan frases o fragmentos seleccionados y se descartan los demás. Es simple, determinista, y no puede inventar nada (todo lo que queda estaba en el original).
+- **Abstractiva:** un modelo resume o reescribe el contexto. Comprime más, pero puede **perder o distorsionar** datos y añade una llamada de modelo.
+- **A nivel de token:** métodos como **LLMLingua** (Jiang et al., 2023) eliminan tokens poco informativos con un modelo pequeño, en un esquema «de grueso a fino». Sus autores reportan **hasta 20 veces de compresión con poca pérdida de rendimiento** en sus pruebas. Son resultados de sus tareas y modelos: la pérdida en tus preguntas hay que medirla.
+
+La compresión **tiene un precio en información**, y se nota en cuanto se mide. En el experimento de abajo, una compresión extractiva simple (frases con más palabras en común con la pregunta, hasta un presupuesto de palabras) reduce el contexto a menos de la mitad, pero la **cobertura** de la respuesta de referencia baja de forma clara.
+
+### ¿RAG o contexto largo?
+
+La tentación es meter todos los documentos en una ventana enorme y olvidarse de la recuperación. La lección sobre RAG frente a contexto largo del módulo 1 ya resumió la evidencia: Li et al. (2024) encontraron que, con recursos suficientes, el contexto largo suele superar a RAG en rendimiento medio, pero que RAG es **mucho más barato**, y propusieron **Self-Route**, que decide por consulta cuál usar. Los criterios prácticos:
+
+| Criterio | Favorece contexto largo | Favorece RAG |
+| --- | --- | --- |
+| Tamaño del corpus | Cabe entero en la ventana | Mayor que la ventana o crece sin parar |
+| Coste por consulta | Asumible (o amortizado con caché) | Importa y hay volumen |
+| Frescura | Se carga en cada petición | El índice se actualiza de forma incremental |
+| Permisos | Mismo contenido para todos | Cada usuario ve documentos distintos |
+| Tipo de pregunta | Síntesis sobre todo el material | Datos puntuales en un corpus grande |
+| Latencia | Un prefijo largo se procesa en cada petición salvo caché | La recuperación añade pasos pero el prompt es corto |
+
+El contexto largo no elimina el problema de la posición: es el escenario donde lost in the middle pesa más.
+
+### Prompt caching
+
+Si muchas peticiones comparten un **prefijo largo** (instrucciones, un manual o una base de conocimiento fija), no tiene sentido procesarlo cada vez. El **prompt caching** reutiliza el procesamiento de un prefijo ya visto. Según la documentación de la API de Claude, el sistema comprueba si el prefijo hasta un punto de corte (*cache breakpoint*) ya está en caché; si está, lo reutiliza y reduce el tiempo y el coste; si no, procesa el prompt completo y guarda el prefijo.
+
+<Snapshot date="2026-10">
+
+Datos de la documentación de prompt caching de Anthropic consultada el 5 de octubre de 2026 (los precios y las reglas cambian; verifica en la fuente): la caché tiene por defecto una vida de **5 minutos** (con opción de 1 hora a mayor coste), contada desde el inicio de la petición; la **escritura** en caché cuesta **1,25 veces** el precio base de entrada con la vida de 5 minutos (2 veces con 1 hora); la **lectura** cuesta **0,1 veces** en los modelos estándar (0,05 veces en Claude Opus 5.5 y 0,025 veces en Claude Fable 5.1 y Claude Mythos 5.1); y el **mínimo cacheable** es de 512 tokens en los modelos listados: un prompt más corto se procesa sin caché y sin error.
+
+</Snapshot>
+
+Lo que implica para RAG: la caché funciona por **prefijos**, así que lo que se repite entre peticiones (instrucciones, definiciones) debe ir **al principio**, y lo que cambia (los fragmentos recuperados, la pregunta) **al final**. Los fragmentos recuperados cambian en cada consulta y por eso rara vez se benefician; el prefijo fijo sí.
+
+### Un experimento: qué cuesta comprimir, ordenar y cachear
+
+El código siguiente usa el corpus Nimbus (28 preguntas con respuesta). Mide la **cobertura** (qué fracción de las palabras de la respuesta de referencia aparece en el contexto) con los tres primeros documentos de BM25 completos y con compresión extractiva a distintos presupuestos; muestra la ordenación en extremos; y calcula el coste relativo del prompt caching con los multiplicadores publicados (escritura 1,25 y lectura 0,1).
+
+```python
+import math
+import re
+
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+golden = [q for q in load_golden() if q["answerable"]]
+ids = [d["id"] for d in corpus]
+por_id = {d["id"]: d for d in corpus}
+docs = {d["id"]: tokenize(d["title"] + " " + d["text"]) for d in corpus}
+avgdl = sum(map(len, docs.values())) / len(docs)
+
+
+def bm25(query, k1=1.5, b=0.75):
+    scores = {i: 0.0 for i in ids}
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs.values())
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in docs.items():
+            f = d.count(t)
+            if f:
+                scores[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(d) / avgdl))
+    return sorted(ids, key=lambda i: -scores[i])
+
+
+def frases(texto):
+    return [f.strip() for f in re.split(r"(?<=[.!?])\s+", texto) if f.strip()]
+
+
+def comprimir(query, doc_ids, presupuesto):
+    """Compresión extractiva: conserva las frases más solapadas con la consulta hasta agotar el presupuesto."""
+    q = set(tokenize(query))
+    candidatas = [
+        (len(q & set(tokenize(f))), -i, f) for i, d in enumerate(doc_ids) for f in frases(por_id[d]["text"])
+    ]
+    elegidas, usadas = [], 0
+    for solape, _, f in sorted(candidatas, reverse=True):
+        n = len(f.split())
+        if solape > 0 and usadas + n <= presupuesto:
+            elegidas.append(f)
+            usadas += n
+    return elegidas
+
+
+def cobertura(ref, textos):
+    r = set(tokenize(ref))
+    return len(r & set(tokenize(" ".join(textos)))) / len(r) if r else 1
+
+
+def medir(construir):
+    cob, pal = [], []
+    for q in golden:
+        ctx = construir(q["question"], bm25(q["question"])[:3])
+        cob.append(cobertura(q["reference_answer"], ctx))
+        pal.append(sum(len(t.split()) for t in ctx))
+    return round(float(np.mean(cob)), 3), round(float(np.mean(pal)))
+
+
+print("contexto                       cobertura  palabras")
+print("3 documentos completos        ", *medir(lambda q, top: [por_id[d]["text"] for d in top]))
+for presupuesto in (90, 60, 30):
+    print(f"compresión a {presupuesto:>3} palabras max     ", *medir(lambda q, top: comprimir(q, top, presupuesto)))
+
+
+# Ordenación contra «lost in the middle»: los mejores, en los extremos.
+def extremos(ranking):
+    return ranking[0::2] + ranking[1::2][::-1]
+
+
+print(extremos(["1", "2", "3", "4", "5", "6"]))
+
+
+# Coste con prompt caching (multiplicadores publicados: escritura 1,25 y lectura 0,1 del precio de entrada base).
+def coste_relativo(n_consultas, escritura=1.25, lectura=0.1):
+    return (escritura + (n_consultas - 1) * lectura) / n_consultas
+
+
+for n in (1, 2, 10, 100):
+    print(f"{n:>3} consultas con el mismo prefijo: coste relativo {coste_relativo(n):.3f}")
+```
+
+Salida (determinista):
+
+```text
+contexto                       cobertura  palabras
+3 documentos completos         0.837 161
+compresión a  90 palabras max      0.657 74
+compresión a  60 palabras max      0.633 52
+compresión a  30 palabras max      0.472 25
+['1', '3', '5', '6', '4', '2']
+  1 consultas con el mismo prefijo: coste relativo 1.250
+  2 consultas con el mismo prefijo: coste relativo 0.675
+ 10 consultas con el mismo prefijo: coste relativo 0.215
+100 consultas con el mismo prefijo: coste relativo 0.112
+```
+
+Qué enseñan los números:
+
+- **Comprimir cuesta información.** Con 161 palabras de contexto la cobertura es 0,837; con un presupuesto de 90 palabras (74 reales, menos de la mitad) baja a 0,657, y con 30, a 0,472. La compresión extractiva es honesta (no inventa), pero descarta frases que contenían parte de la respuesta. Un compresor mejor perderá menos, pero **nunca es gratis**: mide el efecto sobre tus preguntas antes de activarlo.
+- **La cobertura es un proxy**, no una medida de corrección (la fidelidad y la corrección se evalúan en el módulo 8).
+- **La ordenación en extremos** pone el mejor documento (1) al principio y el segundo (2) al final, y deja en el centro a los peores (5 y 6). Es una heurística; su efecto real depende del modelo.
+- **El prompt caching** sale a cuenta cuando el prefijo se **reutiliza**: con una sola consulta, escribir en caché **cuesta más** (1,25 veces); a partir de dos consultas ya compensa (0,675), y con 100 consultas el coste medio del prefijo es el 11 % del base. El cálculo supone que todas las peticiones llegan dentro de la vida de la caché y que el prefijo es idéntico byte a byte; si pasan más de cinco minutos entre peticiones sin refrescarla, hay que volver a escribir.
+
+## Trade-offs
+
+| Técnica | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Ordenar en extremos | Gratis; puede ayudar con contextos largos | Heurística: el efecto depende del modelo |
+| Menos fragmentos (top-k pequeño) | Menos ruido, menos coste | Riesgo de perder la evidencia |
+| Compresión extractiva | Determinista, sin invención | Pierde información (cobertura menor) |
+| Compresión abstractiva / de tokens | Comprime mucho | Puede distorsionar o perder datos; añade un modelo |
+| Contexto largo sin recuperación | Simple, mejor en síntesis global | Coste, latencia y lost in the middle |
+| Prompt caching | Gran ahorro con prefijos repetidos | Solo prefijos idénticos; vida limitada; sobrecoste de escritura |
+
+## Errores comunes en producción
+
+- **Rellenar la ventana «porque cabe».** Más contexto implica más coste y más ruido; empieza con pocos fragmentos y sube solo si la métrica mejora.
+- **Suponer que lost in the middle sigue igual (o que ya no existe).** Depende del modelo: mídelo con una prueba que mueva la posición de la evidencia.
+- **Comprimir sin medir.** Una compresión que parece razonable puede quitar justo la frase que contenía la respuesta.
+- **Poner lo variable al principio del prompt.** Un solo carácter distinto al comienzo invalida la caché del resto: lo estático va primero.
+- **Contar con la caché sin controlar el tráfico.** Con poco tráfico, la caché caduca entre peticiones y se paga siempre la escritura.
+- **Cachear prompts por debajo del mínimo.** Se procesan sin caché y sin error: crees que ahorras y no ahorras.
+- **Comparar RAG y contexto largo solo por calidad.** La decisión es de calidad, coste, latencia, frescura y permisos a la vez.
+- **Olvidar que cada usuario puede ver cosas distintas.** Una caché o un contexto compartido con documentos restringidos filtra datos entre usuarios.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es lost in the middle y cómo lo mitigas?"_ Pista: el rendimiento cae cuando la evidencia está en medio de un contexto largo; menos fragmentos, ordenar con lo mejor en los extremos, reranking y comprimir; y medir con el modelo propio.
+- _"¿Cuándo usarías contexto largo en lugar de RAG?"_ Pista: corpus que cabe en la ventana, preguntas de síntesis, coste asumible o amortizado con caché; RAG para corpus grandes, permisos por usuario y frescura.
+- _"¿Cómo abarata el prompt caching un sistema con un prefijo largo?"_ Pista: reutiliza el procesamiento del prefijo; escritura más cara, lecturas mucho más baratas; el prefijo debe ser idéntico y estar al principio.
+- _"¿Qué riesgos tiene comprimir el contexto?"_ Pista: pérdida de información o distorsión; mide la calidad de respuesta antes y después.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Los modelos aprovechan peor la información **en medio** de un contexto largo (Liu et al., 2023); coloca la mejor evidencia en los **extremos** y mide con tu modelo.
+- **Comprimir** el contexto ahorra tokens pero cuesta información: en Nimbus, de 0,837 a 0,657 de cobertura al quedarnos con menos de la mitad.
+- **RAG frente a contexto largo** es una decisión de calidad, coste, latencia, frescura y permisos; **Self-Route** combina ambos.
+- El **prompt caching** exige prefijos idénticos y reutilizados: lo estático va primero; con una sola consulta cuesta más.
+- Los datos de precios y reglas de la caché cambian: consúltalos en la documentación vigente.
+
+</KeyTakeaways>
