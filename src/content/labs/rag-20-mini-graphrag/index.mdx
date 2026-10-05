@@ -1,0 +1,64 @@
+---
+title: Mini GraphRAG con networkx
+description: Construye un grafo de conocimiento a partir de tripletas, resuelve entidades duplicadas, responde preguntas de varios saltos y detecta comunidades, las piezas básicas de un RAG con grafos.
+part: rag
+module: m07-rag-avanzado
+difficulty: 3
+estimatedMinutes: 40
+concepts:
+  - grafo de conocimiento
+  - resolución de entidades
+  - multi-hop
+  - detección de comunidades
+packages:
+  - networkx
+hints:
+  - 'Normaliza con `strip_accents(nombre).casefold()` y colapsa espacios con `" ".join(texto.split())`. Así «Envío  Exprés» y «envio exprés» son el mismo nodo.'
+  - 'Usa `nx.MultiDiGraph()`: `grafo.add_edge(origen, destino, key=relacion)` permite varias relaciones distintas entre las mismas entidades y no duplica una tripleta repetida.'
+  - 'Para los vecinos a distancia máxima `hops`, trabaja sobre la vista no dirigida: `nx.single_source_shortest_path_length(grafo.to_undirected(as_view=True), inicio, cutoff=hops)`.'
+  - 'Para seguir una cadena de relaciones, en cada paso mira `grafo.out_edges(actual, keys=True)`, filtra por `key == relacion` y quédate con el primer destino en orden alfabético.'
+relatedLessons:
+  - m07-rag-avanzado/01-graphrag-y-lightrag
+---
+
+## Objetivo
+
+Un RAG con grafo parte de **tripletas** `(sujeto, relación, objeto)` que normalmente extrae un LLM de los documentos. En este laboratorio no necesitas el LLM: ya tienes las tripletas, y construyes lo que viene después. Vas a implementar un grafo de conocimiento con **resolución de entidades**, preguntas de **varios saltos** y detección de **comunidades**.
+
+`strip_accents` (de `ragkit.text`) y `networkx` ya están importados en el código inicial.
+
+## Qué tienes que hacer
+
+### `normalize_entity(name)`
+
+Devuelve el nombre sin acentos (conserva la ñ, `strip_accents` ya lo hace), en minúsculas (`casefold`) y con los espacios colapsados y sin espacios en los extremos. Así «Envío  Exprés» y «envio exprés» se consideran la misma entidad.
+
+### `build_graph(triples)`
+
+Recibe una lista de tuplas `(sujeto, relación, objeto)` y devuelve un `nx.MultiDiGraph` con un nodo por entidad **normalizada** y una arista dirigida `sujeto → objeto` cuya **clave** es la relación. Una tripleta repetida (incluso con otra grafía de las entidades) no duplica la arista.
+
+### `neighbors_within(graph, entity, hops)`
+
+Devuelve la **lista ordenada** de entidades alcanzables en como mucho `hops` saltos **ignorando la dirección de las aristas**, sin incluir la propia entidad. `entity` se normaliza antes de buscar. Si no existe en el grafo, devuelve `[]`.
+
+### `follow_relations(graph, start, relations)`
+
+Parte de `start` (se normaliza) y sigue en orden las relaciones de `relations`: en cada paso se mueve al **destino** de una arista **saliente** con esa relación (si hay varios destinos, el primero por orden alfabético). Devuelve la entidad final o `None` si alguna relación no existe en algún paso o `start` no está en el grafo.
+
+### `find_communities(graph)`
+
+Detecta comunidades en el grafo **no dirigido** con `nx.community.greedy_modularity_communities` y devuelve una lista de listas de entidades: cada comunidad **ordenada**, y las comunidades ordenadas de **mayor a menor tamaño** (desempate por su primera entidad).
+
+## Un ejemplo para comprobar a mano
+
+```python
+g = build_graph([("Envío exprés", "gestionado_por", "Equipo de Envíos"),
+                 ("Equipo de Envíos", "responsable", "Marta Ruiz")])
+follow_relations(g, "envio exprés", ["gestionado_por", "responsable"])   # 'marta ruiz'
+```
+
+<Callout type="nota" title="Por qué importa la normalización">
+
+Si «Nimbus», «Nimbus Logística» y «la empresa» son tres nodos distintos, el grafo se rompe en trozos y las comunidades y los caminos dejan de reflejar la realidad. La **resolución de entidades** (aquí, una normalización simple; en producción, algo bastante más sofisticado) es una de las partes más delicadas de un RAG con grafos.
+
+</Callout>

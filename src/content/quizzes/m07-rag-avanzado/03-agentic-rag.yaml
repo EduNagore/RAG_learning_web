@@ -1,0 +1,95 @@
+lesson: m07-rag-avanzado/03-agentic-rag
+questions:
+  - id: m07-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué distingue a Agentic RAG de un pipeline de RAG fijo?'
+    options:
+      - 'Que usa siempre una base de datos vectorial distinta.'
+      - 'Que un agente decide cuántas veces y con qué consultas o herramientas recupera, en lugar de seguir un flujo prefijado.'
+      - 'Que elimina el modelo de lenguaje.'
+      - 'Que solo funciona con documentos en inglés.'
+    answer: [1]
+    explanation: 'En Agentic RAG la recuperación es una herramienta más. El número de pasos y las consultas dependen de lo que el agente va encontrando.'
+    ref: '#intuición-de-recuperar-y-generar-a-decidir-cómo-buscar'
+
+  - id: m07-03-q2
+    type: multiple
+    difficulty: 2
+    prompt: '¿Cuáles son los patrones de diseño agénticos citados en el survey de Singh et al.? Marca todos los correctos.'
+    options:
+      - 'Reflexión.'
+      - 'Planificación.'
+      - 'Uso de herramientas.'
+      - 'Colaboración multiagente.'
+    answer: [0, 1, 2, 3]
+    explanation: 'El survey describe esos cuatro patrones: reflexión, planificación, uso de herramientas y colaboración multiagente.'
+    ref: '#los-cuatro-patrones-aplicados-a-la-recuperación'
+
+  - id: m07-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué intercala el patrón ReAct?'
+    options:
+      - 'Embeddings y reranking.'
+      - 'Trazas de razonamiento y acciones, de modo que el razonamiento refina el plan mientras las acciones reúnen información externa.'
+      - 'Chunks pequeños y grandes.'
+      - 'Preguntas y respuestas del usuario.'
+    answer: [1]
+    explanation: 'ReAct alterna razonar y actuar: el modelo usa el razonamiento para planificar y las acciones (herramientas) para obtener información.'
+    ref: '#el-bucle-básico'
+
+  - id: m07-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento con q25, el RAG de un paso ya recuperaba doc-002 y doc-003. ¿Qué conclusión es correcta?'
+    options:
+      - 'Los agentes siempre mejoran la recuperación.'
+      - 'Para esta pregunta la autonomía no aportó recuperación adicional y triplicó las llamadas al modelo: un agente se justifica cuando un paso no basta.'
+      - 'El RAG de un paso nunca funciona con preguntas de dos documentos.'
+      - 'Las llamadas al modelo no cuestan nada.'
+    answer: [1]
+    explanation: 'El agente hizo dos búsquedas y tres llamadas al modelo para recuperar lo que un solo paso ya traía. La autonomía tiene un coste que solo compensa cuando hace falta.'
+    ref: '#un-experimento-un-agente-de-búsqueda-frente-a-un-rag-de-un-paso'
+
+  - id: m07-03-q5
+    type: single
+    difficulty: 3
+    prompt: '¿Con qué permisos debe ejecutar la herramienta de búsqueda de un agente?'
+    options:
+      - 'Con los permisos máximos del sistema, para no limitar al agente.'
+      - 'Con los permisos del usuario que hace la pregunta, en cada llamada.'
+      - 'Sin permisos, porque el agente es de confianza.'
+      - 'Con los permisos del último documento recuperado.'
+    answer: [1]
+    explanation: 'Un agente con permisos amplios puede filtrar información restringida a un usuario que no debería verla. El control de acceso se aplica con la identidad del usuario en cada llamada a una herramienta.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m07-03-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un agente de RAG puede entrar en un bucle de búsquedas repetidas si no se le impone un máximo de pasos o un presupuesto.'
+    answer: [0]
+    explanation: 'Es verdadero. Sin límites, un agente que no converge consume tokens y tiempo sin responder. Se fijan máximos de pasos, un presupuesto y una condición de parada.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m07-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Evaluar solo la respuesta final basta para entender si un agente de RAG funciona bien.'
+    answer: [1]
+    explanation: 'Es falso. También hay que medir la trayectoria: pasos innecesarios, búsquedas repetidas, herramientas mal elegidas y coste. Dos agentes con la misma respuesta pueden costar muy distinto.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m07-03-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Qué riesgo de seguridad es específico de tratar los resultados de una herramienta como si fueran de confianza?'
+    options:
+      - 'Que el índice ocupe más memoria.'
+      - 'La inyección indirecta: un documento recuperado puede contener instrucciones que redirijan al agente.'
+      - 'Que los resultados lleguen en el idioma equivocado.'
+      - 'Que el agente no pueda citar.'
+    answer: [1]
+    explanation: 'El contenido recuperado es dato no fiable. Un documento puede intentar manipular al agente («ignora las instrucciones anteriores»), por lo que se delimita, se limita lo que el agente puede hacer y se filtra.'
+    ref: '#errores-comunes-en-producción'

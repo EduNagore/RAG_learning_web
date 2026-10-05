@@ -1,0 +1,95 @@
+lesson: m07-rag-avanzado/02-self-rag-crag-y-adaptive-rag
+questions:
+  - id: m07-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Cuál es el problema común que atacan Self-RAG, CRAG y Adaptive-RAG?'
+    options:
+      - 'Que los embeddings ocupan demasiada memoria.'
+      - 'Que un pipeline de RAG fijo recupera siempre igual, no corrige la mala recuperación y no se adapta a la pregunta.'
+      - 'Que los documentos no se pueden dividir en fragmentos.'
+      - 'Que los modelos no admiten contextos largos.'
+    answer: [1]
+    explanation: 'Las tres pasan de un pipeline fijo a un pipeline con decisiones: cuándo recuperar, si lo recuperado es bueno y cuánto esfuerzo dedicar.'
+    ref: '#intuición-un-pipeline-fijo-no-se-adapta-a-la-pregunta'
+
+  - id: m07-02-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué son los tokens de reflexión en Self-RAG?'
+    options:
+      - 'Tokens especiales que el modelo emite para decidir si recuperar y para evaluar los pasajes y su propia salida.'
+      - 'Tokens que se usan solo para comprimir el contexto.'
+      - 'Identificadores de documentos en el índice.'
+      - 'Tokens que cifran la respuesta.'
+    answer: [0]
+    explanation: 'Self-RAG entrena un modelo que recupera bajo demanda y se critica con estos tokens, que además se pueden controlar en inferencia para adaptar el comportamiento a cada tarea.'
+    ref: '#self-rag-el-modelo-reflexiona'
+
+  - id: m07-02-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué hace el evaluador de recuperación de CRAG?'
+    options:
+      - 'Entrena el modelo de embeddings.'
+      - 'Puntúa la calidad de los documentos recuperados y su confianza determina la acción siguiente.'
+      - 'Elimina los documentos del índice.'
+      - 'Traduce la pregunta a otro idioma.'
+    answer: [1]
+    explanation: 'Es un evaluador ligero cuya confianza decide si se responde con lo recuperado, se corrige (reformulando o ampliando la búsqueda) o se descarta.'
+    ref: '#crag-evaluar-la-recuperación-y-corregirla'
+
+  - id: m07-02-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué estrategias selecciona el clasificador de Adaptive-RAG?'
+    options:
+      - 'Solo entre dos modelos de embeddings.'
+      - 'Sin recuperación, recuperación en un paso o recuperación iterativa de varios pasos, según la complejidad de la pregunta.'
+      - 'Entre tres idiomas de respuesta.'
+      - 'Entre tres tamaños de chunk.'
+    answer: [1]
+    explanation: 'Un clasificador pequeño estima la dificultad de la pregunta y enruta a una de las tres estrategias para no malgastar cómputo ni quedarse corto.'
+    ref: '#adaptive-rag-elegir-la-estrategia-según-la-complejidad'
+
+  - id: m07-02-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, los umbrales de 0,6 y 0,35 se fijaron tras ver las coberturas de las propias preguntas. ¿Qué implicación tiene?'
+    options:
+      - 'Que el resultado es una estimación fiable del rendimiento real.'
+      - 'Que el resultado está optimizado para ese conjunto y solo ilustra el mecanismo; el rendimiento real exige preguntas no usadas para fijar los umbrales.'
+      - 'Que los umbrales no importan.'
+      - 'Que el evaluador no necesita validación.'
+    answer: [1]
+    explanation: 'Ajustar parámetros con las mismas preguntas con las que se mide produce sobreajuste. Además, solo hay tres preguntas sin respuesta: no se puede concluir casi nada.'
+    ref: '#un-experimento-el-bucle-correctivo-sobre-nimbus'
+
+  - id: m07-02-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué prácticas son recomendables al implementar un bucle correctivo? Marca todas las correctas.'
+    options:
+      - 'Fijar un máximo de reintentos y una condición de parada.'
+      - 'Registrar el veredicto y las consultas reformuladas para poder depurar.'
+      - 'Aplicar los mismos filtros de permisos en cada nueva búsqueda.'
+      - 'Dejar reintentar indefinidamente hasta que el veredicto sea correcto.'
+    answer: [0, 1, 2]
+    explanation: 'Los reintentos sin límite disparan coste y latencia. La traza y los filtros de acceso consistentes son imprescindibles.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m07-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'En un bucle estilo CRAG, una recuperación evaluada como ambigua puede reformular la consulta y reintentar antes de abstenerse.'
+    answer: [0]
+    explanation: 'Es verdadero. La banda intermedia es una segunda oportunidad: se reformula o se amplía la búsqueda, y si sigue sin convencer se abstiene.'
+    ref: '#crag-evaluar-la-recuperación-y-corregirla'
+
+  - id: m07-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Para aplicar las ideas de CRAG o Adaptive-RAG siempre hay que entrenar un modelo propio.'
+    answer: [1]
+    explanation: 'Es falso. Se pueden implementar con un LLM como evaluador o clasificador mediante prompts, a cambio de más latencia y coste por consulta. Entrenar un modelo pequeño es una opción para reducirlos.'
+    ref: '#cómo-se-comparan'

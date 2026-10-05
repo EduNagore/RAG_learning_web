@@ -669,6 +669,104 @@ MUTANTS = [
         "if i >= 2 * n / 3:",
         "if i > 2 * n / 3:",
     ),
+    # --- rag-20-mini-graphrag ---
+    (
+        "rag-20-mini-graphrag",
+        "no quita acentos",
+        "strip_accents(name).casefold().split()",
+        "name.casefold().split()",
+    ),
+    (
+        "rag-20-mini-graphrag",
+        "no colapsa espacios",
+        '" ".join(strip_accents(name).casefold().split())',
+        "strip_accents(name).casefold().strip()",
+    ),
+    (
+        "rag-20-mini-graphrag",
+        "el grafo no normaliza",
+        "graph.add_edge(normalize_entity(subject), normalize_entity(obj), key=relation)",
+        "graph.add_edge(subject, obj, key=relation)",
+    ),
+    (
+        "rag-20-mini-graphrag",
+        "vecinos solo en el sentido de las aristas",
+        "graph.to_undirected(as_view=True), start, cutoff=hops",
+        "graph, start, cutoff=hops",
+    ),
+    ("rag-20-mini-graphrag", "incluye la propia entidad", "if node != start", "if True"),
+    (
+        "rag-20-mini-graphrag",
+        "vecinos sin ordenar",
+        "return sorted(node for node in reachable if node != start)",
+        "return list(node for node in reachable if node != start)",
+    ),
+    ("rag-20-mini-graphrag", "un salto de más", "cutoff=hops", "cutoff=hops + 1"),
+    (
+        "rag-20-mini-graphrag",
+        "elige el último destino",
+        "current = targets[0]",
+        "current = targets[-1]",
+    ),
+    ("rag-20-mini-graphrag", "ignora la relación", "if key == relation", "if True"),
+    (
+        "rag-20-mini-graphrag",
+        "comunidades de menor a mayor",
+        "key=lambda c: (-len(c), c[0])",
+        "key=lambda c: (len(c), c[0])",
+    ),
+    # --- rag-21-crag-simplificado ---
+    (
+        "rag-21-crag-simplificado",
+        "raíz de 4 letras",
+        (
+            "{t[:5] for t in tokenize(question)}",
+            '{t[:5] for doc in docs for t in tokenize(doc["text"])}',
+        ),
+        (
+            "{t[:4] for t in tokenize(question)}",
+            '{t[:4] for doc in docs for t in tokenize(doc["text"])}',
+        ),
+    ),
+    ("rag-21-crag-simplificado", "sin guarda de pregunta vacía", "if not wanted:", "if False:"),
+    ("rag-21-crag-simplificado", "límite alto exclusivo", "if score >= high:", "if score > high:"),
+    ("rag-21-crag-simplificado", "límite bajo inclusivo", "if score < low:", "if score <= low:"),
+    (
+        "rag-21-crag-simplificado",
+        "un reintento de más",
+        "retries < max_retries",
+        "retries <= max_retries",
+    ),
+    (
+        "rag-21-crag-simplificado",
+        "nunca reformula",
+        'verdict == "ambiguo" and retries < max_retries',
+        "False",
+    ),
+    (
+        "rag-21-crag-simplificado",
+        "responde con la pregunta original",
+        "answer_fn(current, docs)",
+        "answer_fn(question, docs)",
+    ),
+    (
+        "rag-21-crag-simplificado",
+        "no registra la traza",
+        "trace.append((current, verdict))",
+        "pass",
+    ),
+    (
+        "rag-21-crag-simplificado",
+        "devuelve la pregunta original al abstenerse",
+        '"answer": None, "question": current',
+        '"answer": None, "question": question',
+    ),
+    (
+        "rag-21-crag-simplificado",
+        "ignora los umbrales de crag_answer",
+        "evaluate_retrieval(current, docs, high=high, low=low)",
+        "evaluate_retrieval(current, docs)",
+    ),
 ]
 
 survivors = []

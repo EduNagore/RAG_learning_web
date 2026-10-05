@@ -1,0 +1,218 @@
+---
+title: GraphRAG y LightRAG, recuperación con grafos
+description: Qué problema resuelve la recuperación basada en grafos de conocimiento (preguntas globales y de varios saltos), cómo funcionan GraphRAG y LightRAG, cuánto cuestan y cuándo no compensan.
+module: m07-rag-avanzado
+order: 1
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Explicar por qué el RAG basado en fragmentos falla con preguntas globales sobre todo un corpus.
+  - Describir el pipeline de GraphRAG (grafo de entidades, comunidades, resúmenes) y la idea de LightRAG (índice en grafo, doble nivel, actualización incremental).
+  - Construir un grafo de documentos y detectar comunidades con networkx, y entender las limitaciones de una extracción de entidades débil.
+  - Decidir cuándo un grafo compensa su coste de indexación frente a búsqueda híbrida con reranking.
+prerequisites:
+  - m06-generacion-contexto/03-abstencion-no-lo-se
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: "From Local to Global: A Graph RAG Approach to Query-Focused Summarization"
+    url: https://arxiv.org/abs/2404.16130
+    type: paper
+    authors: Edge et al.
+    year: 2024
+  - title: "LightRAG: Simple and Fast Retrieval-Augmented Generation"
+    url: https://arxiv.org/abs/2410.05779
+    type: paper
+    authors: Guo, Xia, Yu, Ao, Huang
+    year: 2024
+  - title: "RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval"
+    url: https://arxiv.org/abs/2401.18059
+    type: paper
+    authors: Sarthi, Abdullah, Tuli, Khanna, Goldie, Manning
+    year: 2024
+relatedLabs:
+  - rag-20-mini-graphrag
+---
+
+## Intuición: preguntas que ningún fragmento contesta
+
+Imagina que tienes mil documentos internos y alguien pregunta: **«¿cuáles son los temas principales de esta base de conocimiento?»** o **«¿qué riesgos aparecen de forma recurrente en nuestros informes de incidentes?»**. Un RAG por fragmentos recupera los $k$ pasajes más parecidos a la pregunta, pero esa pregunta no se parece a ningún pasaje concreto: la respuesta está **repartida por todo el corpus**. Edge et al. (2024) lo formulan así: el RAG convencional «falla en preguntas globales dirigidas a un corpus de texto completo», porque esas preguntas son en realidad una tarea de **resumen guiado por la consulta** (*query-focused summarization*), no de recuperación.
+
+Hay un segundo caso parecido: las preguntas de **varios saltos** (*multi-hop*), que necesitan encadenar hechos de documentos distintos («¿quién es el responsable del proveedor que suministra la pieza que falló?»). Un fragmento aislado no basta, y los embeddings no siguen relaciones.
+
+Los enfoques basados en grafos atacan ambos casos construyendo, **al indexar**, una estructura que representa entidades y relaciones del corpus y permite navegarla.
+
+## Cómo funciona
+
+### GraphRAG: del texto al grafo y a los resúmenes por comunidad
+
+Según el trabajo de Edge et al., el método construye un índice basado en grafos en **dos etapas**:
+
+1. **Grafo de entidades.** Un LLM recorre los documentos y extrae un grafo de conocimiento: entidades (personas, organizaciones, productos, conceptos) y las relaciones entre ellas.
+2. **Resúmenes de comunidades.** Se detectan **comunidades** de entidades estrechamente relacionadas (grupos densamente conectados) y se **pregeneran resúmenes** de cada comunidad.
+
+Al responder una pregunta, cada resumen de comunidad produce una **respuesta parcial** y esas respuestas parciales se **consolidan** en una respuesta final. Es un esquema tipo *map-reduce* sobre el corpus, con los resúmenes como pasos intermedios. Los autores evalúan preguntas globales de comprensión sobre colecciones de alrededor de **un millón de tokens** y reportan mejoras sustanciales frente a una línea base de RAG convencional en la **exhaustividad** y la **diversidad** de las respuestas generadas.
+
+Dos detalles que conviene retener. Primero, la ganancia que miden es de **exhaustividad y diversidad** de respuestas a preguntas globales, no de precisión en preguntas factuales puntuales. Segundo, el trabajo parte de un coste previo evidente: **cada documento pasa por un LLM al indexar**, y los resúmenes por comunidad también.
+
+### LightRAG: grafo e índice vectorial, con actualización incremental
+
+LightRAG (Guo et al., 2024) apunta a un diseño más ligero. Sus propuestas, según el resumen del artículo, son tres:
+
+- **Indexación con estructuras de grafo.** Integra grafos en la indexación y la recuperación en lugar de usar solo representaciones planas de los fragmentos, que según los autores producen respuestas fragmentadas por la falta de conciencia del contexto.
+- **Recuperación de doble nivel.** Un sistema que cubre tanto el descubrimiento de conocimiento de **bajo nivel** (entidades y detalles concretos) como el de **alto nivel** (temas y visión general).
+- **Actualización incremental.** Un algoritmo para incorporar datos nuevos con prontitud sin reconstruir todo, en entornos cambiantes.
+
+Los autores afirman que la combinación de grafo y vectores permite recuperar entidades y relaciones relacionadas de forma eficiente y mejorar tiempos de respuesta y exactitud. Son afirmaciones del propio artículo sobre sus conjuntos de evaluación: antes de adoptarlo, **mídelo con tus datos**.
+
+<Diagram
+  caption="Indexación y consulta de un RAG con grafo: el grafo y los resúmenes se calculan una vez, al indexar."
+  code={`flowchart LR
+  D[Documentos] --> E[LLM: extrae entidades y relaciones]
+  E --> G[(Grafo de conocimiento)]
+  G --> C[Detección de comunidades]
+  C --> S[Resúmenes por comunidad]
+  Q[Pregunta global] --> S
+  S --> P[Respuestas parciales]
+  P --> F[Respuesta final consolidada]`}
+/>
+
+### La relación con RAPTOR
+
+En el módulo anterior viste **RAPTOR**, que construye un árbol de resúmenes agrupando por similitud de embeddings. GraphRAG construye una estructura parecida (resúmenes de grupos) pero el criterio de agrupación es **el grafo de entidades y relaciones**, no la similitud de vectores, y la estructura es un grafo, no un árbol. Ambos comparten la idea de **preprocesar el corpus para tener a mano resúmenes de varios niveles**.
+
+<Snapshot date="2026-10">
+
+El ecosistema de RAG con grafos cambia muy rápido: han aparecido implementaciones de código abierto del enfoque original, variantes más baratas, bases de datos de grafos con soporte vectorial y servicios gestionados, y los artículos se actualizan (el de LightRAG se revisó en abril de 2025). Lo que permanece es la arquitectura (extraer entidades, agrupar en comunidades, resumir, consultar). Antes de elegir una implementación, comprueba el estado de su documentación, su licencia, cuánto cuesta indexar un corpus de tu tamaño con el modelo que vayas a usar y si soporta actualización incremental.
+
+</Snapshot>
+
+### Un experimento: un grafo de juguete sobre Nimbus
+
+Una extracción real de entidades usa un LLM. Para ver la mecánica sin llamadas externas, el código siguiente usa una **extracción de juguete**: se consideran «entidades» los términos que aparecen en entre 2 y 6 documentos (ni únicos ni omnipresentes), y se conecta cada par de documentos que comparten al menos dos. Después se detectan comunidades con el algoritmo de modularidad de networkx (GraphRAG usa Leiden, de la misma familia de métodos). Al final se comprueba si las preguntas que necesitan **dos documentos** ya se resuelven con BM25.
+
+```python
+import math
+from collections import Counter
+from itertools import combinations
+
+import networkx as nx
+from ragkit.data import load_corpus, load_golden
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+por_id = {d["id"]: d for d in corpus}
+tokens = {d["id"]: set(tokenize(d["title"] + " " + d["text"])) for d in corpus}
+
+# «Entidades» de juguete: términos que aparecen en 2 a 6 documentos (ni únicos ni omnipresentes).
+frecuencia = Counter(t for ts in tokens.values() for t in ts)
+entidades = {t for t, n in frecuencia.items() if 2 <= n <= 6 and t.isalpha() and len(t) > 3}
+
+# Grafo de documentos: arista si comparten al menos dos entidades.
+G = nx.Graph()
+G.add_nodes_from(tokens)
+for a, b in combinations(tokens, 2):
+    compartidas = (tokens[a] & tokens[b]) & entidades
+    if len(compartidas) >= 2:
+        G.add_edge(a, b, weight=len(compartidas))
+
+# Comunidades por modularidad (GraphRAG usa Leiden, de la misma familia).
+comunidades = sorted(
+    nx.community.greedy_modularity_communities(G, weight="weight"), key=len, reverse=True
+)
+print(f"{G.number_of_nodes()} documentos, {G.number_of_edges()} aristas, {len(comunidades)} comunidades")
+for i, c in enumerate(comunidades, 1):
+    deptos = Counter(por_id[d]["department"] for d in c).most_common(2)
+    temas = [t for t, _ in Counter(t for d in c for t in tokens[d] & entidades).most_common(5)]
+    print(i, len(c), deptos, temas)
+
+pureza = sum(Counter(por_id[d]["department"] for d in c).most_common(1)[0][1] for c in comunidades)
+print("pureza respecto al departamento:", round(pureza / len(corpus), 3))
+
+# ¿Aporta el grafo en las preguntas que necesitan dos documentos? BM25 como referencia.
+docs = {d["id"]: tokenize(d["title"] + " " + d["text"]) for d in corpus}
+avgdl = sum(map(len, docs.values())) / len(docs)
+
+
+def bm25(query, k1=1.5, b=0.75):
+    scores = {i: 0.0 for i in docs}
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs.values())
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in docs.items():
+            f = d.count(t)
+            if f:
+                scores[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(d) / avgdl))
+    return sorted(docs, key=lambda i: -scores[i])
+
+
+for q in load_golden():
+    if len(q["relevant_ids"]) > 1:
+        ranking = bm25(q["question"])
+        posiciones = [ranking.index(d) + 1 for d in q["relevant_ids"]]
+        print(q["id"], "posiciones BM25 de los documentos necesarios:", posiciones)
+```
+
+Salida (determinista):
+
+```text
+42 documentos, 122 aristas, 6 comunidades
+1 10 [('Devoluciones', 4), ('Almacén', 2)] ['gastos', 'paquete', 'recogida', 'reembolso', 'maximo']
+2 10 [('Recursos Humanos', 4), ('TI y Seguridad', 3)] ['responsable', 'personal', 'devoluciones', 'politica', 'deben']
+3 8 [('Facturación', 5), ('Envíos', 1)] ['empresa', 'clientes', 'factura', 'pago', 'datos']
+4 7 [('Almacén', 3), ('Envíos', 2)] ['articulo', 'entrega', 'cada', 'envios', 'garantia']
+5 5 [('Envíos', 2), ('Atención al cliente', 2)] ['seguimiento', 'estado', 'recibes', 'menos', 'correo']
+6 2 [('Envíos', 2)] ['estandar', 'expres', 'programado', 'importe', 'tarifa']
+pureza respecto al departamento: 0.476
+q07 posiciones BM25 de los documentos necesarios: [1, 2]
+q25 posiciones BM25 de los documentos necesarios: [1, 2]
+q26 posiciones BM25 de los documentos necesarios: [3, 1]
+```
+
+Qué se ve, y qué no:
+
+- **Las comunidades agrupan temas, no organigramas.** La primera reúne devoluciones, reembolsos y recogida de paquetes; la tercera, facturación y pagos de empresas; la quinta, seguimiento de pedidos. La coincidencia con los departamentos es parcial (pureza 0,476) y es **buena señal**: el grafo captura relaciones temáticas que cruzan departamentos. Cada comunidad sería la unidad sobre la que un LLM escribiría un resumen.
+- **La calidad del grafo es la calidad de la extracción.** Nuestra extracción es burda: la comunidad 2 mezcla Recursos Humanos con TI y trae el término «devoluciones»; los términos «cada» o «menos» no son entidades. Con extracción de entidades débil, el grafo propaga el ruido. En GraphRAG de verdad la extracción la hace un LLM y es la parte más cara y la más delicada de validar.
+- **El grafo no aporta nada medible en las preguntas de varios documentos de este corpus.** Las tres preguntas que necesitan dos documentos (`q07`, `q25`, `q26`) ya tienen ambos entre los tres primeros de BM25. Con 42 documentos de unas 54 palabras no hay problema de «varios saltos» real. GraphRAG está pensado para corpus **grandes** y preguntas **globales**; en uno pequeño, el coste no se justifica.
+
+## Trade-offs
+
+| Enfoque | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Búsqueda híbrida con reranking | Simple, barata, muy buena en preguntas factuales | No resume ni sintetiza sobre todo el corpus |
+| RAPTOR (árbol de resúmenes) | Síntesis y visión global con una estructura sencilla | Resúmenes por LLM al indexar; actualización costosa |
+| GraphRAG | Responde preguntas globales; relaciones explícitas | Indexar con LLM es caro; calidad ligada a la extracción de entidades |
+| LightRAG | Doble nivel de recuperación y actualización incremental | Resultados reportados por sus autores; madurez variable según la implementación |
+| Sin grafo + contexto largo | Muy simple si el corpus cabe en la ventana | Coste por consulta y lost in the middle |
+
+## Errores comunes en producción
+
+- **Usar GraphRAG para preguntas factuales puntuales.** Una pregunta de «¿cuál es el plazo de devolución?» se resuelve mejor y más barato con búsqueda híbrida y reranking.
+- **Subestimar el coste de indexación.** Cada documento pasa por un LLM, y los resúmenes de comunidad también: calcula el coste con una muestra real antes de indexar todo el corpus.
+- **No validar la extracción de entidades.** Entidades duplicadas («Nimbus», «Nimbus Logística», «la empresa») fragmentan el grafo y rompen las comunidades; hace falta resolución de entidades y revisión por muestreo.
+- **Olvidar la frescura.** Si el grafo se reconstruye entero cada noche, los datos nuevos tardan en aparecer; valora la actualización incremental (el planteamiento de LightRAG) y mide la latencia de actualización.
+- **Ignorar los permisos.** Un resumen de comunidad mezcla información de varios documentos: si alguno es restringido, el resumen puede **filtrarlo** a usuarios sin permiso. Calcula comunidades y resúmenes por nivel de acceso.
+- **No tener preguntas globales en el conjunto dorado.** Si solo evalúas preguntas factuales, no verás la ventaja (ni el coste) de un grafo. Incluye preguntas de síntesis y de varios saltos.
+- **Creer que el grafo elimina la alucinación.** Un LLM extrae relaciones que pueden ser erróneas, y otro LLM las resume: hay dos puntos de fallo más, no menos.
+- **Mantener el grafo sin versionado.** Si cambias de modelo de extracción, el grafo cambia; guarda la versión del extractor y los datos de origen.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué problema resuelve GraphRAG que no resuelve el RAG normal?"_ Pista: preguntas globales sobre todo el corpus; grafo de entidades, comunidades y resúmenes por comunidad, con respuestas parciales consolidadas.
+- _"¿Qué aporta LightRAG?"_ Pista: indexación en grafo, recuperación de doble nivel (detalle y temas) y actualización incremental.
+- _"¿Cuándo no usarías un RAG con grafo?"_ Pista: corpus pequeños, preguntas factuales puntuales o presupuesto de indexación bajo; la búsqueda híbrida con reranking basta.
+- _"¿Cuál es el principal riesgo operativo?"_ Pista: coste de indexación con LLM y calidad de la extracción de entidades; filtración entre niveles de permiso en los resúmenes.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Las preguntas **globales** y de **varios saltos** no se resuelven con fragmentos aislados; los grafos preparan, al indexar, una estructura navegable.
+- **GraphRAG:** grafo de entidades con un LLM, comunidades y **resúmenes por comunidad**; la consulta se resuelve con respuestas parciales consolidadas.
+- **LightRAG:** índice en grafo, **recuperación de doble nivel** y **actualización incremental**.
+- La calidad depende de la **extracción de entidades**; nuestro grafo de juguete mostró cómo el ruido se propaga.
+- En un corpus pequeño como Nimbus, BM25 ya resolvía las preguntas de dos documentos: el grafo compensa en corpus **grandes** y con preguntas de síntesis.
+
+</KeyTakeaways>
