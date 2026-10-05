@@ -18,12 +18,20 @@
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
-Contadores a fecha de hoy: 19 módulos definidos (solo M00 con lecciones), 8 lecciones, 65 preguntas, 3 labs, 51 tests unitarios, 27 e2e, 16 tests de labs + 23 mutantes, `main` = `5d3b107` + commit de cierre de F3.
+Contadores (fin de M05): 19 módulos definidos, 24 lecciones (M00–M05), 183 preguntas, 14 labs, 76 tests unitarios, 71 tests pytest, 112 mutantes de labs (todos detectados), `main` = cierre de F3.
 
-## F3: HECHA (referencia histórica; para continuar ve a "Siguiente paso")
+## F4: avance (rama `fase-4-rag`, commits locales; push pendiente)
+
+- ✅ M01 (3 lecciones), M02 (3 + visualizador de chunking, labs 2–4), M03 (3 + widget de similitud), M04 (3, labs 6–7), **M05 (4 lecciones, labs 8 RRF, 9 reranking/nDCG, 11 multi-query, 12 HyDE, 15 parent-document, 16 ventana de frases; widget RRFCalculator)**.
+- ⬜ M06 (3 lecciones; labs 13–14), M07 (4; labs 20–21), M08 (3; labs 10, 19), M09 (3; labs 17–18).
+- Al cerrar F4: añadir fuentes de M01–M09 a `docs/SOURCES.md` (solo está M00), registrar decisiones de F4 en `docs/DECISIONS.md`, puerta completa (format/check/lint/test/validate/build/e2e + ruff/pytest/mutate/snippets), push, esperar CI, merge `--no-ff` a `main`, verificar despliegue.
+- Notas de M05: RRF verificado en el PDF original (k=60 «fijado en un piloto», casi óptimo, no crítico; Tabla 1). Cifras medidas en Nimbus (28 preguntas): BM25 hit@3 0,893; denso (hashing) 0,75; RRF k=60 0,929 pero MRR baja (0,873→0,827); reranker de juguete hit@1 0,821→0,893 (advertido: ajustado mirando fallos); frase sin contexto 0,786 vs con título 0,893. Los labs 16 y 17 del PLAN se reasignaron: lab 16 = ventana de frases (el contexto con encabezado ya está en M02).
+- Convenciones de trabajo: crear archivos con la herramienta Write (heredocs múltiples fallan en Git Bash); Python con `.venv\Scripts\python.exe` y `PYTHONPATH=public/py`; `uv` no está en el PATH de Git Bash.
 
 ### Siguiente paso
-Tras el visto bueno del usuario, empezar **F4** (contenido Parte I, M01–M09: lecciones, quizzes, labs 2–21 y widgets de M02/M03/M05 según PLAN §7 y §12), en la rama `fase-4-rag`. Ampliar el corpus de Nimbus (hoy 42 docs / 31 preguntas) cuando los labs lo pidan; añadir los mutantes de cada lab nuevo a `scripts/mutate_labs.py`. Recordar: las lecciones exigen fuentes verificadas abriéndolas, código/cálculos ejecutados, `pnpm validate` en verde y todas las reglas de CONTENT_GUIDELINES.
+Escribir **M06** en `fase-4-rag` (lecciones de ≈2000 palabras, quizzes 6–8 preguntas, labs con ≥4 tests y mutantes), luego M07, M08, M09 y cerrar F4 según la lista de arriba. Después F5–F7 (ver tabla).
+
+## F3: HECHA (referencia histórica)
 
 ### Detalle de F3 (histórico)
 
