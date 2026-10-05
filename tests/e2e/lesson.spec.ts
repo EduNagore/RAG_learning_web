@@ -60,3 +60,14 @@ test('la web carga sin errores de consola', async ({ page }) => {
   await page.locator('.mermaid-diagram svg').first().waitFor({ timeout: 15_000 });
   expect(errors).toEqual([]);
 });
+
+test('en móvil la lección no desborda horizontalmente', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await openFirstLesson(page);
+  await page.locator('.mermaid-diagram').first().scrollIntoViewIfNeeded();
+  await page.locator('.mermaid-diagram svg').first().waitFor({ timeout: 15_000 });
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+});

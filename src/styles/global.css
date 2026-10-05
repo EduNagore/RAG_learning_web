@@ -67,3 +67,8 @@ html.dark .astro-code span {
 [data-lesson-id][data-read='true'] .read-mark {
   @apply inline;
 }
+
+/* Las tablas anchas hacen scroll dentro de la lección en lugar de desbordar la página. */
+.prose table {
+  @apply block max-w-full overflow-x-auto;
+}

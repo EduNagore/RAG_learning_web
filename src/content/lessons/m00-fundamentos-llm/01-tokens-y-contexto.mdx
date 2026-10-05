@@ -1,0 +1,178 @@
+---
+title: Tokens y ventana de contexto
+description: Qué ve realmente un LLM cuando le das un texto, por qué los tokens determinan coste y límites, y qué significa que la ventana de contexto sea "grande".
+module: m00-fundamentos-llm
+order: 1
+level: básico
+estimatedMinutes: 14
+objectives:
+  - Explicar qué es un token y por qué el mismo texto cuesta distinto en idiomas y tokenizadores distintos.
+  - Calcular de qué se compone la ventana de contexto de una petición y qué ocurre si se desborda.
+  - Justificar por qué una ventana grande no equivale a usar bien el contexto (context rot, lost in the middle).
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: Neural Machine Translation of Rare Words with Subword Units
+    url: https://arxiv.org/abs/1508.07909
+    type: paper
+    authors: Sennrich, Haddow, Birch
+    year: 2015
+  - title: Attention Is All You Need
+    url: https://arxiv.org/abs/1706.03762
+    type: paper
+    authors: Vaswani et al.
+    year: 2017
+  - title: 'Lost in the Middle: How Language Models Use Long Contexts'
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu et al.
+    year: 2023
+  - title: Context windows (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/context-windows
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+  - title: tiktoken (tokenizador de OpenAI, usado en los ejemplos)
+    url: https://github.com/openai/tiktoken
+    type: docs
+    authors: OpenAI
+    year: 2026
+---
+
+## Intuición: el modelo no lee letras ni palabras
+
+Un LLM no recibe tu texto tal cual. Antes de llegar a la red neuronal, un **tokenizador** lo trocea en unidades llamadas _tokens_ y las convierte en números enteros. Todo lo que el modelo hace después (entender, razonar, generar) ocurre sobre esa secuencia de enteros, y todo lo que se factura y se limita se mide en tokens: el precio, la latencia, el tamaño máximo de la petición.
+
+Por eso entender los tokens es lo primero en un curso de RAG y agentes. Cuando después hablemos de "trocear documentos" (_chunking_) o de "cuánto contexto cabe", la unidad real de medida es esta.
+
+Un token no es una palabra. Es un fragmento de texto: a veces una palabra entera (` delivery`), a veces un trozo (`tras`, `ó`), a veces un solo carácter o una pieza de un emoji. Qué fragmentos existen lo decide el tokenizador al construirse, a partir de estadísticas de texto.
+
+## Cómo funciona
+
+### Tokenización por subpalabras
+
+Los tokenizadores modernos usan **subpalabras**: un vocabulario de decenas o cientos de miles de fragmentos que equilibra dos extremos. Si el vocabulario fueran palabras completas, cualquier palabra rara o nueva sería "desconocida". Si fueran caracteres sueltos, las secuencias serían larguísimas. La técnica clásica para construir ese vocabulario es **Byte Pair Encoding (BPE)**, adaptada al procesamiento del lenguaje por Sennrich et al.: partiendo de caracteres, se fusionan iterativamente los pares de símbolos más frecuentes hasta alcanzar el tamaño de vocabulario deseado. Muchos tokenizadores actuales usan variantes de esta idea.
+
+La consecuencia práctica es que **las palabras frecuentes cuestan pocos tokens y las raras cuestan muchos**. Lo comprobamos con `tiktoken`, el tokenizador de OpenAI (el 5 de octubre de 2026, con dos de sus codificaciones):
+
+| Texto                                                                | Caracteres | `cl100k_base` | `o200k_base` |
+| -------------------------------------------------------------------- | ---------: | ------------: | -----------: |
+| `The delivery was delayed because the warehouse ran out of packaging.` |         68 |            12 |           12 |
+| `La entrega se retrasó porque el almacén se quedó sin material de embalaje.` |         74 |            21 |           17 |
+| `def add(a, b):` + salto de línea + `    return a + b`                |         31 |            11 |           11 |
+| `2026-10-05 12345678901234567890`                                     |         31 |            14 |           14 |
+| `internationalization`                                               |         20 |             2 |            2 |
+| `Pneumonoultramicroscopicsilicovolcanoconiosis`                      |         45 |            17 |           15 |
+| `🚚📦`                                                                |          2 |             6 |            4 |
+
+Tres lecciones salen de esta tabla:
+
+1. **El idioma importa.** La frase en español ocupa más tokens que su equivalente en inglés con `cl100k_base` (21 frente a 12), porque ese vocabulario se construyó con más texto en inglés. Con `o200k_base` la diferencia se reduce (17 frente a 12), pero no desaparece. Si tu corpus RAG está en español, tus fragmentos "de 500 tokens" contienen menos texto del que contendrían en inglés.
+2. **Las palabras frecuentes son baratas y las raras caras.** `internationalization` cabe en dos tokens (`international` + `ization`); una palabra técnica larguísima necesita 15 o 17.
+3. **Números, código y emojis son caros por carácter.** Los emojis se descomponen en piezas por debajo del carácter.
+
+<Callout type="aviso" title="Cada modelo tiene su tokenizador">
+
+Los números anteriores son de `tiktoken` y sirven para ilustrar el fenómeno, no para predecir el consumo en otro proveedor. Cada familia de modelos tiene su propio tokenizador, y el mismo texto puede dar recuentos distintos. Para estimar el tamaño real de una petición usa siempre el contador del proveedor; la API de Claude, por ejemplo, ofrece una API de conteo de tokens para estimar una petición antes de enviarla.
+
+</Callout>
+
+```python
+# Requiere: pip install tiktoken  (este código no se ejecuta en el navegador)
+import tiktoken
+
+enc = tiktoken.get_encoding("o200k_base")
+texto = "La entrega se retrasó porque el almacén se quedó sin material de embalaje."
+
+ids = enc.encode(texto)
+print(len(ids))                         # 17
+print([enc.decode([i]) for i in ids])   # los fragmentos reales
+```
+
+Si ejecutas el fragmento verás los 17 tokens: `La`, ` entrega`, ` se`, ` retras`, `ó`, ` porque`… Fíjate en que el espacio inicial forma parte del token (` entrega`), y en que `retrasó` se parte en ` retras` + `ó`.
+
+### La ventana de contexto
+
+La **ventana de contexto** es todo el texto al que el modelo puede referirse al generar una respuesta, **incluida la propia respuesta**. Es su "memoria de trabajo", distinta del corpus con el que se entrenó.
+
+En una API de chat, la ventana no es solo el último mensaje. Según la documentación de Claude, cuenta todo lo que viaja en la petición: el _system prompt_, cada mensaje del historial (incluidos resultados de herramientas, imágenes y documentos), las definiciones de herramientas y, además, lo que el modelo genera en ese turno (incluido su razonamiento si el _thinking_ está activo). La condición, expresada en tokens, es:
+
+$$
+n_{\text{entrada}} + n_{\text{generados}} \le C
+$$
+
+donde $C$ es el tamaño de la ventana del modelo. En una conversación, cada turno añade la respuesta anterior a la entrada del siguiente, así que **el contexto crece turno a turno** y el coste de cada turno también.
+
+<Diagram
+  caption="Qué entra en la ventana de contexto de una petición y cómo se acumula entre turnos."
+  code={`flowchart LR
+  subgraph IN["Entrada (n_entrada)"]
+    S["System prompt"]
+    T["Definiciones de herramientas"]
+    H["Historial de mensajes y resultados de herramientas"]
+    U["Mensaje actual"]
+  end
+  IN --> M["Modelo"]
+  M --> O["Salida generada (n_generados)"]
+  O -. "se añade al historial del turno siguiente" .-> H`}
+/>
+
+Qué ocurre al desbordar el límite depende de cómo lo gestione cada proveedor. En la API de Claude, si solo la entrada ya excede la ventana, la petición se rechaza con un error 400 (`prompt is too long`); en los modelos más recientes, si la entrada cabe pero la generación llega al límite, el modelo se detiene con `stop_reason: "model_context_window_exceeded"` en lugar de fallar.
+
+<Snapshot date="2026-10">
+
+Según la documentación de Anthropic, la mayoría de los modelos actuales de Claude (por ejemplo Opus 5.5 y Sonnet 5.5) tienen una ventana de **1 millón de tokens**, con hasta 128 000 tokens de salida por petición. Otros, como Sonnet 4.5, tienen 200 000. En los de 1M no hace falta ninguna cabecera especial y el contexto largo se factura a precio estándar. Estas cifras cambian con cada generación de modelos: consulta la tabla de comparación de modelos de la documentación oficial.
+
+</Snapshot>
+
+### Más contexto no es mejor contexto
+
+Que quepa un millón de tokens no significa que el modelo los use bien. Hay dos fenómenos que conviene conocer:
+
+- **Coste de la atención.** En la arquitectura Transformer, la autoatención relaciona cada token con todos los demás, lo que supone un coste que crece de forma cuadrática con la longitud de la secuencia (Vaswani et al. lo recogen en su comparativa de complejidad por capa). Anthropic lo describe como un "presupuesto de atención" que se reparte entre más tokens a medida que el contexto crece.
+- **Context rot.** La documentación de Claude lo define así: a medida que crece el número de tokens, la precisión y el recuerdo se degradan. No es un precipicio sino un gradiente: el modelo sigue siendo capaz, pero con menos precisión al recuperar información o razonar a larga distancia.
+
+El estudio _Lost in the Middle_ (Liu et al.) midió algo muy concreto y muy relevante para RAG: cuando la información relevante está al principio o al final del contexto el rendimiento es mejor, y empeora de forma notable cuando está en medio. Lo retomaremos en el módulo de generación, porque condiciona **en qué orden colocas los fragmentos recuperados en el prompt**.
+
+La conclusión práctica la resume Anthropic al hablar de _context engineering_: curar qué hay en el contexto es tan importante como cuánto espacio hay disponible.
+
+## Trade-offs: cuándo usar contexto largo y cuándo no
+
+| Si necesitas…                                    | Ventana grande ayuda porque…                  | Pero…                                                         |
+| ------------------------------------------------ | --------------------------------------------- | ------------------------------------------------------------- |
+| Analizar un documento largo de una sola vez      | Cabe entero, sin trocear                      | Cada turno vuelve a pagar todo el documento (salvo caching)   |
+| Mantener una conversación o un agente largo      | No se pierde el historial                     | El contexto crece, sube el coste y puede degradarse la calidad |
+| Consultar una base de conocimiento grande        | Podrías meterla entera                        | Suele ser más barato y más preciso recuperar solo lo relevante |
+
+Esta última fila es la razón de ser de RAG. En la lección de caching verás cómo abaratar el prefijo repetido, y en M01 compararemos formalmente RAG, _fine-tuning_ y contexto largo.
+
+## Errores comunes en producción
+
+- **Medir en caracteres o palabras.** Un límite de "2000 caracteres por fragmento" no equivale a un límite de tokens y se comporta distinto en cada idioma. Mide en tokens con el tokenizador del modelo que vayas a usar.
+- **Olvidar lo que no es texto del usuario.** El _system prompt_, las definiciones de herramientas y los resultados de herramientas consumen ventana en cada turno. Un agente con muchas herramientas puede gastar miles de tokens antes de empezar.
+- **Reservar poco para la salida.** Si fijas un `max_tokens` bajo, la respuesta se corta. Si lo fijas muy alto sin necesidad, reservas ventana que no usarás.
+- **Asumir que el historial es gratis.** Cada turno reenvía todo el historial. Una conversación de 50 turnos no cuesta 50 veces un turno: cuesta bastante más, porque cada turno incluye los anteriores.
+- **Confundir "cabe" con "funciona".** Meter 500 páginas en el contexto no garantiza que el modelo encuentre el dato correcto en la página 247.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es un token y por qué importa para un sistema RAG?"_ Pista: fragmento de subpalabra; define coste, límites y el tamaño real de tus _chunks_; varía por idioma y por tokenizador.
+- _"¿Qué cuenta dentro de la ventana de contexto en una conversación con herramientas?"_ Pista: system prompt, historial, resultados de herramientas, definiciones de herramientas y la salida generada, incluido el razonamiento.
+- _"Tu modelo admite 1M de tokens. ¿Por qué sigues haciendo RAG?"_ Pista: coste por turno, degradación con contexto largo (_context rot_, _lost in the middle_), actualización de datos y control de acceso.
+
+</Callout>
+
+<KeyTakeaways>
+
+- El modelo trabaja con **tokens** (subpalabras), no con letras ni palabras; coste y límites se miden en tokens.
+- Palabras frecuentes cuestan pocos tokens; palabras raras, números, código y emojis cuestan más. El **idioma** y el **tokenizador** cambian el recuento.
+- La ventana de contexto incluye system prompt, historial, herramientas, resultados y la salida generada: $n_{\text{entrada}} + n_{\text{generados}} \le C$.
+- Cada turno reenvía el historial, así que **el contexto y el coste crecen** conforme avanza la conversación.
+- Una ventana grande no garantiza buen uso: existe **context rot** y el efecto **lost in the middle**. Curar el contexto importa tanto como su tamaño.
+
+</KeyTakeaways>
