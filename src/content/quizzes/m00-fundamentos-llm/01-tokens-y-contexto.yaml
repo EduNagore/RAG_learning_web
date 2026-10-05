@@ -10,7 +10,7 @@ questions:
       - 'Una letra del alfabeto, sin excepción.'
       - 'Una frase completa separada por puntos.'
     answer: [1]
-    explanation: 'Los tokenizadores modernos trocean el texto en subpalabras: palabras frecuentes como ` delivery` son un token, pero otras se parten (`retras` + `ó`). No son siempre palabras (la primera opción), ni letras sueltas (la tercera), ni frases (la cuarta).'
+    explanation: 'Los tokenizadores modernos trocean el texto en subpalabras: palabras frecuentes como ` delivery` son un token, pero otras se parten (`retras` + `ó`). No son siempre palabras completas, ni letras sueltas, ni frases.'
     ref: '#tokenización-por-subpalabras'
 
   - id: m00-01-q2
@@ -83,7 +83,7 @@ questions:
       - 'Que el modelo olvida lo que aprendió durante el entrenamiento.'
       - 'Que los tokens del historial se corrompen al reenviarse.'
     answer: [1]
-    explanation: 'Context rot es una degradación gradual (no un precipicio): con más tokens el modelo recupera información y razona a larga distancia con menos precisión. Llenar la ventana es otro problema (la primera), y ni afecta al entrenamiento ni corrompe los tokens.'
+    explanation: 'Context rot es una degradación gradual (no un precipicio): con más tokens el modelo recupera información y razona a larga distancia con menos precisión. Que la ventana se llene y el modelo se detenga es otro problema, y el context rot ni afecta al entrenamiento ni corrompe los tokens.'
     ref: '#más-contexto-no-es-mejor-contexto'
 
   - id: m00-01-q8

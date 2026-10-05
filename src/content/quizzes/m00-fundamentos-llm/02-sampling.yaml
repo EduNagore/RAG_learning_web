@@ -10,7 +10,7 @@ questions:
       - 'No la cambia, solo altera el vocabulario.'
       - 'Elimina los tokens menos probables de forma permanente.'
     answer: [1]
-    explanation: 'Dividir los logits entre T < 1 acentúa las diferencias y concentra la masa en el más probable. T > 1 hace lo contrario (la primera opción). La temperatura reescala, no elimina tokens: eso lo hacen top-k y top-p.'
+    explanation: 'Dividir los logits entre T < 1 acentúa las diferencias y concentra la masa en el más probable. T > 1 hace lo contrario: la aplana. La temperatura reescala, no elimina tokens: eso lo hacen top-k y top-p.'
     ref: '#de-logits-a-probabilidades'
 
   - id: m00-02-q2
@@ -42,7 +42,7 @@ questions:
       - 'Todos los tokens con probabilidad superior a 0,9.'
       - 'El 90 % de los tokens del vocabulario elegidos al azar.'
     answer: [1]
-    explanation: 'Top-p (nucleus sampling) conserva el núcleo mínimo con masa acumulada ≥ p, así que el número de candidatos se adapta a la confianza del modelo. Fijar un número de tokens (la primera opción) es top-k.'
+    explanation: 'Top-p (nucleus sampling) conserva el núcleo mínimo con masa acumulada ≥ p, así que el número de candidatos se adapta a la confianza del modelo. Fijar un número concreto de tokens es top-k.'
     ref: '#truncar-la-cola-top-k-y-top-p'
 
   - id: m00-02-q4
@@ -63,7 +63,7 @@ questions:
       - 'Cuando T tiende a 0 se aproxima a elegir siempre el token más probable (greedy).'
       - 'Con T mayor que 1 el token más probable gana más probabilidad que con T = 1.'
     answer: [0, 1, 2]
-    explanation: 'Las tres primeras describen correctamente top-p, top-k y el límite greedy. La última es al revés: con T > 1 la distribución se aplana y el más probable pierde masa.'
+    explanation: 'Las afirmaciones sobre top-p, top-k y el límite greedy son correctas. La que dice que con T mayor que 1 el más probable gana probabilidad es al revés: con T > 1 la distribución se aplana y el más probable pierde masa.'
     ref: '#de-logits-a-probabilidades'
 
   - id: m00-02-q6
@@ -76,7 +76,7 @@ questions:
       - 'Cambiar de proveedor en cuanto ocurra.'
       - 'Repetir la petición hasta que la respuesta salga igual dos veces.'
     answer: [1]
-    explanation: 'La robustez viene del prompt, las salidas estructuradas y la verificación, no de un parámetro que puede desaparecer. Ignorarlo o repetir peticiones a ciegas (la cuarta) no resuelve la causa y encarece el sistema.'
+    explanation: 'La robustez viene del prompt, las salidas estructuradas y la verificación, no de un parámetro que puede desaparecer. Ignorarlo o repetir peticiones hasta que la respuesta coincida no resuelve la causa y encarece el sistema.'
     ref: '#otras-estrategias-brevemente'
 
   - id: m00-02-q7

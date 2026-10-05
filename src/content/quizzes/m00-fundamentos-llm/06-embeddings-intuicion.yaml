@@ -76,7 +76,7 @@ questions:
       - 'Asumir que "cercano" significa "verdadero".'
       - 'Recalcular todos los embeddings al cambiar de modelo.'
     answer: [0, 1, 2]
-    explanation: 'Las tres primeras son errores típicos. Recalcular todo al cambiar de modelo, en cambio, es lo correcto: los vectores antiguos dejan de ser comparables con los nuevos.'
+    explanation: 'Mezclar modelos, ignorar el límite de longitud y asumir que cercano significa verdadero son errores típicos. Recalcular todo al cambiar de modelo, en cambio, es lo correcto: los vectores antiguos dejan de ser comparables con los nuevos.'
     ref: '#errores-comunes-en-producción'
 
   - id: m00-06-q7

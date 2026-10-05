@@ -76,7 +76,7 @@ Archivo: `src/content/quizzes/<modulo>/<NN-slug>.yaml` (mismo id que la lección
 - `ref` apunta a un ancla real de la lección **[CI]** (el slug del encabezado, p. ej. `#la-ventana-de-contexto`).
 - **Verdadero/falso equilibradas** **[CI]**: si un módulo tiene 4 o más, ninguna respuesta puede superar el 80 %. Redacta unas como afirmaciones ciertas y otras como falsas; si todas son falsas, se acierta sin saber.
 - El Markdown de prompts, opciones y explicaciones se renderiza en build, pero el **HTML crudo se escapa**: escribe `<documents>` entre acentos graves o aparecerá literal de todos modos. No hay KaTeX en las preguntas.
-- Las opciones **se barajan** al mostrarlas (salvo en verdadero/falso), así que no dependas de su posición en el YAML ni escribas "la anterior" o "ambas".
+- Las opciones **se barajan** al mostrarlas (salvo en verdadero/falso): **no te refieras a ellas por su posición** ("la primera opción", "las tres primeras", "todas las anteriores") **[CI]**. Describe su contenido.
 - Los tipos `order` no llevan `answer`: `options` ya está en el orden correcto.
 - Los distractores deben ser plausibles (errores reales), no absurdos. Evita "todas las anteriores".
 - Cada pregunta evalúa comprensión, no memoria de una cifra de un `Snapshot`.

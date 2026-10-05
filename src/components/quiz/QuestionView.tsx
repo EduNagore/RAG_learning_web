@@ -138,11 +138,11 @@ export default function QuestionView({ question: q, order, response, onChange, c
             {response.map((orig, pos) => (
               <li
                 key={orig}
-                className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
               >
                 <span className="w-6 text-center font-semibold text-slate-500">{pos + 1}</span>
                 <span
-                  className="flex-1"
+                  className="min-w-[11rem] flex-1"
                   dangerouslySetInnerHTML={{ __html: q.optionsHtml?.[orig] ?? optionLabel(orig) }}
                 />
                 {!checked && (

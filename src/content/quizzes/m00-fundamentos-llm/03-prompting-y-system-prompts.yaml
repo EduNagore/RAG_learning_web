@@ -57,7 +57,7 @@ questions:
       - 'Procura no usar signos raros.'
       - 'No uses puntuación.'
     answer: [1]
-    explanation: 'Explicar el motivo ayuda al modelo a generalizar la intención. Una prohibición seca o vaga (primera y tercera) da menos información, y prohibir toda la puntuación (cuarta) es excesivo y estropea la lectura.'
+    explanation: 'Explicar el motivo ayuda al modelo a generalizar la intención. Una prohibición seca o vaga ("NUNCA…", "procura no usar signos raros") da menos información, y prohibir toda la puntuación es excesivo y estropea la lectura.'
     ref: '#cinco-técnicas-que-funcionan'
 
   - id: m00-03-q6
@@ -83,7 +83,7 @@ questions:
       - 'Eliminar los metadatos de fuente para ahorrar tokens.'
       - 'Pedirle que responda lo más rápido posible.'
     answer: [1]
-    explanation: 'Extraer citas primero centra al modelo en lo pertinente y le permite ignorar el resto. Quitar los metadatos de fuente (tercera) impediría citar de dónde viene cada dato.'
+    explanation: 'Extraer citas primero centra al modelo en lo pertinente y le permite ignorar el resto. Quitar los metadatos de fuente para ahorrar tokens impediría citar de dónde viene cada dato.'
     ref: '#prompts-con-documentos-largos-el-caso-rag'
 
   - id: m00-03-q8
@@ -96,5 +96,5 @@ questions:
       - 'Que el razonamiento paso a paso reduce siempre el coste y la latencia.'
       - 'Que solo funciona con ejemplos en inglés.'
     answer: [0]
-    explanation: 'Dar al modelo espacio para razonar antes de responder mejora las tareas complejas, pero a cambio de más tokens de salida y más latencia, por lo que no reduce coste (tercera).'
+    explanation: 'Dar al modelo espacio para razonar antes de responder mejora las tareas complejas, pero a cambio de más tokens de salida y más latencia, por lo que no reduce ni el coste ni la latencia.'
     ref: '#razonamiento-paso-a-paso'

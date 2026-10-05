@@ -23,7 +23,7 @@ questions:
       - 'Entrenando un modelo distinto para cada esquema.'
       - 'Pidiéndole al modelo en el prompt que se esfuerce más.'
     answer: [1]
-    explanation: 'En cada paso solo pueden elegirse tokens válidos para el estado actual de la gramática, así que la forma queda garantizada por construcción. Reintentar después (primera) es validar a posteriori, y el prompt solo (cuarta) no garantiza nada.'
+    explanation: 'En cada paso solo pueden elegirse tokens válidos para el estado actual de la gramática, así que la forma queda garantizada por construcción. Revisar el texto después de generarlo y reintentar es validar a posteriori, y pedirlo solo en el prompt no garantiza nada.'
     ref: '#decodificación-restringida'
 
   - id: m00-04-q3
@@ -82,7 +82,7 @@ questions:
       - 'Para reducir el número de tokens de la respuesta.'
       - 'Para que el campo sea opcional.'
     answer: [1]
-    explanation: 'Un enum define las únicas etiquetas válidas (categorías, estados). No permite cualquier cadena (primera), no está pensado para ahorrar tokens ni hace opcional el campo.'
+    explanation: 'Un enum define las únicas etiquetas válidas (categorías, estados). No permite cualquier cadena de texto, no está pensado para ahorrar tokens ni hace opcional el campo.'
     ref: '#trade-offs-y-buenas-prácticas'
 
   - id: m00-04-q8
