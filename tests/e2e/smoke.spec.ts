@@ -21,3 +21,13 @@ test('la navegación principal enlaza bajo el base', async ({ page }) => {
   expect(hrefs.length).toBeGreaterThan(0);
   for (const href of hrefs) expect(href).toMatch(/^\/RAG_learning_web\//);
 });
+
+test('el buscador encuentra lecciones por su contenido', async ({ page }) => {
+  await page.goto('buscar/');
+  const box = page.getByRole('searchbox').or(page.getByRole('combobox')).first();
+  await box.fill('caching');
+  const result = page
+    .locator('a[href*="/teoria/m00-fundamentos-llm/07-coste-latencia-caching/"]')
+    .first();
+  await expect(result).toBeVisible({ timeout: 15_000 });
+});

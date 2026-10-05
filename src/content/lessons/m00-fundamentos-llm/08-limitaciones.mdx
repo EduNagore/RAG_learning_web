@@ -1,0 +1,151 @@
+---
+title: Limitaciones de los LLM que justifican RAG y agentes
+description: Alucinaciones, conocimiento congelado, ausencia de datos privados, contexto limitado y falta de memoria. Cada limitación y la técnica del curso que la mitiga.
+module: m00-fundamentos-llm
+order: 8
+level: básico
+estimatedMinutes: 13
+objectives:
+  - Explicar por qué un LLM alucina, con la explicación propuesta por la investigación reciente.
+  - Enumerar las limitaciones estructurales de un LLM usado solo (conocimiento, datos privados, memoria, contexto).
+  - Asociar cada limitación con la técnica del curso que la mitiga y con sus propios límites.
+prerequisites:
+  - m00-fundamentos-llm/01-tokens-y-contexto
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: Survey of Hallucination in Natural Language Generation
+    url: https://arxiv.org/abs/2202.03629
+    type: paper
+    authors: Ji et al.
+    year: 2022
+  - title: Why Language Models Hallucinate
+    url: https://arxiv.org/abs/2509.04664
+    type: paper
+    authors: Kalai, Nachum, Vempala, Zhang
+    year: 2025
+  - title: "Lost in the Middle: How Language Models Use Long Contexts"
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu et al.
+    year: 2023
+  - title: Context windows (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/context-windows
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Tool use with Claude (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+---
+
+## Intuición: potente, pero con límites estructurales
+
+Un LLM bien entrenado es sorprendentemente capaz: redacta, resume, traduce, razona sobre problemas nuevos. Pero tiene limitaciones que **no desaparecen con un modelo más grande ni con mejor prompting**, porque vienen de cómo funciona. Conocerlas no es pesimismo: es lo que justifica cada técnica de este curso. RAG y los agentes existen porque un LLM aislado no basta.
+
+## Cómo funciona: las cinco limitaciones
+
+### 1. Alucina
+
+Una **alucinación** es una generación fluida que **no está respaldada por los hechos o por la fuente** de la que debería salir. El estudio de referencia de Ji et al. (_Survey of Hallucination in Natural Language Generation_) recopila el fenómeno en distintas tareas de generación y lo clasifica; la distinción más útil para este curso es entre contenido que **contradice la fuente** que se le dio al modelo y contenido que **no puede verificarse** a partir de ella.
+
+¿Por qué ocurre? Kalai, Nachum, Vempala y Zhang proponen una explicación que cambia cómo mirar el problema: los modelos alucinan porque **los procedimientos de entrenamiento y de evaluación recompensan adivinar en lugar de reconocer la incertidumbre**. Es la misma lógica de un examen tipo test sin penalización por fallo: si dejar en blanco puntúa cero y acertar por azar puntúa algo, la estrategia óptima es siempre contestar. Un modelo optimizado así aprende a producir una respuesta plausible incluso cuando no sabe.
+
+Dos consecuencias prácticas:
+
+- **No se arregla bajando la temperatura** (lección 2): la temperatura controla la variación, no la veracidad.
+- **Hay que dar al modelo permiso y razón para abstenerse** ("si los documentos no contienen la respuesta, di que no lo sabes") y **medir** si lo hace. Eso se evalúa en el módulo 8.
+
+### 2. Su conocimiento está congelado
+
+El modelo solo "sabe" lo que había en sus datos de entrenamiento hasta su **fecha de corte**. No conoce lo que ocurrió después ni los cambios en tu negocio de ayer. La propia documentación de Claude presenta su herramienta de búsqueda web como una forma de acceder a información **más allá de la fecha de corte de conocimiento**, con fuentes citadas.
+
+### 3. No conoce tus datos privados
+
+Tus manuales internos, tus pedidos, tus políticas y tus tickets no estaban en ningún corpus de entrenamiento público. Aunque el modelo sea excelente, **no puede responder sobre ellos** salvo que se los des en el contexto. Y aunque pudieras entrenarle con ellos, cambiarían continuamente y tendrían controles de acceso por usuario.
+
+### 4. Su contexto es limitado y se degrada
+
+Como viste en la primera lección, la ventana tiene un tamaño máximo y, antes de llegar a él, aparece _context rot_: la precisión y el recuerdo se degradan al crecer el contexto. El estudio _Lost in the Middle_ (Liu et al.) midió además que la información situada **en medio** del contexto se aprovecha peor que la del principio o el final. Meter "todo" en el prompt no es una estrategia fiable.
+
+### 5. No tiene memoria ni capacidad de actuar
+
+Cada llamada a la API es independiente: el modelo **no recuerda** conversaciones anteriores salvo que tú reenvíes el historial dentro del contexto (con el coste que eso supone). Y solo produce texto: no puede consultar una base de datos, llamar a un servicio ni modificar nada por sí mismo; para eso necesita herramientas que ejecute tu aplicación (lección 5).
+
+### Las cinco limitaciones en un caso concreto
+
+Un cliente de Nimbus Logística (la empresa ficticia del curso) pregunta a un asistente basado solo en un LLM: _"Mi pedido 8812 llegó roto. ¿Puedo devolverlo y cuánto tardáis en reembolsarme?"_ Qué falla, limitación por limitación:
+
+1. **Alucina.** Responde con seguridad _"Tienes 30 días y el reembolso tarda 5 días hábiles"_, cifras plausibles que nadie le ha dado.
+2. **Conocimiento congelado.** Aunque la política existiera en su entrenamiento, se actualizó el mes pasado y el modelo no lo sabe.
+3. **Sin datos privados.** No puede saber si el pedido 8812 existe, a quién pertenece ni en qué estado está.
+4. **Contexto limitado.** Si pegaras todo el manual de políticas (cientos de páginas) en cada mensaje, pagarías por él en cada turno y el modelo podría pasar por alto el párrafo clave.
+5. **Sin memoria ni acción.** No recuerda que hace dos días el mismo cliente abrió una incidencia, y no puede iniciar la devolución aunque quiera.
+
+La versión con RAG y agentes responde a cada punto: recupera la política vigente y la cita (1, 2, 4), consulta el pedido con una herramienta restringida a ese cliente (3), guarda el estado de la conversación (5) y solo inicia la devolución tras confirmación (5, con seguridad). Todo lo que sigue en el curso es cómo construir cada una de esas piezas bien.
+
+## De la limitación a la técnica
+
+Esta tabla es el mapa del resto del curso:
+
+| Limitación | Técnica que la mitiga | Módulo | Pero sigue habiendo… |
+| ---------- | --------------------- | ------ | -------------------- |
+| Alucina | Fundamentar en evidencia recuperada, citas, abstención, verificación | M01, M06, M08 | Errores si la recuperación falla o el modelo ignora el contexto |
+| Conocimiento congelado | RAG con fuentes actualizadas; herramientas de búsqueda | M01, M09 | Índices desactualizados si no se mantienen |
+| Sin datos privados | RAG sobre tu corpus, con permisos por usuario | M02 a M05, M09 | Riesgo de fuga si el control de acceso falla |
+| Contexto limitado y degradado | Recuperar solo lo relevante, reordenar, comprimir contexto | M05, M06 | Pérdida de información al recortar |
+| Sin memoria ni acción | Estado y memoria externa; herramientas; agentes | M10, M15 | Nuevos riesgos: bucles, coste, seguridad |
+
+<Diagram
+  caption="Cada limitación del LLM aislado se aborda moviendo información o capacidades al exterior del modelo."
+  code={`flowchart TB
+  L["LLM aislado"] --> A["Alucina"]
+  L --> B["Conocimiento congelado"]
+  L --> C["Sin datos privados"]
+  L --> D["Contexto limitado"]
+  L --> E["Sin memoria ni acción"]
+  A --> RAG["RAG: evidencia recuperada y citada"]
+  B --> RAG
+  C --> RAG
+  D --> RAG
+  E --> AG["Agentes: herramientas, estado y memoria"]
+  RAG --> NEW["Nuevos problemas: calidad de la recuperación, evaluación, seguridad"]
+  AG --> NEW`}
+/>
+
+Una forma útil de resumirlo: **un LLM es un motor de razonamiento y redacción sobre lo que hay en su contexto.** RAG decide _qué información_ pone en ese contexto; los agentes deciden _qué hacer a continuación_ y ejecutan acciones. Ninguna de las dos cosas hace al modelo infalible: trasladan el problema a la calidad de la recuperación, de las herramientas y de la evaluación.
+
+## Trade-offs: cuándo NO necesitas RAG ni agentes
+
+Un LLM solo puede bastar cuando la tarea **no depende de datos propios ni actuales**: reescribir un texto que ya tienes, traducir, resumir un documento que cabe en el contexto, clasificar con unas reglas dadas. Añadir recuperación o herramientas a una tarea así solo aumenta complejidad, latencia y superficie de fallo. Una buena regla de ingeniería: **empieza por lo más simple que pueda funcionar y añade piezas solo cuando una limitación concreta lo justifique**, con una evaluación que lo demuestre.
+
+Antes de construir nada, **mide la línea base**: ejecuta el modelo solo, sin recuperación ni herramientas, sobre un conjunto de preguntas representativas con sus respuestas correctas, y observa dónde falla y por qué. Si el modelo ya acierta el 95 % y los fallos son de formato, un ajuste de prompt vale más que montar una arquitectura RAG. Si falla justo en datos propios y recientes, tienes la justificación medida para recuperar. Sin esa línea base no sabrás si lo que construyes después mejora algo.
+
+## Errores comunes en producción
+
+- **Confundir fluidez con exactitud.** La respuesta suena bien, así que se asume correcta. Sin citas y verificación, no hay forma de saber cuándo el modelo adivinó.
+- **Usar el LLM como base de datos.** Preguntarle cifras, versiones o nombres de memoria. Para hechos concretos, recupera la fuente.
+- **Creer que RAG elimina las alucinaciones.** Las reduce si la recuperación trae la evidencia correcta; si falla, el modelo puede alucinar con más aparente autoridad porque "cita" un documento irrelevante.
+- **Ignorar la fecha de corte** en preguntas sobre eventos, precios o versiones recientes.
+- **Dar todo el contexto "por si acaso"** y pagar por ello en coste, latencia y degradación.
+- **No definir qué hacer cuando no hay respuesta.** Sin política explícita de abstención, el comportamiento por defecto es contestar.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué alucinan los LLM?"_ Pista: la explicación de Kalai et al., entrenamiento y evaluación que premian adivinar sobre expresar incertidumbre; no es un fallo aleatorio sino un incentivo.
+- _"¿Qué problemas resuelve RAG y cuáles no?"_ Pista: resuelve conocimiento actual y privado y reduce alucinaciones con citas; no resuelve una mala recuperación, el razonamiento incorrecto ni la seguridad por sí mismo.
+- _"Un directivo pide meter toda la documentación en el prompt porque el modelo admite 1M de tokens. ¿Qué le dices?"_ Pista: coste por turno, degradación (_context rot_, _lost in the middle_), actualización y control de acceso; un benchmark comparando ambas opciones.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un LLM aislado **alucina**, tiene **conocimiento congelado**, **no conoce tus datos**, tiene **contexto limitado y degradable** y **no tiene memoria ni capacidad de actuar**.
+- La investigación reciente explica la alucinación como un **incentivo**: entrenar y evaluar premiando adivinar frente a admitir incertidumbre.
+- **RAG** mueve la evidencia al contexto; los **agentes** añaden herramientas, estado y memoria. Ambos trasladan los problemas a la recuperación, las herramientas y la evaluación.
+- Empieza por lo simple y añade complejidad **solo cuando una limitación medida lo justifique**.
+- Define siempre qué hace el sistema **cuando no hay evidencia suficiente**.
+
+</KeyTakeaways>

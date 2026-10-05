@@ -1,0 +1,185 @@
+---
+title: Cómo genera un LLM y qué controla el sampling
+description: De los logits al siguiente token. Qué hacen temperature, top-p y top-k, por qué no arreglan las alucinaciones y qué ha cambiado en los modelos recientes.
+module: m00-fundamentos-llm
+order: 2
+level: básico
+estimatedMinutes: 12
+objectives:
+  - Describir cómo un LLM genera texto token a token a partir de una distribución de probabilidad.
+  - Calcular el efecto de la temperatura sobre una distribución y explicar top-p y top-k.
+  - Elegir una configuración de decodificación razonable para tareas factuales y creativas.
+  - Saber que los modelos recientes de algunos proveedores ya no permiten fijar estos parámetros.
+prerequisites:
+  - m00-fundamentos-llm/01-tokens-y-contexto
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: The Curious Case of Neural Text Degeneration
+    url: https://arxiv.org/abs/1904.09751
+    type: paper
+    authors: Holtzman, Buys, Du, Forbes, Choi
+    year: 2019
+  - title: Attention Is All You Need
+    url: https://arxiv.org/abs/1706.03762
+    type: paper
+    authors: Vaswani et al.
+    year: 2017
+  - title: Migrating to Claude Sonnet 5.5 (guía de migración de la API de Claude)
+    url: https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Messages API (referencia de la API de Claude)
+    url: https://platform.claude.com/docs/en/api/messages
+    type: docs
+    authors: Anthropic
+    year: 2026
+---
+
+## Intuición: un LLM predice, no "decide"
+
+Un modelo de lenguaje hace una sola cosa: dada una secuencia de tokens, calcula **una distribución de probabilidad sobre cuál puede ser el siguiente token**. Para generar una respuesta completa repite el proceso: elige un token, lo añade a la secuencia y vuelve a predecir. Esto se llama generación **autorregresiva**.
+
+Como el modelo solo produce probabilidades, alguien tiene que decidir cómo convertirlas en una elección concreta. Esa decisión se llama **decodificación** o _sampling_, y es lo que controlan parámetros como `temperature`, `top_p` y `top_k`.
+
+Para un sistema RAG o un agente esto importa por dos motivos: determina cuánta **variación** esperar entre ejecuciones, y evita un error de diagnóstico muy común, el de creer que bajar la temperatura "arregla" las alucinaciones (no lo hace; lo veremos al final).
+
+## Cómo funciona
+
+### De logits a probabilidades
+
+La última capa del modelo produce un número real por cada token del vocabulario, el **logit** $z_i$. Se convierten en probabilidades con la función _softmax_, dividiendo antes por una **temperatura** $T > 0$:
+
+$$
+p_i = \frac{e^{z_i / T}}{\sum_j e^{z_j / T}}
+$$
+
+- Con $T = 1$ obtienes la distribución "natural" del modelo.
+- Con $T < 1$ la distribución se **afila**: el token más probable gana aún más masa.
+- Con $T > 1$ se **aplana**: los tokens menos probables ganan opciones.
+- En el límite $T \to 0$ equivale a elegir siempre el más probable (_greedy_).
+
+Un ejemplo con cinco candidatos para completar _"El cliente espera su ___"_ y estos logits (calculados con el código de más abajo):
+
+| Token     | Logit | $T = 0{,}5$ | $T = 1$ | $T = 2$ |
+| --------- | ----: | ----------: | ------: | ------: |
+| entrega   |   3,0 |       0,794 |   0,560 |   0,384 |
+| paquete   |   2,2 |       0,160 |   0,252 |   0,258 |
+| pedido    |   1,5 |       0,040 |   0,125 |   0,181 |
+| almacén   |   0,5 |       0,005 |   0,046 |   0,110 |
+| camión    |  −0,5 |       0,001 |   0,017 |   0,067 |
+
+Con $T = 0{,}5$ el modelo elegiría `entrega` casi 8 de cada 10 veces; con $T = 2$, solo 4 de cada 10, y `camión` pasaría de ser casi imposible a tener un 6,7 %.
+
+### Truncar la cola: top-k y top-p
+
+Aunque la temperatura sea razonable, la "cola" de tokens improbables suma masa y de vez en cuando se cuela uno absurdo. Dos técnicas la recortan antes de muestrear:
+
+- **Top-k:** conserva solo los $k$ tokens más probables y renormaliza. Con $k = 2$ nos quedaríamos con `entrega` y `paquete` (el 81,2 % de la masa a $T = 1$).
+- **Top-p (_nucleus sampling_):** conserva el conjunto más pequeño de tokens cuya probabilidad acumulada alcanza $p$. Con $p = 0{,}9$ y $T = 1$ se conservan `entrega`, `paquete` y `pedido` (acumulado 0,937). La ventaja sobre top-k es que **el número de candidatos se adapta**: si el modelo está muy seguro, el conjunto es pequeño; si duda, es grande.
+
+¿Por qué importa recortar la cola si cada token de ella tiene una probabilidad minúscula? Porque un vocabulario tiene decenas de miles de tokens, y **la masa acumulada de la cola puede ser considerable aunque cada elemento sea diminuto**. Si en cada paso hay, por ejemplo, un 5 % de probabilidad total de caer en un token disparatado, en una respuesta de cien tokens es muy probable que se cuele alguno, y el texto posterior se construye sobre ese error. Truncar la cola evita esa deriva, y esa es la motivación central del trabajo que presentó el _nucleus sampling_.
+
+Holtzman et al. introdujeron el _nucleus sampling_ al observar algo contraintuitivo: **maximizar la probabilidad produce texto peor**. Los métodos que buscan la secuencia más probable (_greedy_, _beam search_) generan texto repetitivo y soso en generación abierta, mientras que el texto humano no sigue los tokens más probables en cada paso. Muestrear de forma truncada acerca la salida a la distribución del texto humano.
+
+```python
+import numpy as np
+
+def softmax(logits, temperature=1.0):
+    z = np.asarray(logits, dtype=float) / temperature
+    z -= z.max()                      # estabilidad numérica
+    e = np.exp(z)
+    return e / e.sum()
+
+def top_p_filter(probs, p=0.9):
+    """Devuelve las probabilidades renormalizadas del núcleo de masa >= p."""
+    order = np.argsort(probs)[::-1]
+    cumulative = np.cumsum(probs[order])
+    cutoff = np.searchsorted(cumulative, p) + 1     # incluye el token que cruza p
+    keep = order[:cutoff]
+    filtered = np.zeros_like(probs)
+    filtered[keep] = probs[keep]
+    return filtered / filtered.sum()
+
+tokens = ["entrega", "paquete", "pedido", "almacén", "camión"]
+probs = softmax([3.0, 2.2, 1.5, 0.5, -0.5], temperature=1.0)
+nucleus = top_p_filter(probs, p=0.9)
+
+rng = np.random.default_rng(seed=0)
+print(rng.choice(tokens, p=nucleus))   # muestrea solo entre entrega, paquete y pedido
+```
+
+Este fragmento es válido y lo puedes ejecutar tal cual con NumPy; lo reutilizaremos como base en los laboratorios.
+
+### Otras estrategias, brevemente
+
+- **Greedy:** siempre el más probable. Determinista en teoría, pero repetitivo en generación abierta.
+- **Beam search:** mantiene varias secuencias candidatas y elige la de mayor probabilidad total. Útil en traducción; poco habitual en chat.
+- **Penalizaciones de repetición** (según proveedor): reducen la probabilidad de tokens ya usados.
+
+<Snapshot date="2026-10">
+
+En los modelos recientes de Anthropic **ya no puedes fijar estos parámetros libremente**. La referencia de la API indica que _"los modelos lanzados después de Claude Opus 4.6 no admiten fijar temperature"_: se acepta el valor 1.0 por compatibilidad y se rechazan los demás. La guía de migración de Sonnet 5.5 precisa que, en ese modelo, un valor no predeterminado de `temperature`, `top_p` o `top_k` **devuelve un error 400** y recomienda eliminarlos, mientras que Claude Sonnet 4.6 y anteriores y Claude Haiku 4.5 sí los aceptan. Qué parámetros admite cada proveedor y cada modelo varía y cambia entre versiones: comprueba siempre la referencia del modelo concreto que vayas a usar.
+
+</Snapshot>
+
+Esto tiene una consecuencia de diseño: **no construyas tu sistema suponiendo que puedes ajustar la temperatura**. Si necesitas más consistencia o más variedad, lo robusto es conseguirlo con el prompt (instrucciones y ejemplos claros), con salidas estructuradas y con verificación posterior, no con un parámetro que puede desaparecer.
+
+## Trade-offs: qué configuración usar (cuando puedes elegir)
+
+| Tarea                                        | Orientación                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| Extracción de datos, clasificación, SQL, RAG factual | Temperatura baja: menos variación entre ejecuciones            |
+| Generación creativa, lluvia de ideas         | Temperatura media o alta y/o top-p: más diversidad                 |
+| Pruebas automáticas y evaluaciones           | Temperatura baja, y **diseña los tests para tolerar variación**    |
+
+En un sistema RAG factual el objetivo no es la creatividad sino la **consistencia y la fidelidad a la evidencia**. La variación indeseada se nota cuando la misma pregunta cita fuentes distintas en cada ejecución, o cuando una vez menciona una excepción importante de la política y otra la omite. Más que tocar parámetros, conviene **reducir el espacio de variación**: instrucciones concretas, formato de salida estructurado (lección 4) y exigir citas literales (lección 3).
+
+Una regla práctica: ajusta **temperatura o top-p, no ambos a la vez**, porque ambos recortan la misma cola y es difícil razonar sobre su efecto combinado. Esto es una convención habitual de buena práctica, no una propiedad matemática.
+
+### Medir la variación de tu sistema en lugar de suponerla
+
+Como la salida puede variar, la pregunta de ingeniería no es "¿cuál es la temperatura?" sino **"¿cuánto cambia la respuesta entre ejecuciones y me importa?"**. Se mide: ejecutas la misma entrada $N$ veces y calculas con qué frecuencia coinciden las respuestas (o una versión normalizada de ellas, como la etiqueta final o el valor extraído).
+
+```python
+from collections import Counter
+
+def consistencia(respuestas):
+    """Fracción de ejecuciones que coinciden con la respuesta más frecuente."""
+    cuentas = Counter(r.strip().lower() for r in respuestas)
+    _, veces = cuentas.most_common(1)[0]
+    return veces / len(respuestas)
+
+# Diez ejecuciones de la misma pregunta de clasificación (datos de ejemplo):
+runs = ["envíos"] * 8 + ["facturación"] * 2
+print(consistencia(runs))   # 0.8
+```
+
+Un 0,8 en una tarea de clasificación te dice que 1 de cada 5 veces el sistema cambia de opinión: o la tarea es ambigua, o el prompt no es lo bastante preciso, o necesitas votación entre varias ejecuciones. Esa medida orienta mejor que cualquier regla sobre temperaturas, y sigue siendo válida aunque el proveedor te impida tocar los parámetros. Para respuestas de texto libre, la comparación exacta no sirve y se usan métricas de similitud o un modelo evaluador (módulo 8).
+
+## Errores comunes en producción
+
+- **Creer que temperatura 0 elimina las alucinaciones.** Reduce la variación, no la falsedad: un modelo que "cree" algo erróneo lo repetirá de forma consistente. Para reducir alucinaciones se usa recuperación, citas y verificación (módulos M06 a M08).
+- **Dar por hecho el determinismo.** Aunque la decodificación sea _greedy_, no asumas salidas idénticas entre ejecuciones, versiones del modelo o proveedores. Si necesitas reproducibilidad estricta, compruébala empíricamente con tu modelo concreto.
+- **Subir la temperatura para "arreglar" respuestas aburridas** en una tarea factual: añade ruido y errores.
+- **Escribir código que falla si el proveedor rechaza el parámetro.** Con los modelos recientes de Claude, enviar `temperature` distinto de 1.0 provoca un error. Aísla estos parámetros en una configuración por modelo.
+- **Evaluar con una sola ejecución.** Si la salida es estocástica, una ejecución no mide nada. Repite y agrega (lo retomaremos en la evaluación de agentes con `pass@k`).
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué hace la temperatura?"_ Pista: reescala los logits antes del softmax; $T < 1$ afila, $T > 1$ aplana; no cambia el orden de los tokens, solo cuánta masa tiene cada uno.
+- _"Diferencia entre top-k y top-p."_ Pista: k fijo frente a masa acumulada; top-p adapta el número de candidatos a la confianza del modelo.
+- _"Pones temperatura 0 y el RAG sigue inventando datos. ¿Por qué?"_ Pista: la temperatura controla la variación, no la veracidad; falta evidencia recuperada, instrucción de abstenerse o verificación.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un LLM predice una distribución sobre el siguiente token y se genera texto repitiendo ese paso (autorregresión).
+- La **temperatura** reescala los logits: $p_i = e^{z_i/T} / \sum_j e^{z_j/T}$. Menos $T$ afila; más $T$ aplana.
+- **Top-k** conserva los $k$ más probables; **top-p** conserva el conjunto de masa acumulada $p$ y se adapta a la confianza del modelo.
+- Maximizar la probabilidad (greedy, beam) da texto repetitivo en generación abierta (Holtzman et al.).
+- **Bajar la temperatura no arregla las alucinaciones.** Y en modelos recientes de algunos proveedores ni siquiera puedes fijarla: diseña tu sistema sin depender de ella.
+
+</KeyTakeaways>

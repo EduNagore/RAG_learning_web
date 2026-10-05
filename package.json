@@ -18,7 +18,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:labs": "uv run pytest"
+    "test:labs": "uv run pytest",
+    "validate": "node scripts/validate-content.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.3.1",
@@ -48,12 +49,14 @@
     "eslint": "^10.12.0",
     "eslint-plugin-astro": "^3.2.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
+    "github-slugger": "^2.0.0",
     "globals": "^17.13.0",
     "prettier": "^3.9.9",
     "prettier-plugin-astro": "^1.1.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "yaml": "^2.9.1"
   }
 }

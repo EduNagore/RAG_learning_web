@@ -1,0 +1,193 @@
+---
+title: Tool calling (function calling)
+description: Cómo un LLM puede "usar" herramientas sin ejecutar nada por sí mismo. El ciclo petición, llamada, resultado y respuesta, y cómo diseñar buenas definiciones de herramientas.
+module: m00-fundamentos-llm
+order: 5
+level: intermedio
+estimatedMinutes: 15
+objectives:
+  - Describir el ciclo completo de una llamada a herramienta y quién ejecuta cada paso.
+  - Escribir la definición de una herramienta con nombre, descripción y esquema de parámetros.
+  - Explicar tool_choice, las llamadas en paralelo y el modo estricto.
+  - Identificar los riesgos de validación y seguridad que introduce dar herramientas a un modelo.
+prerequisites:
+  - m00-fundamentos-llm/04-salidas-estructuradas
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: Tool use with Claude (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Function calling (documentación de la API de OpenAI)
+    url: https://developers.openai.com/api/docs/guides/function-calling
+    type: docs
+    authors: OpenAI
+    year: 2026
+  - title: "Toolformer: Language Models Can Teach Themselves to Use Tools"
+    url: https://arxiv.org/abs/2302.04761
+    type: paper
+    authors: Schick et al.
+    year: 2023
+---
+
+## Intuición: el modelo pide, tu código hace
+
+Un LLM, por sí solo, no puede consultar tu base de datos, enviar un correo ni saber qué hora es. Solo produce texto. El _tool calling_ resuelve esto con un reparto de papeles muy simple:
+
+1. Tú describes al modelo qué **herramientas** existen (nombre, qué hacen, qué parámetros reciben).
+2. Cuando una petición lo requiere, el modelo **no responde con prosa: devuelve una solicitud estructurada** ("llama a `get_weather` con `{"location": "San Francisco, CA"}`").
+3. **Tu aplicación** ejecuta la función real y devuelve el resultado al modelo.
+4. El modelo usa ese resultado para redactar la respuesta final (o pedir otra herramienta).
+
+La idea clave: **el modelo nunca ejecuta nada.** Propone; tu código dispone. Todo lo importante de esta lección (validación, permisos, seguridad) se deduce de esa frase.
+
+Este mecanismo es la base de los agentes (módulo 10) y de protocolos como MCP (módulo 13): un agente es, en esencia, este ciclo repetido. La idea de que un modelo decida por sí mismo qué API llamar, cuándo, con qué argumentos y cómo incorporar el resultado ya se estudió en investigación con Toolformer (Schick et al., 2023); hoy los proveedores la ofrecen como una capacidad estándar de sus APIs.
+
+## Cómo funciona
+
+### El ciclo completo
+
+OpenAI lo describe en cinco pasos y la documentación de Claude en la misma estructura: petición con herramientas, llamada de herramienta recibida del modelo, ejecución en tu aplicación, segunda petición con el resultado y respuesta final (o más llamadas).
+
+<Diagram
+  caption="Ciclo de una llamada a herramienta. El modelo propone la llamada; tu aplicación la ejecuta y devuelve el resultado."
+  code={`sequenceDiagram
+  participant U as Usuario
+  participant A as Tu aplicación
+  participant M as Modelo
+  participant T as Herramienta (tu función)
+  U->>A: ¿Dónde está mi pedido 8812?
+  A->>M: Mensaje + definiciones de herramientas
+  M-->>A: tool_use: buscar_pedido(id="8812")
+  A->>T: buscar_pedido("8812")
+  T-->>A: estado: en reparto
+  A->>M: tool_result: en reparto
+  M-->>A: Tu pedido 8812 está en reparto
+  A->>U: Respuesta final`}
+/>
+
+En la API de Claude, cuando el modelo quiere usar una herramienta responde con `stop_reason: "tool_use"` y uno o más bloques `tool_use`. Tu código ejecuta la operación y envía en el siguiente mensaje un bloque `tool_result` con el identificador de la llamada. La conversación completa, incluida la respuesta del modelo con el `tool_use`, debe reenviarse en cada petición: el modelo no tiene memoria entre llamadas.
+
+### Definir una herramienta
+
+Una herramienta es un objeto con tres piezas: **nombre**, **descripción** y **esquema de parámetros** en JSON Schema (`input_schema` en Claude, `parameters` en OpenAI). Este es el ejemplo de la documentación de Claude:
+
+```json
+{
+  "name": "get_weather",
+  "description": "Get the current weather for a given location.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "location": { "type": "string", "description": "City and state, e.g. San Francisco, CA" }
+    },
+    "required": ["location"]
+  }
+}
+```
+
+Y el bucle mínimo en Python, adaptado de la documentación oficial (necesita `pip install anthropic` y una clave de API; no se ejecuta en el navegador):
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+tools = [...]  # lista con la definición anterior
+messages = [{"role": "user", "content": "What's the weather in San Francisco?"}]
+
+# 1) El modelo responde con un bloque tool_use.
+response = client.messages.create(
+    model="claude-opus-5-5", max_tokens=1024, tools=tools, messages=messages
+)
+tool_use = next(b for b in response.content if b.type == "tool_use")
+
+# 2) TÚ ejecutas la función y devuelves el resultado.
+resultado = ejecutar_herramienta(tool_use.name, tool_use.input)   # tu código
+messages += [
+    {"role": "assistant", "content": response.content},
+    {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": tool_use.id, "content": resultado}
+    ]},
+]
+
+# 3) El modelo redacta la respuesta final con ese resultado.
+final = client.messages.create(
+    model="claude-opus-5-5", max_tokens=1024, tools=tools, messages=messages
+)
+```
+
+Fíjate en que `ejecutar_herramienta` es **tuya**. Ahí es donde se validan los argumentos, se comprueban permisos y se decide si la acción se hace o no.
+
+### Controlar cuándo se usan las herramientas
+
+- **`tool_choice`.** Por defecto (`auto`) el modelo decide en cada turno si llama a una herramienta o responde directamente. Puedes forzar que use alguna (`any` en Claude, `required` en OpenAI), una concreta, o ninguna. OpenAI añade _allowed tools_ para restringir el conjunto a un subconjunto.
+- **Llamadas en paralelo.** El modelo puede pedir varias herramientas en un mismo turno. Se puede desactivar (`disable_parallel_tool_use` en Claude, `parallel_tool_calls: false` en OpenAI) para exigir como máximo una por respuesta.
+- **Modo estricto (`strict: true`).** Garantiza que los argumentos de la llamada cumplen el esquema, con la misma tecnología de decodificación restringida de la lección anterior. Exige `additionalProperties: false` y que todos los campos figuren en `required`.
+- **Herramientas de cliente y de servidor.** En Claude, las _client tools_ las ejecuta tu aplicación; las _server tools_ (como la búsqueda web) las ejecuta el proveedor y ves directamente el resultado.
+
+### Las descripciones son prompts
+
+El modelo decide si usar una herramienta **leyendo su descripción**. Por eso escribirlas bien es parte del diseño, no documentación decorativa. Recomendaciones de OpenAI, coherentes con la guía de Claude:
+
+- Nombres, descripciones de parámetros e instrucciones **claros y detallados**.
+- Funciones **predecibles e intuitivas**; usa `enum` y objetos para evitar estados inválidos.
+- Incluye ejemplos y casos límite en la descripción.
+- Usa el system prompt para explicar **cuándo (y cuándo no)** usar cada función.
+- Mantén pocas herramientas disponibles a la vez: OpenAI recomienda **menos de 20** al comienzo de un turno y herramientas de búsqueda de herramientas para colecciones grandes.
+
+Que el modelo use o no una herramienta es **orientable con el system prompt**. Según la documentación de Claude, una instrucción suave como "usa las herramientas para investigar antes de responder" aumenta su uso, una más fuerte ("llama siempre a una herramienta primero") lo empuja más, y "usa tu criterio" mantiene un comportamiento conservador.
+
+<Snapshot date="2026-10">
+
+Las herramientas **consumen contexto y se facturan como entrada**: cuentan los tokens de `tools` (nombres, descripciones, esquemas), de los bloques `tool_use` y `tool_result`, y además la API añade un system prompt interno que habilita el uso de herramientas. En la documentación de Claude ese sobrecoste fijo es de **286 tokens** en Opus 5.5 y Sonnet 5.5 con `tool_choice` automático (354 en Sonnet 5, 497 en Sonnet 4.6, 496 en Haiku 4.5). Para reducirlo con muchas herramientas, existe una herramienta de búsqueda de herramientas que carga definiciones bajo demanda. Los nombres de parámetros y los tipos de herramienta (por ejemplo `web_search_20260209`) llevan fecha en su identificador y cambian: usa la referencia vigente.
+
+</Snapshot>
+
+### Diseñar herramientas pensando en que las usa un modelo
+
+Una función escrita para humanos no siempre funciona bien como herramienta. Tres criterios de diseño que se deducen del ciclo anterior:
+
+- **Resultados concisos.** Todo lo que devuelve la herramienta entra en el contexto y se factura en cada turno siguiente. Devolver una tabla de 5 000 filas cuando el modelo necesitaba un total desperdicia ventana y degrada la atención (lección 1). Devuelve lo necesario, con campos claros.
+- **Errores informativos.** Si la herramienta falla, devuelve el motivo en el `tool_result` en lugar de lanzar una excepción en tu aplicación: "no existe el pedido 8812; los identificadores tienen 6 dígitos". Con esa información el modelo puede corregir la llamada. La documentación de Claude cubre la señalización de errores en su guía sobre cómo manejar las llamadas a herramientas.
+- **Idempotencia para lo que se pueda reintentar.** Un bucle de agente puede repetir una llamada por un fallo de red o porque el modelo duda. Una herramienta de _consulta_ se puede repetir sin riesgo; una de _acción_ (enviar un correo, cobrar) no, a menos que la diseñes para detectar duplicados o que exija confirmación.
+
+Esta separación entre herramientas de **lectura** (seguras, reintentables) y de **escritura** (con efectos) es una de las decisiones de diseño más importantes de un agente y la retomaremos en seguridad.
+
+## Trade-offs
+
+| Decisión | Ventaja | Coste o riesgo |
+| -------- | ------- | -------------- |
+| Pocas herramientas bien descritas | El modelo elige con más acierto | Menos capacidades por turno |
+| Muchas herramientas | Más cobertura | Más tokens por petición y más confusión al elegir |
+| Modo estricto | Argumentos siempre válidos | Límites de complejidad del esquema y latencia de la primera petición |
+| Permitir llamadas paralelas | Menos latencia total | Más difícil de controlar y de depurar |
+| Herramientas de servidor | Sin código de ejecución propio | Menos control; posible coste por uso |
+
+## Errores comunes en producción
+
+- **Confiar en los argumentos sin validar.** Aun con modo estricto, un valor puede ser válido para el esquema y peligroso para tu negocio (un `id` de otro cliente, una consulta SQL arbitraria). Valida y autoriza dentro de `ejecutar_herramienta`.
+- **El modelo inventa parámetros que faltan.** Si el usuario no dio un dato obligatorio, algunos modelos lo piden y otros lo infieren. La documentación de Claude avisa de que Sonnet puede suponer un valor razonable (por ejemplo, una ciudad que nadie mencionó) y de que este comportamiento no está garantizado. Diseña para que la herramienta rechace entradas incompletas.
+- **Tratar el resultado de una herramienta como fiable.** Un `tool_result` puede contener texto de la web, un correo o un documento con instrucciones maliciosas. Es **dato no confiable** que entra en el contexto del modelo; es el origen de la inyección de prompts indirecta (módulo 17).
+- **Dar más permisos de los necesarios.** Una herramienta de "ejecutar SQL" cuando solo hacía falta "buscar pedido por id". Aplica mínimo privilegio.
+- **Bucles sin límite.** Si el modelo sigue pidiendo herramientas, tu bucle debe tener un máximo de iteraciones y un presupuesto.
+- **Olvidar reenviar el historial completo** (incluido el `tool_use` del asistente) en la segunda petición.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Quién ejecuta realmente la herramienta en el function calling?"_ Pista: tu aplicación (o el proveedor, en herramientas de servidor); el modelo solo emite una solicitud estructurada.
+- _"¿Cómo evitas que un agente haga algo peligroso con una herramienta?"_ Pista: validar argumentos, mínimo privilegio, confirmación humana en acciones sensibles, límites de iteraciones y tratar los resultados como no confiables.
+- _"Tu agente tiene 60 herramientas y elige mal. ¿Qué haces?"_ Pista: reducir el conjunto por turno, mejorar descripciones, enrutar a sub-agentes o usar búsqueda de herramientas.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **El modelo propone, tu código ejecuta.** Tool calling es un ciclo: petición con herramientas, llamada estructurada, ejecución, resultado, respuesta.
+- Una herramienta se define con **nombre, descripción y esquema de parámetros**; la descripción es un prompt.
+- `tool_choice` controla cuándo se usan; las **llamadas en paralelo** y el **modo estricto** son opciones configurables.
+- Las definiciones y los resultados **consumen contexto** y se facturan como entrada en cada turno.
+- **Valida y autoriza** en tu código y trata los resultados de herramientas como **datos no confiables**.
+
+</KeyTakeaways>

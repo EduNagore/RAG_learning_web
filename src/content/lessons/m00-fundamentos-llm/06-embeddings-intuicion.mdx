@@ -1,0 +1,160 @@
+---
+title: Embeddings, la intuición
+description: Cómo convertir texto en vectores para buscar por significado. Similitud coseno, por qué los bi-encoders hacen posible la búsqueda a escala y qué no pueden hacer.
+module: m00-fundamentos-llm
+order: 6
+level: básico
+estimatedMinutes: 13
+objectives:
+  - Explicar qué es un embedding y qué significa que dos textos estén "cerca".
+  - Calcular similitud coseno y relacionarla con el producto escalar y la distancia euclídea.
+  - Entender por qué codificar documentos por separado (bi-encoder) permite buscar a escala.
+  - Reconocer los errores típicos al usar embeddings en un sistema de recuperación.
+prerequisites:
+  - m00-fundamentos-llm/01-tokens-y-contexto
+volatility: low
+lastReviewed: 2026-10-05
+sources:
+  - title: Efficient Estimation of Word Representations in Vector Space
+    url: https://arxiv.org/abs/1301.3781
+    type: paper
+    authors: Mikolov, Chen, Corrado, Dean
+    year: 2013
+  - title: "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"
+    url: https://arxiv.org/abs/1908.10084
+    type: paper
+    authors: Reimers, Gurevych
+    year: 2019
+  - title: Attention Is All You Need
+    url: https://arxiv.org/abs/1706.03762
+    type: paper
+    authors: Vaswani et al.
+    year: 2017
+---
+
+## Intuición: búsqueda por significado
+
+Imagina que un cliente escribe _"quiero que me devuelvan el dinero de mi pedido"_ y tu documentación dice _"política de reembolsos"_. No comparten ninguna palabra importante, pero hablan de lo mismo. Una búsqueda por palabras clave no los conectaría; una búsqueda **por significado** sí.
+
+Un **embedding** es la herramienta que lo permite: una función que convierte un texto en un **vector** de números reales de tamaño fijo, de forma que textos con significado parecido den vectores **cercanos** en ese espacio. Buscar por significado pasa a ser un problema geométrico: convertir la consulta en un vector y encontrar los vectores de documentos más próximos.
+
+Esta idea tiene raíces antiguas. Mikolov et al. mostraron en 2013 que se podían aprender representaciones vectoriales de palabras a partir de grandes cantidades de texto, y que esos vectores capturaban relaciones semánticas y sintácticas entre palabras. Los embeddings de frase y de documento actuales extienden la misma intuición a textos completos.
+
+## Cómo funciona
+
+### Texto a vector
+
+Un **modelo de embeddings** es una red neuronal (hoy casi siempre basada en la arquitectura Transformer) que recibe texto y devuelve un vector, normalmente de cientos o miles de dimensiones. No necesitas entender cada dimensión: lo que importa es que el **modelo aprendió** a colocar cerca textos que significan algo parecido y lejos los que no.
+
+<Diagram
+  caption="Pipeline básico de búsqueda semántica. Los documentos se codifican una vez; solo la consulta se codifica en tiempo de ejecución."
+  code={`flowchart LR
+  subgraph OFF["Offline (una vez)"]
+    D["Documentos"] --> E1["Modelo de embeddings"] --> V["Vectores de documentos (índice)"]
+  end
+  subgraph ON["Online (por consulta)"]
+    Q["Consulta"] --> E2["El mismo modelo"] --> QV["Vector de la consulta"]
+  end
+  V --> S["Similitud + top-k"]
+  QV --> S
+  S --> R["Documentos más cercanos"]`}
+/>
+
+### Medir cercanía: coseno, producto escalar y distancia
+
+Hay tres formas habituales de medir lo cerca que están dos vectores $a$ y $b$:
+
+- **Producto escalar:** $a \cdot b = \sum_i a_i b_i$. Mayor valor, más parecidos (pero depende de la longitud de los vectores).
+- **Similitud coseno:** $\cos(a, b) = \dfrac{a \cdot b}{\lVert a \rVert\, \lVert b \rVert}$. Mide el **ángulo** entre los vectores e ignora su longitud; va de −1 a 1.
+- **Distancia euclídea:** $\lVert a - b \rVert$. Menor valor, más parecidos.
+
+Una propiedad útil: **si los vectores están normalizados (norma 1), el coseno y el producto escalar coinciden**, y la distancia euclídea es una función monótona de ambos, así que ordenan los resultados igual. Por eso muchos sistemas normalizan sus embeddings y usan el producto escalar, que es más barato de calcular.
+
+Un ejemplo con **vectores inventados de 3 dimensiones, solo para ver las cuentas** (no son embeddings reales de ningún modelo). La consulta es _"quiero que me devuelvan el dinero"_:
+
+| Documento                   | Vector            | Producto escalar | Coseno | Distancia euclídea |
+| --------------------------- | ----------------- | ---------------: | -----: | -----------------: |
+| A · política de devoluciones | (0,80; 0,20; 0,10) |             0,76 | 0,9866 |             0,1732 |
+| B · horarios de camiones    | (0,10; 0,90; 0,30) |             0,24 | 0,2713 |             1,1358 |
+| C · reembolso de un pedido  | (0,85; 0,05; 0,25) |             0,82 | 0,9964 |             0,0866 |
+
+con la consulta como vector $q = (0{,}90;\ 0{,}10;\ 0{,}20)$. Los tres criterios ordenan igual: **C > A > B**. Si normalizas los tres documentos y la consulta, el producto escalar da exactamente los valores de la columna del coseno.
+
+```python
+import numpy as np
+
+def cosine_top_k(query, matrix, k=3):
+    """Índices y similitudes coseno de los k vectores más cercanos a la consulta."""
+    q = query / np.linalg.norm(query)
+    m = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
+    scores = m @ q                       # producto escalar de vectores normalizados
+    order = np.argsort(scores)[::-1][:k]
+    return order, scores[order]
+
+docs = np.array([[0.80, 0.20, 0.10], [0.10, 0.90, 0.30], [0.85, 0.05, 0.25]])
+consulta = np.array([0.90, 0.10, 0.20])
+print(cosine_top_k(consulta, docs, k=2))   # índices [2, 0] con similitudes ~0.996 y ~0.987
+```
+
+Es exactamente el primer laboratorio del curso: búsqueda del vecino más cercano desde cero.
+
+### Por qué los bi-encoders hacen posible la búsqueda a escala
+
+Hay dos formas de comparar una consulta con un documento:
+
+- **Cross-encoder:** pasas la consulta y el documento **juntos** por la red, que devuelve una puntuación de relevancia. Es muy preciso, pero tienes que ejecutar la red **una vez por cada par** consulta-documento.
+- **Bi-encoder:** codificas **cada texto por separado** y luego comparas los vectores con una operación barata (coseno o producto escalar). Los vectores de los documentos se calculan **una sola vez, de antemano**.
+
+Reimers y Gurevych lo cuantificaron en Sentence-BERT: encontrar el par más similar en una colección de 10 000 frases requiere unos 50 millones de inferencias (~65 horas) con BERT usado como cross-encoder, y su enfoque de embeddings comparables con coseno lo reduce a unos 5 segundos. Esa diferencia es la razón por la que los sistemas RAG recuperan con bi-encoders (rápidos, escalan a millones de documentos) y, si hace falta precisión, **reordenan** después solo unos pocos candidatos con un cross-encoder más lento (módulo 5).
+
+### De dónde sale el "significado"
+
+Un modelo de embeddings no trae el significado de fábrica: lo **aprende** de los datos. Lo habitual es entrenarlo con ejemplos de textos que deberían quedar cerca (por ejemplo, una pregunta y el pasaje que la responde, o dos paráfrasis) y de textos que deberían quedar lejos, y ajustar la red para que la distancia entre vectores refleje esa relación. Sentence-BERT lo hace con redes siamesas: dos copias de la misma red procesan cada texto por separado y se entrenan para que sus vectores sean comparables con el coseno.
+
+Dos consecuencias prácticas:
+
+- **El modelo solo entiende "parecido" en el sentido en que se entrenó.** Un modelo entrenado para emparejar preguntas con respuestas se comporta distinto de uno entrenado para detectar paráfrasis. Por eso importa elegir un modelo orientado a **recuperación** y por eso, para dominios muy específicos (legal, médico, tu jerga interna), a veces compensa afinarlo (módulo 3).
+- **"Cerca" es una propiedad estadística, no lógica.** El modelo agrupa textos que suelen aparecer en contextos parecidos. No razona sobre si dos frases son compatibles: _"el pedido llegó a tiempo"_ y _"el pedido no llegó a tiempo"_ comparten casi todo su vocabulario y tema, y pueden quedar muy próximos.
+
+Para elegir un modelo no basta fiarse de que sea famoso: hay comparativas públicas por tarea e idioma (en el módulo 3 verás cómo leer MTEB), pero el criterio final es el rendimiento **en tus datos**, que medirás en el módulo 8.
+
+### Denso frente a disperso
+
+Un embedding como los de arriba es una representación **densa**: todas las dimensiones tienen valor y capturan significado. La búsqueda clásica por palabras clave (por ejemplo BM25) es una representación **dispersa**: cada dimensión es una palabra y la mayoría valen cero. No compiten; se complementan, y la búsqueda **híbrida** combina ambas (módulo 5).
+
+## Trade-offs
+
+| Ventaja de los embeddings densos            | Limitación                                                      |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| Encuentran paráfrasis y sinónimos           | Pueden fallar con identificadores exactos, códigos o nombres raros |
+| Funcionan entre idiomas (según el modelo)   | La calidad depende del dominio con el que se entrenó el modelo |
+| Búsqueda rápida con índices aproximados     | Un vector es una compresión: se pierde detalle fino            |
+| Documentos pre-calculados una sola vez      | Si cambias de modelo, **debes recalcular todo**                |
+
+## Errores comunes en producción
+
+- **Mezclar modelos.** Los vectores de modelos distintos viven en espacios distintos y **no son comparables**. Documentos y consultas deben codificarse con el **mismo modelo**, y cambiar de modelo obliga a reindexar.
+- **Ignorar el límite de longitud del modelo.** Cada modelo de embeddings admite un máximo de tokens por texto; lo que sobra se trunca y su significado no entra en el vector. Eso condiciona el tamaño de tus _chunks_ (módulo 2).
+- **Asumir que "cercano" significa "verdadero" o "relevante para esta pregunta".** Dos textos pueden ser muy similares en tema y uno contradecir al otro. La cercanía mide parecido, no veracidad.
+- **Olvidar las instrucciones del modelo.** Algunos modelos de embeddings recomiendan tratar de forma distinta la consulta y el documento (por ejemplo, con un prefijo); lee la ficha del modelo concreto que uses.
+- **No medir.** Elegir un modelo "porque es popular" sin evaluarlo en tus propios datos. En el módulo 8 verás cómo medir la calidad de recuperación.
+
+Una comprobación rápida antes de construir nada más: escribe a mano veinte preguntas reales de tus usuarios, anota para cada una qué documento debería aparecer, y mira **en cuántas aparece entre los tres primeros resultados**. Es una versión informal de _recall@k_ y, en media hora, te dice si el modelo de embeddings y el troceado van por buen camino o si hay un problema de base que ningún ajuste posterior arreglará.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué usamos similitud coseno y no distancia euclídea?"_ Pista: coseno ignora la magnitud; con vectores normalizados coseno, producto escalar y euclídea ordenan igual.
+- _"¿Qué diferencia hay entre un bi-encoder y un cross-encoder, y cuándo usarías cada uno?"_ Pista: precomputación y escala frente a precisión; bi-encoder para recuperar, cross-encoder para reordenar candidatos.
+- _"Cambias de modelo de embeddings y la búsqueda se rompe. ¿Por qué?"_ Pista: los espacios vectoriales no son compatibles; hay que reindexar todo el corpus con el nuevo modelo.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un **embedding** convierte texto en un vector; textos de significado parecido quedan cerca. La búsqueda semántica es un problema geométrico.
+- La **similitud coseno** compara ángulos; con vectores normalizados coincide con el producto escalar y ordena igual que la distancia euclídea.
+- Los **bi-encoders** codifican documentos de antemano y comparan vectores: por eso escalan. Los **cross-encoders** son más precisos pero lentos y se usan para reordenar.
+- Los embeddings **densos** capturan significado; los **dispersos** (BM25) capturan palabras exactas. Se complementan.
+- Mismo modelo para documentos y consultas; **cambiar de modelo implica reindexar**; y cercanía no es veracidad.
+
+</KeyTakeaways>
