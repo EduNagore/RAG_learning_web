@@ -1,0 +1,100 @@
+lesson: m00-fundamentos-llm/05-tool-calling
+questions:
+  - id: m00-05-q1
+    type: single
+    difficulty: 1
+    prompt: 'En el *tool calling* con herramientas de cliente, ¿quién ejecuta realmente la función?'
+    options:
+      - 'El propio modelo de lenguaje.'
+      - 'Tu aplicación: el modelo solo emite una solicitud estructurada.'
+      - 'El navegador del usuario.'
+      - 'El tokenizador.'
+    answer: [1]
+    explanation: 'El modelo propone la llamada (nombre y argumentos) y tu código la ejecuta y devuelve el resultado. De ahí se deduce que la validación y los permisos son responsabilidad de tu aplicación.'
+    ref: '#intuición-el-modelo-pide-tu-código-hace'
+
+  - id: m00-05-q2
+    type: order
+    difficulty: 2
+    prompt: 'Ordena el ciclo completo de una llamada a herramienta.'
+    options:
+      - 'Envías la petición con el mensaje y las definiciones de herramientas.'
+      - 'El modelo responde con una llamada a herramienta (`tool_use`) y sus argumentos.'
+      - 'Tu aplicación ejecuta la función real con esos argumentos.'
+      - 'Envías el resultado de vuelta (`tool_result`) junto con la conversación.'
+      - 'El modelo redacta la respuesta final (o pide otra herramienta).'
+    explanation: 'El modelo propone y tu código ejecuta; luego devuelves el resultado y el modelo continúa. Hay que reenviar el historial completo, incluida la respuesta del modelo con la llamada, porque no conserva memoria entre peticiones.'
+    ref: '#el-ciclo-completo'
+
+  - id: m00-05-q3
+    type: multiple
+    difficulty: 1
+    prompt: '¿Qué piezas definen una herramienta que se le ofrece al modelo? Marca todas las correctas.'
+    options:
+      - 'Un nombre.'
+      - 'Una descripción de qué hace y cuándo usarla.'
+      - 'Un esquema de parámetros (JSON Schema).'
+      - 'La clave de API del servicio que consulta.'
+    answer: [0, 1, 2]
+    explanation: 'Una herramienta se define con nombre, descripción y esquema de parámetros. La clave de API nunca se le da al modelo: la usa tu código al ejecutar la función.'
+    ref: '#definir-una-herramienta'
+
+  - id: m00-05-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué hace configurar `tool_choice` como *any* (Claude) o *required* (OpenAI)?'
+    options:
+      - 'Impide que el modelo use cualquier herramienta.'
+      - 'Obliga al modelo a llamar al menos a una herramienta en ese turno.'
+      - 'Hace que el modelo elija siempre la última herramienta definida.'
+      - 'Desactiva el razonamiento del modelo.'
+    answer: [1]
+    explanation: 'Con el valor por defecto (*auto*) el modelo decide si usar herramientas o responder directamente; con *any*/*required* se le exige llamar a alguna. Para impedirlas se usa la opción *none*.'
+    ref: '#controlar-cuándo-se-usan-las-herramientas'
+
+  - id: m00-05-q5
+    type: truefalse
+    difficulty: 2
+    prompt: 'El contenido de un `tool_result` debe tratarse como dato no confiable, aunque lo devuelva tu propia herramienta.'
+    answer: [0]
+    explanation: 'Es verdadero. Un resultado puede contener texto de la web, un correo o un documento con instrucciones maliciosas. Es un dato no confiable que entra en el contexto del modelo y está en el origen de la inyección de prompts indirecta.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m00-05-q6
+    type: single
+    difficulty: 3
+    prompt: 'Tu agente tiene 60 herramientas y elige mal entre ellas. ¿Qué harías primero?'
+    options:
+      - 'Añadir más herramientas para cubrir todos los casos.'
+      - 'Reducir el conjunto de herramientas disponibles por turno y mejorar sus descripciones.'
+      - 'Desactivar las descripciones para ahorrar tokens.'
+      - 'Forzar `tool_choice` a una herramienta fija.'
+    answer: [1]
+    explanation: 'Con muchas herramientas aumentan los tokens fijos y la confusión al elegir. Conviene ofrecer pocas por turno, con descripciones claras (o enrutar a sub-agentes o usar búsqueda de herramientas). Quitar las descripciones empeoraría la elección.'
+    ref: '#las-descripciones-son-prompts'
+
+  - id: m00-05-q7
+    type: single
+    difficulty: 3
+    prompt: 'Usas el modo estricto (`strict: true`), de modo que los argumentos siempre cumplen el esquema. ¿Por qué sigue siendo necesario validar y autorizar dentro de tu función?'
+    options:
+      - 'No es necesario: el modo estricto garantiza que la llamada es segura.'
+      - 'Porque un valor válido para el esquema puede ser peligroso para tu negocio (por ejemplo, el identificador de pedido de otro cliente).'
+      - 'Porque el modo estricto cambia el nombre de la herramienta.'
+      - 'Porque el modo estricto desactiva el esquema.'
+    answer: [1]
+    explanation: 'El esquema garantiza la forma, no la intención ni los permisos. Validar y autorizar (mínimo privilegio) es lo que impide acciones indebidas, aunque los argumentos sean sintácticamente perfectos.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m00-05-q8
+    type: single
+    difficulty: 2
+    prompt: '¿Cómo afectan las herramientas al coste y al contexto?'
+    options:
+      - 'No afectan: las definiciones son gratuitas.'
+      - 'Sus definiciones, las llamadas y los resultados cuentan como tokens de entrada y consumen ventana en cada petición.'
+      - 'Solo cuenta el resultado de la última herramienta.'
+      - 'Solo se facturan las herramientas de servidor.'
+    answer: [1]
+    explanation: 'Los tokens de `tools`, de los bloques `tool_use` y `tool_result`, y el sobrecoste interno de la API se suman a la entrada de cada petición. Por eso los resultados deben ser concisos y las herramientas, pocas.'
+    ref: '#diseñar-herramientas-pensando-en-que-las-usa-un-modelo'

@@ -1,0 +1,100 @@
+lesson: m00-fundamentos-llm/03-prompting-y-system-prompts
+questions:
+  - id: m00-03-q1
+    type: single
+    difficulty: 1
+    prompt: 'Según la guía de prompting, ¿cuál es la "regla de oro" para comprobar si tu prompt es claro?'
+    options:
+      - 'Que tenga más de 500 palabras.'
+      - 'Enseñárselo a un compañero sin contexto de la tarea y ver si se confunde: si él se confunde, el modelo también.'
+      - 'Que use mayúsculas para las instrucciones importantes.'
+      - 'Probarlo una sola vez con un ejemplo y comprobar que funciona.'
+    answer: [1]
+    explanation: 'El modelo es como un empleado brillante pero nuevo que no conoce tus normas: si un humano sin contexto no entiende el prompt, el modelo tampoco. La longitud, las mayúsculas o una única prueba no garantizan claridad.'
+    ref: '#intuición-un-prompt-es-un-contrato-con-un-colaborador-sin-contexto'
+
+  - id: m00-03-q2
+    type: single
+    difficulty: 2
+    prompt: 'En un prompt RAG con documentos largos, ¿cómo conviene ordenar el contenido?'
+    options:
+      - 'La pregunta primero y los documentos al final.'
+      - 'Los datos largos arriba, y la pregunta e instrucciones al final.'
+      - 'Da igual el orden.'
+      - 'Los documentos repartidos entre las instrucciones, de forma intercalada.'
+    answer: [1]
+    explanation: 'La guía recomienda colocar los datos largos arriba y la consulta al final, lo que mejora el rendimiento (según sus pruebas, hasta un 30 % en entradas complejas). Intercalar o poner la pregunta antes complica que el modelo distinga datos de instrucciones.'
+    ref: '#prompts-con-documentos-largos-el-caso-rag'
+
+  - id: m00-03-q3
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué características debe tener un buen conjunto de ejemplos few-shot? Marca todas las correctas.'
+    options:
+      - 'Relevantes: parecidos a tu caso real.'
+      - 'Diversos: cubren casos límite para no inducir patrones no deseados.'
+      - 'Estructurados: envueltos en etiquetas como `<example>`.'
+      - 'Idénticos entre sí, para reforzar el patrón.'
+    answer: [0, 1, 2]
+    explanation: 'Los ejemplos deben ser relevantes, diversos y estar marcados con etiquetas. Que sean idénticos es contraproducente: el modelo puede copiar detalles accidentales y no generalizar.'
+    ref: '#cinco-técnicas-que-funcionan'
+
+  - id: m00-03-q4
+    type: truefalse
+    difficulty: 2
+    prompt: 'Las etiquetas XML en un prompt solo sirven para que quede más ordenado visualmente.'
+    answer: [1]
+    explanation: 'Es falso. Separan instrucciones, contexto y datos, lo que reduce malinterpretaciones y es la base para defenderse de la inyección de prompts indirecta: el modelo debe tratar el contenido de un documento recuperado como datos, no como órdenes.'
+    ref: '#cinco-técnicas-que-funcionan'
+
+  - id: m00-03-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál de estas instrucciones es más eficaz según la guía de prompting?'
+    options:
+      - 'NUNCA uses puntos suspensivos.'
+      - 'Tu respuesta la leerá en voz alta un motor de texto a voz: evita los puntos suspensivos porque no sabrá pronunciarlos.'
+      - 'Procura no usar signos raros.'
+      - 'No uses puntuación.'
+    answer: [1]
+    explanation: 'Explicar el motivo ayuda al modelo a generalizar la intención. Una prohibición seca o vaga (primera y tercera) da menos información, y prohibir toda la puntuación (cuarta) es excesivo y estropea la lectura.'
+    ref: '#cinco-técnicas-que-funcionan'
+
+  - id: m00-03-q6
+    type: single
+    difficulty: 1
+    prompt: 'En un chatbot RAG, ¿qué pondrías normalmente en el **system prompt**?'
+    options:
+      - 'La pregunta concreta del usuario en este turno.'
+      - 'Los fragmentos recuperados para esta pregunta.'
+      - 'El rol, las reglas estables, el formato de salida y qué hacer cuando no hay información.'
+      - 'La respuesta anterior del modelo.'
+    answer: [2]
+    explanation: 'El system prompt contiene lo estable (rol, reglas, formato, política de "no lo sé"). La pregunta, los fragmentos recuperados y el historial son datos variables que van en los mensajes.'
+    ref: '#system-prompt-y-mensajes'
+
+  - id: m00-03-q7
+    type: single
+    difficulty: 3
+    prompt: 'Para una tarea sobre documentos largos, ¿qué técnica recomienda la guía antes de que el modelo razone y responda?'
+    options:
+      - 'Resumir todos los documentos en una frase.'
+      - 'Pedirle que primero extraiga citas literales relevantes y después razone a partir de ellas.'
+      - 'Eliminar los metadatos de fuente para ahorrar tokens.'
+      - 'Pedirle que responda lo más rápido posible.'
+    answer: [1]
+    explanation: 'Extraer citas primero centra al modelo en lo pertinente y le permite ignorar el resto. Quitar los metadatos de fuente (tercera) impediría citar de dónde viene cada dato.'
+    ref: '#prompts-con-documentos-largos-el-caso-rag'
+
+  - id: m00-03-q8
+    type: single
+    difficulty: 2
+    prompt: '¿Qué mostró el trabajo sobre *chain-of-thought* de Wei et al.?'
+    options:
+      - 'Que pedir pasos intermedios mejora el razonamiento de modelos grandes en tareas aritméticas, de sentido común y simbólicas.'
+      - 'Que los modelos razonan mejor cuanto más corto es el prompt.'
+      - 'Que el razonamiento paso a paso reduce siempre el coste y la latencia.'
+      - 'Que solo funciona con ejemplos en inglés.'
+    answer: [0]
+    explanation: 'Dar al modelo espacio para razonar antes de responder mejora las tareas complejas, pero a cambio de más tokens de salida y más latencia, por lo que no reduce coste (tercera).'
+    ref: '#razonamiento-paso-a-paso'

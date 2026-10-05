@@ -122,6 +122,7 @@ for (const [id, { file, data, body }] of lessons) {
 // --- Quizzes -----------------------------------------------------------------
 const quizzesDir = join(CONTENT, 'quizzes');
 const questionIds = new Map();
+const tfByModule = new Map(); // módulo -> { v: nº verdaderas, f: nº falsas }
 for (const file of walk(quizzesDir, '.yaml')) {
   const f = rel(file);
   const quiz = parseYaml(readFileSync(file, 'utf8'));
@@ -142,7 +143,22 @@ for (const file of walk(quizzesDir, '.yaml')) {
       err(f, `${q.id}: ancla "${q.ref}" no existe en la lección`);
     if (!q.explanation || q.explanation.trim().length < 40)
       err(f, `${q.id}: explicación demasiado corta`);
+    if (q.type === 'truefalse') {
+      const t = tfByModule.get(lesson.data.module) ?? { v: 0, f: 0 };
+      if (q.answer[0] === 0) t.v++;
+      else t.f++;
+      tfByModule.set(lesson.data.module, t);
+    }
   }
+}
+// Si casi todas las verdadero/falso de un módulo tienen la misma respuesta, se acierta sin saber.
+for (const [mod, { v, f }] of tfByModule) {
+  const total = v + f;
+  if (total >= 4 && Math.max(v, f) / total >= 0.8)
+    err(
+      `quizzes/${mod}`,
+      `verdadero/falso desequilibradas (${v} verdaderas, ${f} falsas): reparte las respuestas`,
+    );
 }
 for (const [id, { data }] of lessons) {
   if (!existsSync(join(quizzesDir, `${id}.yaml`))) warn(`lessons/${id}`, 'sin quiz asociado');

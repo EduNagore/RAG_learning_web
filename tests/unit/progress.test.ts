@@ -99,3 +99,25 @@ describe('exportar / importar', () => {
     expect(() => importProgress('[]')).toThrow(/copia de seguridad/);
   });
 });
+
+describe('updateProgress', () => {
+  it('parte de lo guardado y no pisa el progreso con un store vacío', async () => {
+    const { vi } = await import('vitest');
+    const storage = fakeStorage({
+      [STORAGE_KEY]: JSON.stringify(
+        withLessonRead(emptyProgress(), 'ya-leida', new Date('2026-01-01T00:00:00Z')),
+      ),
+    });
+    vi.stubGlobal('localStorage', storage);
+    try {
+      // Módulo importado de nuevo: su store en memoria empieza vacío (isla sin hidratar).
+      vi.resetModules();
+      const mod = await import('../../src/lib/progress');
+      mod.markLessonRead('nueva');
+      const saved = JSON.parse(storage.getItem(STORAGE_KEY)!);
+      expect(Object.keys(saved.lessonsRead).sort()).toEqual(['nueva', 'ya-leida']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

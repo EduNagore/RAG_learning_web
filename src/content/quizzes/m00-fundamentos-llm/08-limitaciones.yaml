@@ -1,0 +1,100 @@
+lesson: m00-fundamentos-llm/08-limitaciones
+questions:
+  - id: m00-08-q1
+    type: single
+    difficulty: 2
+    prompt: 'Según Kalai et al., ¿por qué alucinan los modelos de lenguaje?'
+    options:
+      - 'Por un fallo aleatorio en el hardware.'
+      - 'Porque el entrenamiento y la evaluación recompensan adivinar en lugar de reconocer la incertidumbre.'
+      - 'Porque siempre tienen una fecha de corte reciente.'
+      - 'Porque los prompts son demasiado cortos.'
+    answer: [1]
+    explanation: 'Su explicación es un incentivo: como en un examen tipo test sin penalización por fallo, adivinar puntúa más que dejar en blanco. No es un error de hardware ni una cuestión de la longitud del prompt.'
+    ref: '#1-alucina'
+
+  - id: m00-08-q2
+    type: truefalse
+    difficulty: 1
+    prompt: 'Aunque un modelo admita un millón de tokens de contexto, su precisión puede degradarse con contextos muy largos.'
+    answer: [0]
+    explanation: 'Es verdadero. Existe context rot (la precisión y el recuerdo se degradan al crecer el contexto) y el efecto lost in the middle. Que quepa no garantiza que se use bien.'
+    ref: '#4-su-contexto-es-limitado-y-se-degrada'
+
+  - id: m00-08-q3
+    type: multiple
+    difficulty: 1
+    prompt: '¿Cuáles son limitaciones **estructurales** de un LLM usado de forma aislada? Marca todas.'
+    options:
+      - 'Puede alucinar.'
+      - 'Su conocimiento está congelado en su fecha de corte.'
+      - 'No conoce tus datos privados.'
+      - 'No sabe generar texto en español.'
+    answer: [0, 1, 2]
+    explanation: 'Alucinar, tener conocimiento congelado y no conocer datos privados son limitaciones estructurales. Generar texto en español no lo es: los LLM actuales son multilingües, aunque el idioma afecta a los tokens.'
+    ref: '#cómo-funciona-las-cinco-limitaciones'
+
+  - id: m00-08-q4
+    type: single
+    difficulty: 1
+    prompt: '¿Qué técnica del curso mitiga a la vez el conocimiento congelado y la falta de acceso a datos privados?'
+    options:
+      - 'Subir la temperatura.'
+      - 'RAG: recuperar evidencia actual y propia y ponerla en el contexto.'
+      - 'Reducir el tamaño del vocabulario.'
+      - 'Entrenar el modelo desde cero cada día.'
+    answer: [1]
+    explanation: 'RAG mueve la evidencia (actualizada y privada) al contexto en cada consulta. Subir la temperatura no añade información, y reentrenar a diario es inviable y no resuelve los permisos por usuario.'
+    ref: '#de-la-limitación-a-la-técnica'
+
+  - id: m00-08-q5
+    type: single
+    difficulty: 3
+    prompt: '¿Elimina RAG las alucinaciones?'
+    options:
+      - 'Sí, por completo, siempre que se use.'
+      - 'Las reduce si la recuperación trae la evidencia correcta; si falla, el modelo puede alucinar con apariencia de autoridad al "citar" un documento irrelevante.'
+      - 'No tiene ningún efecto sobre ellas.'
+      - 'Solo las elimina si se usa temperatura 0.'
+    answer: [1]
+    explanation: 'RAG traslada el problema a la calidad de la recuperación. Con buena evidencia reduce las alucinaciones; con mala puede producir respuestas erróneas que parecen respaldadas. Tampoco depende de la temperatura.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m00-08-q6
+    type: single
+    difficulty: 2
+    prompt: 'Antes de construir un sistema RAG, ¿qué recomienda la lección?'
+    options:
+      - 'Construirlo directamente: siempre mejora los resultados.'
+      - 'Medir la línea base: ejecutar el modelo solo sobre preguntas representativas con respuestas correctas y ver dónde y por qué falla.'
+      - 'Elegir primero la base de datos vectorial.'
+      - 'Meter toda la documentación en el prompt.'
+    answer: [1]
+    explanation: 'Sin una línea base no sabes si lo que construyes mejora algo. Si el modelo ya acierta casi todo, un ajuste de prompt puede valer más que una arquitectura RAG; si falla justo en datos propios y recientes, tienes la justificación medida.'
+    ref: '#trade-offs-cuándo-no-necesitas-rag-ni-agentes'
+
+  - id: m00-08-q7
+    type: single
+    difficulty: 2
+    prompt: 'Un asistente basado solo en un LLM no puede saber si el pedido 8812 existe ni en qué estado está. ¿Qué limitación lo explica?'
+    options:
+      - 'No conoce tus datos privados.'
+      - 'Su fecha de corte es muy antigua.'
+      - 'Su ventana de contexto es demasiado pequeña.'
+      - 'Su temperatura es demasiado alta.'
+    answer: [0]
+    explanation: 'Los datos de pedidos son privados y no estaban en ningún corpus de entrenamiento público, así que el modelo solo puede conocerlos si se los das (RAG o una herramienta restringida al cliente). La fecha de corte o la ventana no son la causa principal aquí.'
+    ref: '#las-cinco-limitaciones-en-un-caso-concreto'
+
+  - id: m00-08-q8
+    type: single
+    difficulty: 2
+    prompt: '¿Qué limitación del LLM aislado se aborda con estado y memoria externos, herramientas y agentes?'
+    options:
+      - 'Que alucina.'
+      - 'Que no tiene memoria entre llamadas ni capacidad de actuar.'
+      - 'Que su fecha de corte es antigua.'
+      - 'Que tiene un vocabulario limitado.'
+    answer: [1]
+    explanation: 'Cada llamada es independiente y el modelo solo produce texto: recordar y actuar requiere estado externo y herramientas que ejecute tu aplicación, que es lo que aportan los agentes. Las demás limitaciones se abordan sobre todo con RAG.'
+    ref: '#5-no-tiene-memoria-ni-capacidad-de-actuar'

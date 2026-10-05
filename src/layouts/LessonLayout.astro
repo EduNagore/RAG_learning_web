@@ -7,7 +7,9 @@ import Toc from '../components/layout/Toc.astro';
 import Breadcrumbs from '../components/layout/Breadcrumbs.astro';
 import SourceList from '../components/content/SourceList.astro';
 import ReadToggle from '../components/progress/ReadToggle';
+import Quiz from '../components/quiz/Quiz';
 import { lessonHref, type Lesson, type Module } from '../lib/content';
+import type { RenderedQuestion } from '../lib/quiz';
 import { url } from '../lib/url';
 
 interface Props {
@@ -17,8 +19,9 @@ interface Props {
   prev?: Lesson;
   next?: Lesson;
   prerequisites: Lesson[];
+  questions: RenderedQuestion[];
 }
-const { lesson, module, headings, prev, next, prerequisites } = Astro.props;
+const { lesson, module, headings, prev, next, prerequisites, questions } = Astro.props;
 const { data } = lesson;
 
 const reviewed = data.lastReviewed.toISOString().slice(0, 10);
@@ -105,6 +108,17 @@ const volatilityLabel = { low: 'Estable', medium: 'Cambia a veces', high: 'Cambi
       </div>
 
       <SourceList sources={data.sources} lastReviewed={data.lastReviewed} />
+
+      {questions.length > 0 && (
+        <div class="mt-10" data-pagefind-ignore>
+          <Quiz
+            client:only="react"
+            quizId={lesson.id}
+            title="Comprueba lo aprendido"
+            questions={questions}
+          />
+        </div>
+      )}
 
       <div class="mt-8 flex flex-wrap items-center justify-between gap-4">
         <ReadToggle client:load lessonId={lesson.id} />

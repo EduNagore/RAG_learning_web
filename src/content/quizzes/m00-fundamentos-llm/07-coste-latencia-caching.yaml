@@ -1,0 +1,119 @@
+lesson: m00-fundamentos-llm/07-coste-latencia-caching
+questions:
+  - id: m00-07-q1
+    type: single
+    difficulty: 1
+    prompt: 'Si activas el razonamiento (*thinking*) de un modelo, ¿cómo se facturan los tokens de razonamiento?'
+    options:
+      - 'Como tokens de entrada.'
+      - 'Como tokens de salida.'
+      - 'No se facturan.'
+      - 'Solo se facturan si la respuesta final es incorrecta.'
+    answer: [1]
+    explanation: 'Los tokens de razonamiento se generan, así que se facturan como salida (y cuentan para la ventana de contexto). Por eso un razonamiento largo aumenta coste y latencia.'
+    ref: '#intuición-pagas-por-lo-que-el-modelo-lee-y-por-lo-que-escribe'
+
+  - id: m00-07-q2
+    type: code-output
+    difficulty: 3
+    prompt: 'Con estos precios de ejemplo (USD por millón de tokens de entrada), ¿qué imprime el código?'
+    code: |-
+      base, escritura, lectura = 4.0, 5.0, 0.20
+      prefijo, n = 10_000, 50
+
+      con = prefijo / 1e6 * escritura + (n - 1) * prefijo / 1e6 * lectura
+      print(round(con, 2))
+    options:
+      - '2.0'
+      - '0.15'
+      - '0.05'
+      - '0.5'
+    answer: [1]
+    explanation: 'Una escritura de 10 000 tokens a 5 $/M son 0,05 $, y 49 lecturas a 0,20 $/M suman 0,098 $; en total 0,148 $, que redondea a 0,15. Sin caché serían 50 × 10 000 × 4 $/M = 2,00 $ (primera opción).'
+    ref: '#un-ejemplo-con-números'
+
+  - id: m00-07-q3
+    type: single
+    difficulty: 2
+    prompt: '¿En qué orden jerárquico se construye la caché de prompt, de modo que un cambio invalida ese nivel y los siguientes?'
+    options:
+      - 'messages, system, tools'
+      - 'tools, system, messages'
+      - 'system, messages, tools'
+      - 'No hay jerarquía: cada bloque se cachea por separado.'
+    answer: [1]
+    explanation: 'La jerarquía es tools → system → messages. Un cambio en las herramientas invalida todo; uno en el system invalida system y messages; uno en los mensajes solo afecta a los mensajes. De ahí que lo estable vaya primero.'
+    ref: '#qué-hace-el-prompt-caching'
+
+  - id: m00-07-q4
+    type: truefalse
+    difficulty: 2
+    prompt: 'Con una única petición, activar la caché de prompt siempre sale más barato que no activarla.'
+    answer: [1]
+    explanation: 'Es falso. La escritura en caché cuesta más que el precio base (1,25× para 5 minutos), así que con una sola petición el caching sale más caro. Compensa a partir de dos usos dentro de la ventana de vida de la caché.'
+    ref: '#un-ejemplo-con-números'
+
+  - id: m00-07-q5
+    type: single
+    difficulty: 2
+    prompt: 'Para aprovechar la caché, ¿dónde deben ir los datos que cambian en cada petición (como la pregunta actual o una marca de hora)?'
+    options:
+      - 'Al principio del prompt.'
+      - 'Al final, después del prefijo estable.'
+      - 'En medio de las herramientas.'
+      - 'Da igual dónde se pongan.'
+    answer: [1]
+    explanation: 'La caché funciona por prefijo: lo estable debe ir primero y lo variable al final. Un dato variable al principio hace que el prefijo nunca coincida y no haya aciertos.'
+    ref: '#diseñar-para-la-caché'
+
+  - id: m00-07-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Cuáles de estas acciones **invalidan** la caché (total o parcialmente) o impiden los aciertos? Marca todas.'
+    options:
+      - 'Cambiar las definiciones de las herramientas entre peticiones.'
+      - 'Modificar el system prompt.'
+      - 'Poner una marca de hora variable al principio del prefijo.'
+      - 'Añadir un mensaje nuevo al final de la conversación.'
+    answer: [0, 1, 2]
+    explanation: 'Cambiar herramientas o system rompe el prefijo, y un dato variable al principio impide que coincida. Añadir un mensaje al final es justo lo normal: el prefijo anterior sigue siendo idéntico y se reutiliza.'
+    ref: '#diseñar-para-la-caché'
+
+  - id: m00-07-q7
+    type: single
+    difficulty: 2
+    prompt: 'El **tiempo hasta el primer token** (TTFT) depende principalmente de...'
+    options:
+      - 'La longitud de la respuesta que se va a generar.'
+      - 'La longitud de la entrada, porque el modelo debe procesarla antes de empezar a responder.'
+      - 'El idioma del usuario.'
+      - 'El número de herramientas que se usarán después.'
+    answer: [1]
+    explanation: 'Antes de emitir el primer token hay que procesar toda la entrada, por lo que el TTFT crece con ella (y el caching lo reduce al reutilizar el prefijo). La longitud de la respuesta determina, en cambio, el tiempo de generación.'
+    ref: '#latencia-qué-la-determina'
+
+  - id: m00-07-q8
+    type: single
+    difficulty: 2
+    prompt: '¿Qué conviene registrar por cada llamada para controlar el coste de un sistema con agentes?'
+    options:
+      - 'Solo el texto de la respuesta.'
+      - 'Modelo, tokens de entrada, de salida y de lectura/escritura de caché, tiempos y un identificador de la tarea.'
+      - 'Únicamente el número total de usuarios.'
+      - 'Nada: el proveedor ya lo hace por ti de forma suficiente.'
+    answer: [1]
+    explanation: 'Sin esos datos no puedes calcular el coste por tarea, localizar los pasos que concentran el gasto ni comprobar si el caching funciona. El resto de opciones no permiten optimizar.'
+    ref: '#qué-registrar-para-controlar-el-coste'
+
+  - id: m00-07-q9
+    type: single
+    difficulty: 3
+    prompt: 'En un sistema RAG, ¿qué suele poder cachearse con prompt caching?'
+    options:
+      - 'Los fragmentos recuperados, porque son siempre los mismos.'
+      - 'Lo que rodea a los fragmentos: instrucciones, herramientas y ejemplos; los fragmentos cambian con cada pregunta.'
+      - 'Nada, el caching no se puede usar en RAG.'
+      - 'Solo la pregunta del usuario.'
+    answer: [1]
+    explanation: 'Los fragmentos recuperados cambian con cada pregunta y normalmente no son cacheables. Sí lo son las instrucciones, herramientas y ejemplos estables. En un chat con un documento fijo, en cambio, el documento entero es un buen prefijo.'
+    ref: '#diseñar-para-la-caché'

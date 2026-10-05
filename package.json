@@ -30,6 +30,7 @@
     "astro": "^7.3.5",
     "astro-pagefind": "^2.0.1",
     "katex": "^0.19.0",
+    "marked": "^18.0.14",
     "mermaid": "^12.1.0",
     "nanostores": "^1.5.4",
     "react": "^19.3.0",

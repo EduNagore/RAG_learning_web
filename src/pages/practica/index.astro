@@ -1,9 +1,82 @@
 ---
-import ComingSoon from '../../components/layout/ComingSoon.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { url } from '../../lib/url';
+
+const cards = [
+  {
+    href: url('/practica/tests/'),
+    title: 'Tests por módulo',
+    text: 'Preguntas tipo test de cada módulo. Apruebas con un 80 %. Cada lección también tiene su mini-test al final.',
+  },
+  {
+    href: url('/practica/examen/'),
+    title: 'Modo examen',
+    text: 'Elige módulos y número de preguntas, con temporizador opcional. Al terminar, informe por módulo.',
+  },
+  {
+    href: url('/practica/repaso/'),
+    title: 'Repaso espaciado',
+    text: 'Las preguntas que fallas vuelven a ti cuando toca (sistema Leitner), hasta que las dominas.',
+    due: true,
+  },
+  {
+    href: url('/progreso/'),
+    title: 'Mi progreso',
+    text: 'Lecciones leídas, notas, exámenes y copia de seguridad de tu avance.',
+  },
+];
 ---
 
-<ComingSoon
+<BaseLayout
   title="Práctica"
-  description="Tests tipo test, modo examen, repaso espaciado y laboratorios de código autocorregidos."
-  phase="F2 y F3"
-/>
+  description="Tests tipo test, modo examen, repaso espaciado y laboratorios de código."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Práctica</h1>
+  <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">
+    Aprender no es leer: es recordar y aplicar. Aquí practicas lo que has estudiado en la teoría.
+  </p>
+
+  <ul class="mt-8 grid gap-4 md:grid-cols-2">
+    {cards.map((c) => (
+      <li>
+        <a
+          href={c.href}
+          class="block h-full rounded-lg border border-slate-200 p-5 hover:border-indigo-400 dark:border-slate-800"
+        >
+          <h2 class="text-lg font-semibold">
+            {c.title}
+            {c.due && (
+              <span
+                id="due-badge"
+                hidden
+                class="ml-2 rounded-full bg-amber-200 px-2 py-0.5 text-xs font-medium text-amber-900"
+              />
+            )}
+          </h2>
+          <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">{c.text}</p>
+        </a>
+      </li>
+    ))}
+    <li class="rounded-lg border border-dashed border-slate-300 p-5 dark:border-slate-700">
+      <h2 class="text-lg font-semibold">Laboratorios de código</h2>
+      <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">
+        Ejercicios de Python que se ejecutan y se corrigen en tu navegador.
+      </p>
+      <p class="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+        En construcción · F3
+      </p>
+    </li>
+  </ul>
+</BaseLayout>
+
+<script>
+  import { loadProgress } from '../../lib/progress';
+  import { dueQuestionIds } from '../../lib/srs';
+
+  const due = dueQuestionIds(loadProgress().srs, new Date()).length;
+  const badge = document.getElementById('due-badge');
+  if (badge && due > 0) {
+    badge.textContent = `${due} pendiente${due === 1 ? '' : 's'}`;
+    badge.hidden = false;
+  }
+</script>

@@ -1,4 +1,5 @@
 import { atom } from 'nanostores';
+import { applyResults } from './srs';
 
 /** Clave de localStorage; el sufijo es la versión del esquema. */
 export const STORAGE_KEY = 'rma:progress:v1';
@@ -107,6 +108,48 @@ export function withLessonUnread(p: Progress, lessonId: string): Progress {
   return { ...p, lessonsRead };
 }
 
+export interface QuizOutcome {
+  /** Id del quiz: el id de la lección, o "module:<id>" para el test de un módulo. */
+  quizId: string;
+  results: { id: string; correct: boolean }[];
+}
+
+/**
+ * Registra un intento: actualiza mejor/último/intentos (porcentaje 0-100) y manda
+ * las preguntas fallidas al repaso espaciado (o hace avanzar las ya existentes).
+ */
+export function withQuizOutcome(p: Progress, outcome: QuizOutcome, now = new Date()): Progress {
+  const total = outcome.results.length;
+  const pct =
+    total === 0 ? 0 : Math.round((outcome.results.filter((r) => r.correct).length / total) * 100);
+  const prev = p.quizScores[outcome.quizId];
+  return {
+    ...p,
+    quizScores: {
+      ...p.quizScores,
+      [outcome.quizId]: {
+        best: Math.max(prev?.best ?? 0, pct),
+        last: pct,
+        attempts: (prev?.attempts ?? 0) + 1,
+      },
+    },
+    srs: applyResults(p.srs, outcome.results, now),
+  };
+}
+
+/** Resultado de un repaso espaciado: solo toca el sistema Leitner, no las notas de los quizzes. */
+export function withReview(
+  p: Progress,
+  results: { id: string; correct: boolean }[],
+  now = new Date(),
+): Progress {
+  return { ...p, srs: applyResults(p.srs, results, now) };
+}
+
+export function withExam(p: Progress, exam: ExamResult): Progress {
+  return { ...p, exams: [...p.exams, exam] };
+}
+
 export function moduleCompletion(
   p: Progress,
   lessonIds: string[],
@@ -142,12 +185,26 @@ export function hydrateProgress(): void {
   $progress.set(loadProgress());
 }
 
+/**
+ * Aplica un cambio partiendo SIEMPRE de lo guardado en localStorage (la fuente de verdad):
+ * así una isla que aún no se ha hidratado, o una segunda pestaña, no pisa el progreso
+ * existente con un estado vacío. Sin almacenamiento disponible se usa el store en memoria.
+ */
 export function updateProgress(fn: (p: Progress) => Progress): void {
-  const next = fn($progress.get());
+  const storage = getStorage();
+  const next = fn(storage ? loadProgress(storage) : $progress.get());
   $progress.set(next);
-  saveProgress(next);
+  saveProgress(next, storage);
 }
 
+export const recordQuizOutcome = (outcome: QuizOutcome) =>
+  updateProgress((p) => withQuizOutcome(p, outcome));
+export const recordReview = (results: { id: string; correct: boolean }[]) =>
+  updateProgress((p) => withReview(p, results));
+export const recordExam = (exam: ExamResult) => updateProgress((p) => withExam(p, exam));
 export const markLessonRead = (id: string) => updateProgress((p) => withLessonRead(p, id));
 export const markLessonUnread = (id: string) => updateProgress((p) => withLessonUnread(p, id));
 export const resetProgress = () => updateProgress(() => emptyProgress());
+
+/** Sustituye todo el progreso (importación de una copia de seguridad). */
+export const replaceProgress = (p: Progress) => updateProgress(() => p);
