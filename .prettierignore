@@ -1,0 +1,8 @@
+dist/
+.astro/
+node_modules/
+.venv/
+pnpm-lock.yaml
+public/
+*.mdx
+docs/

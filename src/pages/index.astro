@@ -1,5 +1,6 @@
 ---
 import { url } from '../lib/url';
+import '../styles/global.css';
 ---
 
 <!doctype html>
@@ -10,9 +11,9 @@ import { url } from '../lib/url';
     <link rel="icon" type="image/svg+xml" href={url('favicon.svg')} />
     <title>RAG &amp; Multi-Agent Academy</title>
   </head>
-  <body>
-    <h1>RAG &amp; Multi-Agent Academy</h1>
-    <p>Hello world: el despliegue en GitHub Pages funciona.</p>
-    <p><img src={url('favicon.svg')} alt="logo" width="32" height="32" /></p>
+  <body class="mx-auto max-w-2xl p-8">
+    <h1 class="text-3xl font-bold">RAG &amp; Multi-Agent Academy</h1>
+    <p class="mt-4">Hello world: el despliegue en GitHub Pages funciona.</p>
+    <img src={url('favicon.svg')} alt="Logo" width="32" height="32" class="mt-4" />
   </body>
 </html>
