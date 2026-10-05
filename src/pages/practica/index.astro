@@ -4,6 +4,11 @@ import { url } from '../../lib/url';
 
 const cards = [
   {
+    href: url('/practica/labs/'),
+    title: 'Laboratorios de código',
+    text: 'Ejercicios de Python que se ejecutan y se corrigen en tu navegador, sin instalar nada.',
+  },
+  {
     href: url('/practica/tests/'),
     title: 'Tests por módulo',
     text: 'Preguntas tipo test de cada módulo. Apruebas con un 80 %. Cada lección también tiene su mini-test al final.',
@@ -57,15 +62,6 @@ const cards = [
         </a>
       </li>
     ))}
-    <li class="rounded-lg border border-dashed border-slate-300 p-5 dark:border-slate-700">
-      <h2 class="text-lg font-semibold">Laboratorios de código</h2>
-      <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        Ejercicios de Python que se ejecutan y se corrigen en tu navegador.
-      </p>
-      <p class="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-        En construcción · F3
-      </p>
-    </li>
   </ul>
 </BaseLayout>
 

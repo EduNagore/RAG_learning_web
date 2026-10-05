@@ -1,0 +1,122 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs.astro';
+import { DIFFICULTY_NAMES, PART_NAMES, getLabs } from '../../../lib/labs';
+import { url } from '../../../lib/url';
+
+const labs = await getLabs();
+const select =
+  'rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900';
+---
+
+<BaseLayout
+  title="Laboratorios"
+  description="Ejercicios de código en Python que se ejecutan y se corrigen en tu navegador, sin instalar nada."
+>
+  <Breadcrumbs
+    items={[{ label: 'Práctica', href: url('/practica/') }, { label: 'Laboratorios' }]}
+  />
+  <h1 class="text-3xl font-bold tracking-tight">Laboratorios de código</h1>
+  <p class="mt-2 max-w-3xl text-slate-600 dark:text-slate-400">
+    Programas la solución, pulsas Comprobar y tus tests se ejecutan al instante en tu navegador. Sin
+    instalar nada, sin claves de API: el modelo de lenguaje es un simulador con guion para que todo
+    sea reproducible.
+  </p>
+
+  <form class="mt-6 flex flex-wrap gap-4" aria-label="Filtros" onsubmit="return false">
+    <label class="text-sm">
+      Parte
+      <select id="f-part" class={select}>
+        <option value="">Todas</option>
+        {Object.entries(PART_NAMES).map(([k, v]) => (
+          <option value={k}>{v}</option>
+        ))}
+      </select>
+    </label>
+    <label class="text-sm">
+      Dificultad
+      <select id="f-diff" class={select}>
+        <option value="">Todas</option>
+        {Object.entries(DIFFICULTY_NAMES).map(([k, v]) => (
+          <option value={k}>{v}</option>
+        ))}
+      </select>
+    </label>
+    <label class="text-sm">
+      Estado
+      <select id="f-state" class={select}>
+        <option value="">Todos</option>
+        <option value="todo">Sin empezar</option>
+        <option value="started">En curso</option>
+        <option value="passed">Superados</option>
+      </select>
+    </label>
+  </form>
+
+  <ul id="lab-list" class="mt-6 grid gap-4 md:grid-cols-2">
+    {labs.map((lab) => (
+      <li
+        data-lab-id={lab.id}
+        data-part={lab.data.part}
+        data-difficulty={lab.data.difficulty}
+        class="rounded-lg border border-slate-200 p-5 dark:border-slate-800"
+      >
+        <h2 class="font-semibold">
+          <a
+            class="text-indigo-700 hover:underline dark:text-indigo-300"
+            href={url(`/practica/labs/${lab.id}/`)}
+          >
+            {lab.data.title}
+          </a>
+          <span data-status class="ml-2 rounded-full px-2 py-0.5 text-xs font-medium" />
+        </h2>
+        <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">{lab.data.description}</p>
+        <p class="mt-2 text-xs text-slate-500">
+          {PART_NAMES[lab.data.part]} · {DIFFICULTY_NAMES[lab.data.difficulty]} · ~
+          {lab.data.estimatedMinutes} min
+        </p>
+      </li>
+    ))}
+  </ul>
+  <p id="lab-empty" hidden class="mt-6 text-slate-600 dark:text-slate-400">
+    Ningún laboratorio coincide con los filtros.
+  </p>
+</BaseLayout>
+
+<script>
+  import { loadProgress } from '../../../lib/progress';
+
+  const { labs } = loadProgress();
+  const items = Array.from(document.querySelectorAll<HTMLElement>('#lab-list > li'));
+  const state = (id: string): 'todo' | 'started' | 'passed' => labs[id]?.status ?? 'todo';
+
+  for (const li of items) {
+    const badge = li.querySelector<HTMLElement>('[data-status]');
+    const s = state(li.dataset.labId ?? '');
+    if (!badge || s === 'todo') continue;
+    badge.textContent = s === 'passed' ? '✓ Superado' : 'En curso';
+    badge.className +=
+      s === 'passed'
+        ? ' bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+        : ' bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200';
+  }
+
+  const filters = {
+    part: document.getElementById('f-part') as HTMLSelectElement,
+    diff: document.getElementById('f-diff') as HTMLSelectElement,
+    state: document.getElementById('f-state') as HTMLSelectElement,
+  };
+  const apply = () => {
+    let visible = 0;
+    for (const li of items) {
+      const show =
+        (!filters.part.value || li.dataset.part === filters.part.value) &&
+        (!filters.diff.value || li.dataset.difficulty === filters.diff.value) &&
+        (!filters.state.value || state(li.dataset.labId ?? '') === filters.state.value);
+      li.hidden = !show;
+      if (show) visible++;
+    }
+    document.getElementById('lab-empty')!.hidden = visible > 0;
+  };
+  Object.values(filters).forEach((f) => f.addEventListener('change', apply));
+</script>

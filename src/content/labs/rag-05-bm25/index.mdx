@@ -16,7 +16,7 @@ hints:
   - Calcula primero una sola vez lo que es común a todos los documentos, como el número de documentos `N` y la longitud media `avgdl`, y luego recorre los documentos.
   - Para cada término único de la consulta necesitas `n`, el número de documentos que lo contienen (no cuántas veces aparece en total). Después `idf = log(1 + (N - n + 0.5) / (n + 0.5))` con `math.log`.
   - La frecuencia de un término en un documento es `doc.count(termino)`. Si es 0, ese término no suma nada a ese documento.
-  - Para `bm25_search`, tokeniza con `tokenize(titulo + " " + texto)` para que el título también cuente, y ordena con `sorted(..., key=lambda x: (-x[1], x[2]))` para desempatar por posición.
+  - 'Para `bm25_search`, tokeniza con `tokenize(titulo + " " + texto)` para que el título también cuente, y ordena con `sorted(..., key=lambda x: (-x[1], x[2]))` para desempatar por posición.'
 relatedLessons:
   - m00-fundamentos-llm/06-embeddings-intuicion
 ---

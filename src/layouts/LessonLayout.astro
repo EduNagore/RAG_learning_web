@@ -9,6 +9,7 @@ import SourceList from '../components/content/SourceList.astro';
 import ReadToggle from '../components/progress/ReadToggle';
 import Quiz from '../components/quiz/Quiz';
 import { lessonHref, type Lesson, type Module } from '../lib/content';
+import type { CollectionEntry } from 'astro:content';
 import type { RenderedQuestion } from '../lib/quiz';
 import { url } from '../lib/url';
 
@@ -20,8 +21,9 @@ interface Props {
   next?: Lesson;
   prerequisites: Lesson[];
   questions: RenderedQuestion[];
+  labs: CollectionEntry<'labs'>[];
 }
-const { lesson, module, headings, prev, next, prerequisites, questions } = Astro.props;
+const { lesson, module, headings, prev, next, prerequisites, questions, labs } = Astro.props;
 const { data } = lesson;
 
 const reviewed = data.lastReviewed.toISOString().slice(0, 10);
@@ -108,6 +110,31 @@ const volatilityLabel = { low: 'Estable', medium: 'Cambia a veces', high: 'Cambi
       </div>
 
       <SourceList sources={data.sources} lastReviewed={data.lastReviewed} />
+
+      {labs.length > 0 && (
+        <section
+          class="mt-10 rounded-lg border border-indigo-200 bg-indigo-50 p-5 dark:border-indigo-900 dark:bg-indigo-950/40"
+          data-pagefind-ignore
+        >
+          <h2 class="text-lg font-semibold">Practica en código</h2>
+          <ul class="mt-2 space-y-1 text-sm">
+            {labs.map((lab) => (
+              <li>
+                <a
+                  class="font-medium text-indigo-700 hover:underline dark:text-indigo-300"
+                  href={url(`/practica/labs/${lab.id}/`)}
+                >
+                  {lab.data.title}
+                </a>
+                <span class="text-slate-600 dark:text-slate-400">
+                  {' '}
+                  · ~{lab.data.estimatedMinutes} min
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {questions.length > 0 && (
         <div class="mt-10" data-pagefind-ignore>

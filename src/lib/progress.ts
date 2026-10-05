@@ -146,6 +146,24 @@ export function withReview(
   return { ...p, srs: applyResults(p.srs, results, now) };
 }
 
+/** Guarda el código del alumno. Un laboratorio ya superado no vuelve a "started". */
+export function withLabCode(p: Progress, labId: string, code: string, now = new Date()): Progress {
+  const status = p.labs[labId]?.status ?? 'started';
+  return { ...p, labs: { ...p.labs, [labId]: { status, code, updatedAt: now.toISOString() } } };
+}
+
+export function withLabPassed(
+  p: Progress,
+  labId: string,
+  code: string,
+  now = new Date(),
+): Progress {
+  return {
+    ...p,
+    labs: { ...p.labs, [labId]: { status: 'passed', code, updatedAt: now.toISOString() } },
+  };
+}
+
 export function withExam(p: Progress, exam: ExamResult): Progress {
   return { ...p, exams: [...p.exams, exam] };
 }
@@ -201,6 +219,10 @@ export const recordQuizOutcome = (outcome: QuizOutcome) =>
   updateProgress((p) => withQuizOutcome(p, outcome));
 export const recordReview = (results: { id: string; correct: boolean }[]) =>
   updateProgress((p) => withReview(p, results));
+export const saveLabCode = (labId: string, code: string) =>
+  updateProgress((p) => withLabCode(p, labId, code));
+export const markLabPassed = (labId: string, code: string) =>
+  updateProgress((p) => withLabPassed(p, labId, code));
 export const recordExam = (exam: ExamResult) => updateProgress((p) => withExam(p, exam));
 export const markLessonRead = (id: string) => updateProgress((p) => withLessonRead(p, id));
 export const markLessonUnread = (id: string) => updateProgress((p) => withLessonUnread(p, id));

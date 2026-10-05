@@ -1,0 +1,94 @@
+---
+import 'katex/dist/katex.min.css';
+import { getEntry, render } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs.astro';
+import Callout from '../../../components/content/Callout.astro';
+import Diagram from '../../../components/content/Diagram.astro';
+import KeyTakeaways from '../../../components/content/KeyTakeaways.astro';
+import Snapshot from '../../../components/content/Snapshot.astro';
+import CodeLab from '../../../components/lab/CodeLab';
+import { DIFFICULTY_NAMES, PART_NAMES, getLabFiles, getLabs } from '../../../lib/labs';
+import { lessonHref } from '../../../lib/content';
+import { url } from '../../../lib/url';
+
+export async function getStaticPaths() {
+  return (await getLabs()).map((lab) => ({ params: { id: lab.id }, props: { lab } }));
+}
+
+const { lab } = Astro.props;
+const { data } = lab;
+const { Content } = await render(lab);
+const files = getLabFiles(lab.id);
+const module = await getEntry('modules', data.module);
+const lessons = (
+  await Promise.all(data.relatedLessons.map((id) => getEntry('lessons', id)))
+).filter((l) => l !== undefined);
+---
+
+<BaseLayout title={`Lab: ${data.title}`} description={data.description} wide>
+  <div class="mx-auto w-full max-w-7xl px-4 py-8">
+    <Breadcrumbs
+      items={[
+        { label: 'Práctica', href: url('/practica/') },
+        { label: 'Laboratorios', href: url('/practica/labs/') },
+        { label: data.title },
+      ]}
+    />
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold tracking-tight">{data.title}</h1>
+      <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">{data.description}</p>
+      <ul class="mt-4 flex flex-wrap gap-2 text-xs">
+        <li class="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
+          {PART_NAMES[data.part]}
+        </li>
+        <li class="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+          Dificultad: {DIFFICULTY_NAMES[data.difficulty]}
+        </li>
+        <li class="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+          ~{data.estimatedMinutes} min
+        </li>
+        {data.concepts.map((c) => (
+          <li class="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">{c}</li>
+        ))}
+      </ul>
+      {lessons.length > 0 && (
+        <p class="mt-3 text-sm text-slate-600 dark:text-slate-400">
+          Teoría relacionada:{' '}
+          {lessons.map((l, i) => (
+            <>
+              {i > 0 && ', '}
+              <a class="text-indigo-700 hover:underline dark:text-indigo-300" href={lessonHref(l)}>
+                {l.data.title}
+              </a>
+            </>
+          ))}
+        </p>
+      )}
+      {module && <p class="mt-1 text-xs text-slate-500">Módulo: {module.data.title}</p>}
+    </header>
+
+    <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+      <article
+        data-pagefind-body
+        class="prose prose-slate min-w-0 max-w-none dark:prose-invert prose-headings:scroll-mt-24"
+      >
+        <Content components={{ Callout, Diagram, KeyTakeaways, Snapshot }} />
+      </article>
+
+      <div class="min-w-0" data-pagefind-ignore>
+        <CodeLab
+          client:only="react"
+          labId={lab.id}
+          title={data.title}
+          starter={files.starter}
+          solution={files.solution}
+          tests={files.tests}
+          hints={data.hints}
+          packages={data.packages}
+          base={url('/')}
+        />
+      </div>
+    </div>
+  </div>
+</BaseLayout>

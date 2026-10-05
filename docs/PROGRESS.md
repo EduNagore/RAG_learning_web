@@ -11,14 +11,14 @@
 | F0 Setup y despliegue | ✅ hecha, en `main` y desplegada | Astro 7, Tailwind 4, CI, deploy a Pages |
 | F1 Núcleo de teoría | ✅ hecha, en `main` y desplegada | Layouts, Pagefind, KaTeX, Mermaid, progreso, **M00 completo (8 lecciones)** |
 | F2 Motor de tests | ✅ hecha, en `main` y desplegada | Quiz, examen, Leitner, panel de progreso, **65 preguntas de M00** |
-| F3 Laboratorios | 🟡 **en curso** (rama `fase-3-labs`, sin fusionar) | Ver "F3: dónde me quedé" |
+| F3 Laboratorios | 🟡 **código completo y verificado; falta CI, fusionar a `main` y el resumen al usuario** (rama `fase-3-labs`) | Ver "F3: dónde me quedé" |
 | **Pausa de revisión tras F3** | ⏳ | **Detenerse y dar resumen al usuario antes de F4** (lo exige el prompt) |
 | F4 Contenido Parte I (RAG, M01–M09) | ⬜ | |
 | F5 Contenido Parte II (Agentes, M10–M17) | ⬜ | |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
-Contadores a fecha de hoy: 19 módulos definidos (solo M00 con lecciones), 8 lecciones, 65 preguntas, 48 tests unitarios, 19 e2e, `main` = `49a01f5`.
+Contadores a fecha de hoy: 19 módulos definidos (solo M00 con lecciones), 8 lecciones, 65 preguntas, 3 labs, 51 tests unitarios, 27 e2e, 16 tests de labs + 23 mutantes, `main` = `49a01f5` (F3 aún sin fusionar).
 
 ## F3: dónde me quedé
 
@@ -37,6 +37,9 @@ Rama `fase-3-labs` (creada desde `main`). Archivos ya escritos (commit WIP):
 - En Pyodide: escribir `ragkit/*.py` en `/home/pyodide/py/ragkit/` y los datos en `/home/pyodide/data/nimbus/`; añadir `/home/pyodide/py` a `sys.path` (la estructura `py/ragkit` + `data/nimbus` es la que asume `ragkit.data`).
 
 ### Pendiente de F3, en orden
+
+> **Actualización:** los pasos 4–7 están **HECHOS y verificados** (colección `labs`, worker/cliente de Pyodide, `CodeLab` con CodeMirror, páginas `/practica/labs/` y `/practica/labs/[id]/`, `relatedLabs` en las lecciones 5 y 6 de M00, validación de labs en `pnpm validate`, `tests/e2e/labs.spec.ts` con 8 tests en navegador real). **Solo quedan los pasos 8 y 9** (CI en verde, fusionar a `main`, verificar despliegue —incluido que un lab se resuelve en el sitio público— y **parar para resumir al usuario**). El detalle original de los pasos se conserva abajo por referencia.
+
 1. ~~Verificar `ragkit`~~ (hecho).
 2. ~~Tres labs de punta a punta~~ **HECHO** (ids `rag-01-coseno-topk`, `rag-05-bm25`, `agents-23-react`): enunciado, starter, solution, test_lab. Diseño acordado: lab 1 `cosine_top_k(query, matrix, k)`; lab 5 `bm25_scores(...)` con idf `ln(1+(N-n+0.5)/(n+0.5))` + búsqueda sobre el corpus (calcular los valores esperados con la solución y fijarlos en los tests); lab 23 bucle ReAct `run_agent(llm, tools, question, max_steps)` con `MockLLM` guionizado, errores de herramienta devueltos al modelo y límite de pasos.
 3. ~~`tests/labs/test_all_labs.py` real~~ **HECHO** (16 tests en verde; además `scripts/mutate_labs.py`: 23 mutantes de error típico, todos detectados; ejecútalo al añadir labs: `uv run python scripts/mutate_labs.py`). Criterio original: por cada lab, `run_lab(solution)` pasa **todo** y `run_lab(starter)` **no** pasa todo (usa `ragkit.labrunner`, no reimplementar). Añadir `pythonpath = ["public/py"]` ya está en `pyproject.toml`.

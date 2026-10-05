@@ -85,4 +85,26 @@ const quizzes = defineCollection({
   }),
 });
 
-export const collections = { modules, lessons, quizzes };
+const labs = defineCollection({
+  // Un laboratorio por carpeta: src/content/labs/<id>/index.mdx (+ starter.py, solution.py, test_lab.py).
+  loader: glob({
+    pattern: '*/index.mdx',
+    base: './src/content/labs',
+    generateId: ({ entry }) => entry.split('/')[0],
+  }),
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    part: z.enum(['fundamentos', 'rag', 'agentes']),
+    module: z.string(),
+    difficulty: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    estimatedMinutes: z.number().int().positive(),
+    concepts: z.array(z.string()).min(1),
+    /** Paquetes de Pyodide que hay que cargar además de numpy (p. ej. 'networkx'). */
+    packages: z.array(z.string()).default([]),
+    hints: z.array(z.string()).min(1),
+    relatedLessons: z.array(z.string()).default([]),
+  }),
+});
+
+export const collections = { modules, lessons, quizzes, labs };

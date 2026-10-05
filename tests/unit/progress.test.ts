@@ -121,3 +121,32 @@ describe('updateProgress', () => {
     }
   });
 });
+
+describe('laboratorios', () => {
+  const T = new Date('2026-10-05T10:00:00Z');
+
+  it('guardar código crea el laboratorio como "started"', async () => {
+    const { withLabCode } = await import('../../src/lib/progress');
+    const p = withLabCode(emptyProgress(), 'lab-1', 'print(1)', T);
+    expect(p.labs['lab-1']).toEqual({
+      status: 'started',
+      code: 'print(1)',
+      updatedAt: T.toISOString(),
+    });
+  });
+
+  it('un laboratorio superado no vuelve a "started" al seguir editando', async () => {
+    const { withLabCode, withLabPassed } = await import('../../src/lib/progress');
+    let p = withLabPassed(emptyProgress(), 'lab-1', 'solución', T);
+    expect(p.labs['lab-1'].status).toBe('passed');
+    p = withLabCode(p, 'lab-1', 'otra cosa', new Date(T.getTime() + 1000));
+    expect(p.labs['lab-1']).toMatchObject({ status: 'passed', code: 'otra cosa' });
+  });
+
+  it('no modifica el progreso original', async () => {
+    const { withLabCode } = await import('../../src/lib/progress');
+    const base = emptyProgress();
+    withLabCode(base, 'lab-1', 'x', T);
+    expect(base.labs).toEqual({});
+  });
+});
