@@ -1,0 +1,8 @@
+part: agentes
+order: 10
+title: 'Fundamentos de agentes'
+description: 'Qué es un agente, el bucle agéntico, ReAct, planificación, reflexión y memoria.'
+objectives:
+  - 'Distinguir workflows de agentes.'
+  - 'Describir el bucle del agente y ReAct.'
+  - 'Aplicar principios de context engineering.'

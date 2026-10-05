@@ -1,0 +1,16 @@
+---
+import Search from 'astro-pagefind/components/Search.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Buscar" description="Busca en todas las lecciones del curso.">
+  <h1 class="text-3xl font-bold tracking-tight">Buscar</h1>
+  <p class="mt-2 text-slate-600 dark:text-slate-400">Busca en el contenido de las lecciones.</p>
+  <div class="mt-6 max-w-xl">
+    <Search />
+  </div>
+  <p class="mt-4 text-sm text-slate-500">
+    El índice de búsqueda se genera al compilar el sitio, así que no funciona con{' '}
+    <code>pnpm dev</code>. Usa <code>pnpm build &amp;&amp; pnpm preview</code>.
+  </p>
+</BaseLayout>

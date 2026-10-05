@@ -1,0 +1,28 @@
+---
+import { getEntry, render } from 'astro:content';
+import LessonLayout from '../../layouts/LessonLayout.astro';
+import Callout from '../../components/content/Callout.astro';
+import Diagram from '../../components/content/Diagram.astro';
+import KeyTakeaways from '../../components/content/KeyTakeaways.astro';
+import Snapshot from '../../components/content/Snapshot.astro';
+import { getOrderedLessons } from '../../lib/content';
+
+export async function getStaticPaths() {
+  const ordered = await getOrderedLessons();
+  return ordered.map((lesson, i) => ({
+    params: { slug: lesson.id },
+    props: { lesson, prev: ordered[i - 1], next: ordered[i + 1], ordered },
+  }));
+}
+
+const { lesson, prev, next, ordered } = Astro.props;
+const module = (await getEntry('modules', lesson.data.module))!;
+const { Content, headings } = await render(lesson);
+const prerequisites = (lesson.data.prerequisites ?? [])
+  .map((id) => ordered.find((l) => l.id === id))
+  .filter((l) => l !== undefined);
+---
+
+<LessonLayout {lesson} {module} {headings} {prev} {next} {prerequisites}>
+  <Content components={{ Callout, Diagram, KeyTakeaways, Snapshot }} />
+</LessonLayout>

@@ -1,0 +1,63 @@
+---
+import '../styles/global.css';
+import Header from '../components/layout/Header.astro';
+import Footer from '../components/layout/Footer.astro';
+import { url } from '../lib/url';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Sin contenedor centrado: la página gestiona su propio ancho (lecciones). */
+  wide?: boolean;
+}
+
+const {
+  title,
+  description = 'Aprende y practica RAG y sistemas multi-agente: teoría, tests, laboratorios de código y preparación de entrevistas.',
+  wide = false,
+} = Astro.props;
+const fullTitle =
+  title === 'RAG & Multi-Agent Academy' ? title : `${title} · RAG & Multi-Agent Academy`;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href={url('favicon.svg')} />
+    <link rel="sitemap" href={url('sitemap-index.xml')} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Aplica el tema antes de pintar para evitar el parpadeo. -->
+    <script is:inline>
+      try {
+        const t = localStorage.getItem('rma:theme');
+        const dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.classList.toggle('dark', dark);
+      } catch {
+        // Sin almacenamiento: se usa la preferencia del sistema.
+      }
+    </script>
+  </head>
+  <body class="flex min-h-screen flex-col">
+    <a
+      href="#contenido"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-indigo-600 focus:px-3 focus:py-2 focus:text-white"
+    >
+      Saltar al contenido
+    </a>
+    <Header />
+    <main id="contenido" class:list={['flex-1', !wide && 'mx-auto w-full max-w-6xl px-4 py-8']}>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

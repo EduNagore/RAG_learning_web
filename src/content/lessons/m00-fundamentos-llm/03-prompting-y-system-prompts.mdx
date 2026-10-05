@@ -1,0 +1,159 @@
+---
+title: Prompting y system prompts
+description: Cómo escribir instrucciones que un modelo sigue de forma fiable. Claridad, ejemplos, estructura con etiquetas, orden en contextos largos y el papel del system prompt.
+module: m00-fundamentos-llm
+order: 3
+level: básico
+estimatedMinutes: 15
+objectives:
+  - Diferenciar el system prompt del mensaje de usuario y saber qué poner en cada uno.
+  - Aplicar las técnicas básicas de prompting, incluidos ejemplos few-shot y etiquetas para separar partes.
+  - Ordenar correctamente un prompt con documentos largos, como el de un sistema RAG.
+  - Explicar qué aporta el razonamiento paso a paso y cuándo no hace falta pedirlo.
+prerequisites:
+  - m00-fundamentos-llm/01-tokens-y-contexto
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: Prompting best practices (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+  - title: Chain-of-Thought Prompting Elicits Reasoning in Large Language Models
+    url: https://arxiv.org/abs/2201.11903
+    type: paper
+    authors: Wei et al.
+    year: 2022
+  - title: "Lost in the Middle: How Language Models Use Long Contexts"
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu et al.
+    year: 2023
+---
+
+## Intuición: un prompt es un contrato con un colaborador sin contexto
+
+Un LLM no conoce tu empresa, tus normas ni lo que "obviamente" quieres. Todo lo que sabe de tu tarea es lo que pones en el contexto. La guía de prompting de Anthropic lo expresa con una imagen útil: trata al modelo como **un empleado brillante pero nuevo que no conoce tus normas ni tus flujos de trabajo**; cuanto más precisamente expliques lo que quieres, mejor será el resultado.
+
+De ahí sale una regla de oro que puedes aplicar hoy: **enséñale tu prompt a un compañero que no conozca la tarea y pídele que lo ejecute. Si se confunde, el modelo también.**
+
+En un sistema RAG el prompt es la pieza donde se encuentran la pregunta del usuario, los fragmentos recuperados y tus reglas de comportamiento. Escribirlo bien es parte del diseño, no un detalle de última hora.
+
+## Cómo funciona
+
+### System prompt y mensajes
+
+Las APIs de chat separan los mensajes por rol. Lo habitual es:
+
+- **System prompt:** instrucciones estables sobre quién eres, cómo debes comportarte y qué reglas aplican. No cambia entre turnos.
+- **Mensajes de usuario y asistente:** la conversación, incluidos los datos variables de cada petición.
+
+Un rol de una sola frase en el system prompt ya enfoca el tono y el comportamiento, según la guía de Claude (por ejemplo, _"Eres un asistente de soporte de Nimbus Logística…"_). Que sea estable tiene además una ventaja de ingeniería: un prefijo idéntico entre peticiones se puede **cachear** y abaratar (lo veremos en la lección de coste).
+
+Anthropic habla de la "altura correcta" (_right altitude_) para un system prompt: ni lógica frágil con decenas de reglas rígidas, ni una orientación tan vaga que no dé señales concretas. Debe ser lo bastante específico para guiar el comportamiento y lo bastante flexible para dar al modelo buenas heurísticas.
+
+### Cinco técnicas que funcionan
+
+1. **Sé claro y directo.** Especifica el formato de salida y las restricciones. Si el orden o la completitud de los pasos importan, enuméralos. Si quieres un comportamiento "extra", pídelo explícitamente en lugar de esperar que el modelo lo infiera.
+2. **Explica el porqué.** Dar el motivo de una instrucción ayuda al modelo a generalizar. Ejemplo de la guía: en vez de _"No uses puntos suspensivos"_, escribe _"Tu respuesta la leerá en voz alta un motor de texto a voz, así que no uses puntos suspensivos porque no sabrá pronunciarlos."_
+3. **Da ejemplos (few-shot).** Son, según la guía, una de las formas más fiables de fijar formato, tono y estructura. Deben ser **relevantes** (parecidos a tu caso real), **diversos** (para que el modelo no aprenda patrones no deseados) y **estructurados** (envueltos en etiquetas `<example>`). La guía sugiere 3–5 ejemplos.
+4. **Separa las partes con etiquetas.** Cuando el prompt mezcla instrucciones, contexto, ejemplos y entradas variables, envolver cada tipo de contenido en su propia etiqueta XML (`<instructions>`, `<context>`, `<input>`) reduce malinterpretaciones. Usa nombres coherentes y anida cuando haya jerarquía natural.
+5. **Pide el formato que quieres, no solo prohíbas el que no.** Indicar cómo debe ser la salida suele funcionar mejor que una lista de prohibiciones.
+
+<Callout type="consejo" title="Separar datos de instrucciones también es seguridad">
+
+Las etiquetas no solo ordenan: marcan qué parte del prompt son **datos** (por ejemplo, el texto de un documento recuperado) y cuál son **instrucciones**. Esa separación es la base para defenderse de la inyección de prompts indirecta, que veremos en el módulo de seguridad. Un documento recuperado puede contener frases como "ignora tus instrucciones anteriores"; el modelo debe tratarlas como contenido a leer, no como órdenes.
+
+</Callout>
+
+### Prompts con documentos largos: el caso RAG
+
+Cuando el prompt incluye mucho material (la guía de Claude se refiere a entradas de unos 20 000 tokens o más), el orden importa:
+
+- **Pon los datos largos arriba**, antes de la pregunta, las instrucciones y los ejemplos. La guía indica que esto mejora el rendimiento en todos los modelos y que colocar la consulta al final puede mejorar la calidad de la respuesta hasta un 30 % en sus pruebas, sobre todo con entradas complejas de varios documentos. Es una cifra del propio proveedor medida en su banco de pruebas: tómala como indicio, no como constante.
+- **Estructura cada documento con etiquetas y metadatos** (`<document>`, `<source>`, `<document_content>`), para que el modelo sepa de dónde viene cada fragmento. Esa misma información es la que luego te permite **citar fuentes**.
+- **Pide citar antes de responder.** Para tareas sobre documentos largos, la guía recomienda pedir al modelo que primero extraiga citas literales relevantes y después razone a partir de ellas. Así se centra en lo pertinente e ignora el resto.
+
+Esto encaja con lo que viste en la lección anterior: el efecto _lost in the middle_ (Liu et al.) hace que la información situada en medio de un contexto largo se aproveche peor, lo que refuerza la idea de **ordenar y acotar** lo que metes en el prompt.
+
+Así se ve un prompt RAG bien estructurado, con la empresa ficticia que usaremos en los laboratorios:
+
+```xml
+Eres el asistente de soporte de Nimbus Logística. Respondes solo con la información
+de los documentos. Si los documentos no contienen la respuesta, di que no lo sabes.
+
+<documents>
+  <document index="1">
+    <source>politica-devoluciones.md</source>
+    <document_content>
+      {{FRAGMENTO_1}}
+    </document_content>
+  </document>
+  <document index="2">
+    <source>faq-envios.md</source>
+    <document_content>
+      {{FRAGMENTO_2}}
+    </document_content>
+  </document>
+</documents>
+
+Pregunta del cliente: {{PREGUNTA}}
+
+Primero copia entre <quotes> las frases de los documentos que respondan a la pregunta.
+Después responde en <respuesta> citando el documento con [1] o [2].
+```
+
+Fíjate en que las `{{...}}` son marcadores que rellena tu código, no sintaxis del modelo. Y en que el prompt le da una salida de escape explícita ("di que no lo sabes"), clave para reducir invención.
+
+### Razonamiento paso a paso
+
+El artículo de Wei et al. mostró que pedir a un modelo grande que escriba los pasos intermedios (_chain-of-thought_) mejora el razonamiento en tareas aritméticas, de sentido común y simbólicas, cuando el modelo es lo bastante grande. Durante años la técnica fue una frase mágica ("piensa paso a paso"). Hoy muchos modelos incorporan razonamiento propio (_thinking_) que se activa y se configura por parámetro, y la guía de Claude trata cómo aprovecharlo y cuándo es excesivo. La idea de fondo se mantiene: **darle al modelo espacio para razonar antes de responder** mejora las tareas complejas, a cambio de más tokens de salida y más latencia.
+
+<Snapshot date="2026-10">
+
+La guía oficial de prompting de Claude cubre modelos actuales como Opus 5.5 y Sonnet 5.5, y distingue guías específicas por modelo: lo que funciona en uno puede cambiar en otro. Recomienda **volver a validar con tus propias evaluaciones** cualquier técnica antes de aplicarla a un modelo distinto. Además, ha dejado de recomendar el relleno previo de la respuesta (_prefilling_) y propone instrucciones directas, etiquetas XML, salidas estructuradas o tool calling.
+
+</Snapshot>
+
+## Trade-offs
+
+| Decisión                    | Ventaja                                      | Coste o riesgo                                             |
+| --------------------------- | -------------------------------------------- | ---------------------------------------------------------- |
+| Prompt largo y detallado    | Menos ambigüedad, comportamiento más estable | Más tokens en cada petición; instrucciones que se contradicen |
+| Muchos ejemplos few-shot    | Formato y tono muy consistentes              | Consumen contexto; el modelo puede copiar patrones accidentales |
+| Razonamiento antes de responder | Mejor en tareas complejas                | Más latencia y más tokens de salida                        |
+| Reglas rígidas ("NUNCA…")   | Parece más seguro                            | Frágil; el modelo generaliza peor que con una explicación  |
+
+## Errores comunes en producción
+
+- **Prompt "demostrado en tres ejemplos":** funciona en la demo y falla con entradas reales. Un prompt se valida con un conjunto de evaluación, no a ojo.
+- **Instrucciones contradictorias** acumuladas tras muchos parches. Cada arreglo puntual añade una regla; con el tiempo el prompt se vuelve incoherente. Reescribe en lugar de apilar.
+- **Ejemplos poco diversos**, que el modelo imita al pie de la letra, incluidos detalles irrelevantes.
+- **Mezclar datos e instrucciones sin marcar**, lo que facilita tanto confusiones como inyección de prompts.
+- **No dar salida de escape.** Sin una instrucción explícita para el caso "no hay información", el modelo tiende a completar de todos modos.
+- **Copiar prompts de un modelo a otro sin reevaluar.** Lo que ajustaste para un modelo puede sobrar o estorbar en el siguiente.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué pondrías en el system prompt y qué en el mensaje de usuario en un chatbot RAG?"_ Pista: rol, reglas, formato y política de "no lo sé" en el system; pregunta y fragmentos recuperados en el mensaje, con etiquetas.
+- _"¿Dónde colocas los documentos recuperados respecto a la pregunta, y por qué?"_ Pista: datos largos arriba y pregunta al final; efecto _lost in the middle_; metadatos de fuente para citar.
+- _"¿Cómo sabes que un cambio de prompt es una mejora?"_ Pista: conjunto de evaluación con casos representativos, comparación antes/después, no impresiones.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un prompt es un contrato con un colaborador **sin contexto**: sé claro, explica el porqué y especifica el formato de salida.
+- El **system prompt** fija rol y reglas estables; los mensajes de usuario llevan lo variable. Apunta a la "altura correcta": ni rígido ni vago.
+- Los **ejemplos few-shot** (3–5, relevantes y diversos, dentro de `<example>`) son una de las formas más fiables de fijar formato y tono.
+- Las **etiquetas** separan instrucciones, contexto y datos: más claridad y base de seguridad frente a inyección indirecta.
+- En prompts con documentos largos: **datos arriba, pregunta al final**, metadatos de fuente y, si procede, pedir citas antes de responder.
+- Valida los prompts con **evaluaciones**, y vuelve a validarlos al cambiar de modelo.
+
+</KeyTakeaways>

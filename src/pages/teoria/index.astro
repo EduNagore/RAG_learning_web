@@ -1,0 +1,90 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import {
+  PART_LABELS,
+  getLessonsByModule,
+  getModules,
+  groupByPart,
+  lessonHref,
+} from '../../lib/content';
+
+const [modules, byModule] = await Promise.all([getModules(), getLessonsByModule()]);
+---
+
+<BaseLayout
+  title="Teoría"
+  description="Curso de RAG y sistemas multi-agente dividido en partes y módulos, de los fundamentos a la preparación de entrevistas."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Teoría</h1>
+  <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">
+    Cuatro partes, de los fundamentos de los LLM a la preparación profesional. Cada lección cita sus
+    fuentes y la fecha en la que se revisó.
+  </p>
+
+  {groupByPart(modules).map(([part, mods]) => (
+    <section class="mt-10">
+      <h2 class="text-xl font-semibold">{PART_LABELS[part]}</h2>
+      <ul class="mt-4 grid gap-4 md:grid-cols-2">
+        {mods.map((mod) => {
+          const lessons = byModule.get(mod.id) ?? [];
+          return (
+            <li
+              id={mod.id}
+              class="rounded-lg border border-slate-200 p-5 dark:border-slate-800"
+              data-module-progress
+              data-lessons={lessons.map((l) => l.id).join(',')}
+            >
+              <h3 class="font-semibold">{mod.data.title}</h3>
+              <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">{mod.data.description}</p>
+              {lessons.length > 0 ? (
+                <>
+                  <div class="mt-3 flex items-center gap-3 text-xs text-slate-500">
+                    <div class="h-1.5 flex-1 overflow-hidden rounded bg-slate-200 dark:bg-slate-800">
+                      <div data-bar class="h-full w-0 bg-emerald-500 transition-all" />
+                    </div>
+                    <span data-count>0/{lessons.length}</span>
+                  </div>
+                  <ol class="mt-3 space-y-1 text-sm">
+                    {lessons.map((lesson) => (
+                      <li data-lesson-id={lesson.id}>
+                        <a
+                          class="text-indigo-700 hover:underline dark:text-indigo-300"
+                          href={lessonHref(lesson)}
+                        >
+                          {lesson.data.title}
+                        </a>
+                        <span class="read-mark text-emerald-600 dark:text-emerald-400"> ✓</span>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <p class="mt-3 text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Próximamente
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  ))}
+</BaseLayout>
+
+<script>
+  import { loadProgress, moduleCompletion } from '../../lib/progress';
+  const progress = loadProgress();
+  document.querySelectorAll<HTMLElement>('[data-lesson-id]').forEach((el) => {
+    if (el.dataset.lessonId && el.dataset.lessonId in progress.lessonsRead)
+      el.dataset.read = 'true';
+  });
+  document.querySelectorAll<HTMLElement>('[data-module-progress]').forEach((card) => {
+    const ids = (card.dataset.lessons ?? '').split(',').filter(Boolean);
+    if (ids.length === 0) return;
+    const { done, total } = moduleCompletion(progress, ids);
+    const bar = card.querySelector<HTMLElement>('[data-bar]');
+    if (bar) bar.style.width = `${(done / total) * 100}%`;
+    const count = card.querySelector<HTMLElement>('[data-count]');
+    if (count) count.textContent = `${done}/${total}`;
+  });
+</script>

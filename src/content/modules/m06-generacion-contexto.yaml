@@ -1,0 +1,8 @@
+part: rag
+order: 6
+title: 'Generación y gestión del contexto'
+description: 'Cómo construir el prompt final, citar fuentes y gestionar el contexto disponible.'
+objectives:
+  - 'Construir prompts con citas y grounding.'
+  - 'Mitigar lost in the middle y comprimir contexto.'
+  - 'Hacer que el sistema responda "no lo sé" cuando falta evidencia.'

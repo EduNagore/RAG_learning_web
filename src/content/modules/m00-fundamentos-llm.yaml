@@ -1,0 +1,8 @@
+part: fundamentos
+order: 0
+title: 'Fundamentos de LLMs para RAG y agentes'
+description: 'Lo mínimo que necesitas saber de los modelos de lenguaje para construir sistemas RAG y agentes con criterio.'
+objectives:
+  - 'Entender tokens, ventana de contexto y sampling y su efecto en coste y calidad.'
+  - 'Controlar al modelo con prompts, salidas estructuradas y tool calling.'
+  - 'Conocer las limitaciones de un LLM que justifican RAG y agentes.'

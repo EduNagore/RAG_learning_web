@@ -1,0 +1,8 @@
+part: agentes
+order: 15
+title: 'Memoria, estado y control'
+description: 'Checkpointing, human-in-the-loop, memoria a largo plazo y aislamiento de contexto.'
+objectives:
+  - 'Diseñar estado y checkpointing duraderos.'
+  - 'Incorporar human-in-the-loop.'
+  - 'Gestionar memoria a largo plazo y compactación.'

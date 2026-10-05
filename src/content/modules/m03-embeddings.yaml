@@ -1,0 +1,8 @@
+part: rag
+order: 3
+title: 'Embeddings y representaciones'
+description: 'Representaciones densas y dispersas, cómo evaluarlas y cuándo afinarlas.'
+objectives:
+  - 'Comparar embeddings densos y dispersos.'
+  - 'Leer MTEB con criterio y elegir un modelo.'
+  - 'Entender dimensión, cuantización y Matryoshka.'

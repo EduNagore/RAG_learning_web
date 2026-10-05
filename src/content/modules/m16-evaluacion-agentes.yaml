@@ -1,0 +1,8 @@
+part: agentes
+order: 16
+title: 'Evaluación de agentes'
+description: 'Métricas, trayectorias, benchmarks y harnesses para medir agentes de forma fiable.'
+objectives:
+  - 'Evaluar éxito de tarea y trayectoria.'
+  - 'Distinguir pass@k de pass^k.'
+  - 'Conocer los benchmarks principales y sus límites.'

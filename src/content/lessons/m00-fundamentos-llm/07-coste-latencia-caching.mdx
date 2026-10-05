@@ -1,0 +1,157 @@
+---
+title: Coste, latencia y prompt caching
+description: De qué se compone la factura de una llamada a un LLM, qué determina la latencia y cómo el prompt caching puede abaratar un prefijo repetido más de un 90 %.
+module: m00-fundamentos-llm
+order: 7
+level: intermedio
+estimatedMinutes: 15
+objectives:
+  - Desglosar el coste de una petición en tokens de entrada, de salida y de caché.
+  - Calcular el ahorro de un prompt caching con un ejemplo concreto y su punto de equilibrio.
+  - Diseñar un prompt con un prefijo estable que aproveche la caché y saber qué la invalida.
+  - Enumerar palancas para reducir coste y latencia además del caching.
+prerequisites:
+  - m00-fundamentos-llm/01-tokens-y-contexto
+  - m00-fundamentos-llm/05-tool-calling
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: Prompt caching (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Context windows (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/context-windows
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Tool use with Claude (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+---
+
+## Intuición: pagas por lo que el modelo lee y por lo que escribe
+
+Un LLM se factura por **tokens**, y cada petición tiene dos partes que se cobran por separado:
+
+- **Tokens de entrada:** todo lo que envías (system prompt, historial, documentos, definiciones de herramientas).
+- **Tokens de salida:** todo lo que el modelo genera, **incluido su razonamiento** si el _thinking_ está activo. La documentación de Claude precisa que los tokens de razonamiento se facturan como salida.
+
+Los precios por token son distintos para entrada y salida y cambian por modelo, así que consulta siempre la tabla vigente del proveedor.
+
+En aplicaciones RAG y de agentes aparece un patrón costoso: **la mayor parte de la entrada se repite de una petición a la siguiente.** El system prompt, las herramientas, los ejemplos y, en un chat sobre un documento, el propio documento son idénticos en cada turno, y los reenvías enteros cada vez. El _prompt caching_ ataca justo ese desperdicio.
+
+## Cómo funciona
+
+### Qué hace el prompt caching
+
+El proveedor guarda el trabajo ya hecho sobre un **prefijo** del prompt. Si la siguiente petición empieza con ese mismo prefijo, lo reutiliza: menos tiempo de procesamiento y menos coste. La documentación de Claude lo describe como una coincidencia de **prefijo** hasta un punto de corte (_cache breakpoint_): si el prefijo hasta ese punto ya está en caché lo reutiliza; si no, procesa el prompt completo y guarda el prefijo.
+
+Puntos clave de la documentación de Claude (a fecha de octubre de 2026):
+
+- **Duración:** 5 minutos por defecto, o 1 hora con un coste de escritura mayor. El plazo se mide desde el inicio de la petición que escribe o lee la entrada, y cada lectura la refresca.
+- **Modos de uso:** automático (un único campo `cache_control` en la petición, que el sistema mueve al último bloque cacheable según crece la conversación) o explícito (puntos de corte en bloques concretos, hasta 4 por petición).
+- **Mínimo cacheable:** un prefijo demasiado corto no se cachea y no da error; hay que comprobar los campos de uso de la respuesta. El mínimo depende del modelo: por ejemplo 512 tokens en los más recientes (Opus 5.5, Sonnet 5.5) y 4 096 en Haiku 4.5.
+- **Orden de jerarquía:** la caché sigue el orden `tools` → `system` → `messages`. Un cambio en un nivel **invalida ese nivel y los siguientes**.
+
+<Diagram
+  caption="El prefijo estable va primero y se cachea; lo que cambia en cada petición va al final. Un cambio en un nivel invalida los niveles posteriores."
+  code={`flowchart LR
+  T["1. Herramientas (estables)"] --> S["2. System prompt (estable)"]
+  S --> D["3. Ejemplos y documentos fijos"]
+  D --> B["Punto de corte (cache_control)"]
+  B --> V["4. Historial reciente y pregunta nueva (cambian)"]`}
+/>
+
+<Snapshot date="2026-10">
+
+Multiplicadores de la documentación de Claude, relativos al precio base de entrada: escritura de caché de 5 minutos **1,25×**, escritura de 1 hora **2×**, y lectura (acierto) **0,1×** en general (**0,05×** en Opus 5.5 y **0,025×** en Fable 5.1 y Mythos 5.1). Como referencia, para Claude Opus 5.5 la documentación indica un precio base de entrada de **4 $ por millón de tokens**, 5 $ por escritura de 5 minutos, 8 $ por escritura de 1 hora y 0,20 $ por lectura. Precios, multiplicadores y mínimos cambian con los modelos: verifica en la página de precios vigente.
+
+</Snapshot>
+
+### Un ejemplo con números
+
+Un chat de soporte con un prefijo fijo de **20 000 tokens** (system prompt, herramientas y ejemplos) y **100 peticiones** dentro de la ventana de 5 minutos, con los precios de Opus 5.5 de arriba (solo contamos la entrada):
+
+| Estrategia | Cálculo | Coste de entrada |
+| ---------- | ------- | ---------------: |
+| Sin caché | 100 × 20 000 tokens × 4 $/M | **8,00 $** |
+| Con caché | 1 escritura (20 000 × 5 $/M = 0,10 $) + 99 lecturas (99 × 20 000 × 0,20 $/M = 0,396 $) | **0,496 $** |
+
+Un ahorro de **93,8 %** sobre ese prefijo. Pero hay un **punto de equilibrio**: con una sola petición el caching sale **más caro** (0,10 $ frente a 0,08 $), porque la escritura cuesta 1,25× el precio base. Con dos peticiones ya compensa (0,104 $ frente a 0,16 $). En general, mientras la lectura cueste mucho menos que el precio base, **dos usos dentro de la ventana de vida bastan para amortizar la escritura**.
+
+```python
+# Cálculo del ejemplo (precios en USD por millón de tokens de entrada)
+base, escritura_5m, lectura = 4.0, 5.0, 0.20
+prefijo, peticiones = 20_000, 100
+
+sin_cache = peticiones * prefijo / 1e6 * base
+con_cache = prefijo / 1e6 * escritura_5m + (peticiones - 1) * prefijo / 1e6 * lectura
+print(f"{sin_cache:.3f} -> {con_cache:.3f}  ({1 - con_cache / sin_cache:.1%} de ahorro)")
+# 8.000 -> 0.496  (93.8% de ahorro)
+```
+
+### Diseñar para la caché
+
+Reglas prácticas derivadas de la documentación:
+
+1. **Lo estable primero, lo variable al final.** Herramientas, system prompt y ejemplos arriba; la pregunta del turno actual, abajo.
+2. **Coloca el punto de corte en el último bloque cuyo prefijo sea idéntico entre peticiones.** Si el punto de corte está sobre contenido que cambia cada vez (una marca de hora, un contexto por petición), el prefijo nunca coincide y no hay aciertos.
+3. **No cambies las herramientas entre turnos:** invalidan toda la caché. Cambiar `tool_choice` o añadir imágenes invalida solo el nivel de mensajes.
+4. **Activar o desactivar opciones del sistema** (como la búsqueda web o las citas) modifica el system prompt e invalida ese nivel y el de mensajes.
+5. **Comprueba que funciona.** La respuesta informa del uso; si los tokens de lectura de caché son cero, no estás cacheando.
+
+Una consecuencia para RAG: los fragmentos recuperados **cambian con cada pregunta**, así que normalmente no son cacheables. Lo que sí se cachea es todo lo que los rodea (instrucciones, herramientas, ejemplos). En cambio, en un "chat con un documento" el documento entero es el prefijo estable y el caching es especialmente rentable.
+
+## Latencia: qué la determina
+
+La latencia que percibe el usuario tiene dos componentes:
+
+- **Tiempo hasta el primer token (TTFT):** el modelo debe procesar todo el prompt de entrada antes de empezar a responder, así que crece con la longitud de la entrada. Es el tiempo que reduce el caching al reutilizar el trabajo del prefijo.
+- **Tiempo de generación:** la salida se produce token a token, así que crece con la longitud de la respuesta.
+
+Con **streaming** el usuario ve la respuesta mientras se genera, lo que mejora la latencia percibida sin cambiar la total. Un razonamiento largo antes de responder (_thinking_) mejora la calidad en tareas difíciles a costa de más tokens de salida y más espera.
+
+## Trade-offs: otras palancas de coste y latencia
+
+| Palanca | Efecto | Cuidado |
+| ------- | ------ | ------- |
+| Recuperar menos y mejor (reranking) | Menos tokens de entrada | Menor recall si recortas demasiado |
+| Salida más corta (formato conciso, `max_tokens`) | Menos tokens de salida y menos espera | Respuestas truncadas si el límite es bajo |
+| Modelo más pequeño para pasos simples (enrutado) | Coste y latencia menores | Hay que evaluar la calidad por paso |
+| Menos herramientas por turno | Menos tokens fijos | Menos capacidades |
+| Contar tokens antes de enviar | Evita errores y sorpresas | Cada proveedor tiene su contador |
+| Cachés propias (por ejemplo semántica) | Evitan llamadas repetidas | Riesgo de respuestas desfasadas (módulo 9) |
+
+### Qué registrar para controlar el coste
+
+No puedes optimizar lo que no mides. Por cada llamada conviene guardar, como mínimo: el modelo usado, los **tokens de entrada, de salida y de lectura y escritura de caché** (la API de Claude los devuelve en el campo `usage`: `input_tokens`, `cache_read_input_tokens` y `cache_creation_input_tokens`), el tiempo hasta el primer token y el total, el número de llamadas a herramientas, y un identificador de la tarea o conversación a la que pertenece. Con eso puedes calcular el coste **por tarea**, detectar qué pasos de un agente concentran el gasto y comprobar si el caching funciona de verdad.
+
+## Errores comunes en producción
+
+- **Medir el coste solo por petición, no por tarea.** Un agente hace decenas de llamadas; cada una reenvía un contexto que crece. El coste real es el de la tarea completa.
+- **Poner un dato variable al principio del prompt** (una marca de hora, un identificador de sesión) y estropear sin saberlo toda la caché.
+- **Cachear prefijos que casi nunca se repiten dentro de 5 minutos:** pagas la escritura (1,25×) y no amortizas.
+- **No vigilar el uso real.** Sin registrar entrada, salida, lecturas y escrituras de caché por petición, no sabes qué está pasando.
+- **Olvidar el coste de los tokens de razonamiento** (se facturan como salida) y de las herramientas (sobrecoste fijo más definiciones y resultados).
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo reducirías el coste de un asistente que repite un prompt largo en cada petición?"_ Pista: prompt caching con prefijo estable, lo variable al final; calcular el punto de equilibrio.
+- _"¿Por qué una petición con el mismo prompt puede tardar más cuanto más largo es el contexto?"_ Pista: el TTFT depende de procesar toda la entrada; la salida se genera token a token.
+- _"¿Qué invalida la caché de prompt?"_ Pista: cambios en herramientas, system prompt o mensajes; la jerarquía `tools` → `system` → `messages`; prefijos que cambian en cada petición.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Se factura por **tokens de entrada y de salida** (el razonamiento cuenta como salida), a precios distintos y variables por modelo.
+- En RAG y agentes, **gran parte de la entrada se repite**: ahí actúa el prompt caching.
+- Con precios de ejemplo, un prefijo de 20 000 tokens usado 100 veces pasa de **8,00 $ a 0,50 $** de entrada, pero con **una sola** petición el caching sale más caro (punto de equilibrio en 2 usos).
+- Diseña el prompt con **lo estable primero y lo variable al final**; cambios en herramientas o en el system prompt **invalidan** la caché.
+- La latencia = **procesar la entrada** (TTFT) + **generar la salida** token a token. Streaming mejora la percibida, no la total.
+
+</KeyTakeaways>

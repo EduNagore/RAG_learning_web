@@ -1,0 +1,8 @@
+part: profesional
+order: 18
+title: 'System design y entrevistas'
+description: 'Método para resolver system design de RAG y agentes y casos de estudio.'
+objectives:
+  - 'Aplicar un método estructurado de system design.'
+  - 'Discutir trade-offs con claridad.'
+  - 'Evitar los errores típicos en entrevistas.'

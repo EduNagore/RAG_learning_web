@@ -7,10 +7,27 @@ test('la portada carga bajo el base de GitHub Pages y el favicon resuelve', asyn
   await page.goto('./');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('RAG');
 
-  const logo = page.getByRole('img', { name: 'Logo' });
-  const src = await logo.getAttribute('src');
-  expect(src).toBe('/RAG_learning_web/favicon.svg');
+  const href = await page.locator('link[rel="icon"]').getAttribute('href');
+  expect(href).toBe('/RAG_learning_web/favicon.svg');
+  expect((await request.get(href!)).ok()).toBe(true);
+});
 
-  const res = await request.get(src!);
-  expect(res.ok()).toBe(true);
+test('la navegación principal enlaza bajo el base', async ({ page }) => {
+  await page.goto('./');
+  const hrefs = await page
+    .getByRole('navigation', { name: 'Principal' })
+    .getByRole('link')
+    .evaluateAll((links) => links.map((a) => a.getAttribute('href')));
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) expect(href).toMatch(/^\/RAG_learning_web\//);
+});
+
+test('el buscador encuentra lecciones por su contenido', async ({ page }) => {
+  await page.goto('buscar/');
+  const box = page.getByRole('searchbox').or(page.getByRole('combobox')).first();
+  await box.fill('caching');
+  const result = page
+    .locator('a[href*="/teoria/m00-fundamentos-llm/07-coste-latencia-caching/"]')
+    .first();
+  await expect(result).toBeVisible({ timeout: 15_000 });
 });

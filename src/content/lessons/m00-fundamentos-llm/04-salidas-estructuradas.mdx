@@ -1,0 +1,209 @@
+---
+title: Salidas estructuradas y JSON Schema
+description: Cómo conseguir que un LLM devuelva datos que tu código pueda procesar sin romperse. De "pídele JSON en el prompt" a la decodificación restringida por esquema.
+module: m00-fundamentos-llm
+order: 4
+level: intermedio
+estimatedMinutes: 14
+objectives:
+  - Distinguir entre pedir JSON en el prompt, el modo JSON y las salidas estructuradas con esquema.
+  - Explicar cómo la decodificación restringida garantiza que la salida cumpla un esquema.
+  - Diseñar un JSON Schema útil para un caso RAG, por ejemplo respuesta con citas.
+  - Enumerar los casos en los que el cumplimiento del esquema no está garantizado y cómo tratarlos.
+prerequisites:
+  - m00-fundamentos-llm/02-sampling
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: Structured outputs (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Structured Outputs (documentación de la API de OpenAI)
+    url: https://developers.openai.com/api/docs/guides/structured-outputs
+    type: docs
+    authors: OpenAI
+    year: 2026
+  - title: Efficient Guided Generation for Large Language Models
+    url: https://arxiv.org/abs/2307.09702
+    type: paper
+    authors: Willard, Louf
+    year: 2023
+---
+
+## Intuición: el modelo habla en prosa y tu código necesita datos
+
+Un LLM produce texto. Pero un sistema real rara vez quiere texto: quiere un objeto con campos (`respuesta`, `fuentes`, `confianza`), una etiqueta de un conjunto cerrado (`facturación`, `envíos`, `otros`), o los argumentos de una función. Si esa salida llega mal formada, tu aplicación falla: un `JSON.parse` que lanza una excepción, un campo obligatorio que falta, un valor fuera de rango.
+
+Es el mismo problema de siempre en integración de sistemas (definir un **contrato** entre dos componentes), con una particularidad: uno de los componentes es probabilístico.
+
+## Cómo funciona
+
+### Tres niveles de garantía
+
+| Nivel | Cómo se pide | Qué garantiza | Qué NO garantiza |
+| ----- | ------------ | ------------- | ---------------- |
+| 1. Solo prompt | "Responde en JSON con estos campos…" | Nada: el modelo suele obedecer | JSON válido, campos presentes, tipos correctos |
+| 2. Modo JSON | Un parámetro que fuerza JSON | JSON sintácticamente válido (según OpenAI) | Que cumpla **tu** esquema |
+| 3. Salidas estructuradas | Un JSON Schema en la petición | Que la salida **cumple el esquema** | Que los valores sean ciertos (ver abajo) |
+
+OpenAI recomienda usar siempre salidas estructuradas en lugar del modo JSON cuando sea posible, y el modo JSON solo como alternativa para modelos que no las soportan.
+
+### Decodificación restringida
+
+¿Cómo se puede _garantizar_ algo de un proceso que muestrea tokens? Con **decodificación restringida por gramática** (_constrained decoding_). Recuerda de la lección anterior que en cada paso el modelo produce probabilidades para todo el vocabulario. La idea es **enmascarar, antes de muestrear, los tokens que harían imposible cumplir el esquema**: si acabas de abrir una llave y el siguiente campo debe ser una cadena entre comillas, cualquier token que no pueda continuar ese patrón recibe probabilidad cero. El modelo solo puede elegir entre continuaciones válidas.
+
+Willard y Louf formalizaron este enfoque para expresiones regulares y gramáticas libres de contexto, reformulando la generación como transiciones entre estados de una máquina de estados finitos. La documentación de Anthropic describe sus salidas estructuradas como _constrained decoding_ (muestreo restringido por gramática), y garantiza JSON válido que respeta el esquema.
+
+<Diagram
+  caption="Con decodificación restringida, en cada paso solo pueden elegirse tokens que mantengan la salida dentro del esquema."
+  code={`flowchart LR
+  S["JSON Schema"] --> G["Gramática / máquina de estados"]
+  M["Modelo: probabilidades de todo el vocabulario"] --> F["Máscara: solo tokens válidos en el estado actual"]
+  G --> F
+  F --> X["Muestreo (temperature, top-p)"]
+  X --> T["Token elegido"]
+  T --> G`}
+/>
+
+### Un esquema útil para RAG
+
+El caso más habitual en este curso: una respuesta con citas y una vía de escape cuando no hay evidencia.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "answerable": {
+      "type": "boolean",
+      "description": "false si los documentos no contienen la respuesta"
+    },
+    "answer": {
+      "type": "string",
+      "description": "Respuesta en español, solo con información de los documentos"
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "doc_id": { "type": "string" },
+          "quote": { "type": "string", "description": "Frase literal del documento" }
+        },
+        "required": ["doc_id", "quote"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["answerable", "answer", "citations"],
+  "additionalProperties": false
+}
+```
+
+Con este contrato tu código puede, sin interpretar prosa: mostrar la respuesta, enlazar cada cita a su documento y **tratar `answerable: false` como "no lo sé"**. Fíjate en que las descripciones de los campos son instrucciones para el modelo, igual que el prompt.
+
+En la API de Claude, la petición lleva el esquema en `output_config.format` con `type: "json_schema"`:
+
+```json
+{
+  "model": "claude-opus-5-5",
+  "max_tokens": 1024,
+  "messages": [{ "role": "user", "content": "..." }],
+  "output_config": {
+    "format": { "type": "json_schema", "schema": { "...": "el esquema de arriba" } }
+  }
+}
+```
+
+En OpenAI la forma equivalente es `text.format` con un esquema JSON (su documentación también se refiere a este mecanismo como `response_format`, según la API que uses). Los nombres de los campos cambian entre proveedores y entre versiones; el concepto no.
+
+### En código: validar siempre en tu lado
+
+Aunque el proveedor garantice el esquema, valida en tu aplicación. Es barato y te protege de cambios de proveedor, de modelos sin soporte y de errores de configuración:
+
+```python
+# Requiere: pip install pydantic   (este código no se ejecuta en el navegador)
+from pydantic import BaseModel, Field
+
+class Citation(BaseModel):
+    doc_id: str
+    quote: str
+
+class RagAnswer(BaseModel):
+    answerable: bool
+    answer: str
+    citations: list[Citation] = Field(default_factory=list)
+
+# El esquema que envías al modelo se genera desde el propio modelo de datos:
+schema = RagAnswer.model_json_schema()
+
+# Y la respuesta se valida (lanza ValidationError si no cumple):
+respuesta = RagAnswer.model_validate_json(texto_devuelto_por_el_modelo)
+if not respuesta.answerable:
+    ...  # responder "no lo sé" sin inventar
+```
+
+Un modelo de datos como fuente única de verdad evita que el esquema enviado y el esquema validado se desincronicen.
+
+## Cuando la garantía se rompe
+
+Las salidas estructuradas **no son una garantía absoluta**. La documentación de Claude enumera casos concretos en los que la salida puede no cumplir el esquema:
+
+1. **Rechazo por seguridad** (`stop_reason: "refusal"`): el modelo rechaza la petición; el mensaje de rechazo prevalece sobre el esquema y la respuesta llega con estado 200. OpenAI lo expone como un campo `refusal` distinto de tu esquema. Tu código debe comprobar el motivo de parada **antes** de parsear.
+2. **Límite de tokens** (`stop_reason: "max_tokens"`): la salida se corta a mitad y queda incompleta. Hay que reintentar con más margen.
+3. **Mayúsculas de los valores `enum`:** el esquema no garantiza la capitalización de las cadenas de un `enum` o `const`; compara sin distinguir mayúsculas.
+
+Y hay un caso que ninguna garantía sintáctica cubre: **un JSON perfectamente válido puede contener valores falsos.** El esquema asegura que `quote` es una cadena, no que esa cita exista en el documento. Esa verificación semántica es trabajo tuyo (por ejemplo, comprobar que cada `quote` aparece literalmente en el contexto recuperado, que es el laboratorio 13).
+
+<Snapshot date="2026-10">
+
+Las salidas estructuradas de Claude admiten un subconjunto de JSON Schema. Según su documentación **no se soportan** los esquemas recursivos, las restricciones numéricas (`minimum`, `maximum`, `multipleOf`) ni de cadena (`minLength`, `maxLength`), y los objetos exigen `additionalProperties: false`. Hay límites de complejidad (por ejemplo, 20 herramientas estrictas por petición y 24 parámetros opcionales en total). La primera petición con un esquema nuevo tiene latencia extra porque se compila la gramática, que luego se cachea 24 horas. Cambiar el formato de salida **invalida la caché de prompt**. Muchos SDK eliminan las restricciones no soportadas del esquema enviado y las comprueban después en tu lado. En OpenAI, todos los campos de `required` deben estar presentes y también se exige `additionalProperties: false`; la primera petición con un esquema añade latencia. Los subconjuntos soportados evolucionan: revisa la documentación vigente.
+
+</Snapshot>
+
+### Qué hacer cuando la salida no sirve
+
+Aunque la garantía sea alta, tu código necesita un plan para el caso en que la respuesta llegue inutilizable (rechazo, corte, valor semánticamente inválido). Un patrón sencillo y robusto:
+
+1. **Valida** (esquema y reglas de negocio) y **comprueba el motivo de parada** antes de usar nada.
+2. Si falla por corte (`max_tokens`), **reintenta con más margen**; no tiene sentido reintentar igual.
+3. Si falla por un valor inválido, **reintenta una o dos veces añadiendo el error concreto** a la conversación ("la cita `X` no aparece en el documento `D`"). Le das al modelo la información que necesita para corregirse.
+4. Si tras el máximo de intentos sigue fallando, **degrada con elegancia**: devuelve "no he podido responder con seguridad" o escala a una persona, en lugar de mostrar un dato dudoso.
+
+Cada reintento cuesta tokens y latencia, así que limita el número de intentos y regístralos: una tasa alta de reintentos es una señal de que el esquema, el prompt o el modelo no son adecuados.
+
+## Trade-offs y buenas prácticas
+
+- **Esquemas simples y planos.** Cuanto más complejo (anidación, uniones, muchos opcionales), más riesgo de superar límites y más latencia de compilación. Si el esquema crece, divide la tarea en varias peticiones.
+- **Usa `enum` para conjuntos cerrados** (categorías, estados). Evita que el modelo invente etiquetas.
+- **Las descripciones cuentan.** Describe cada campo con la intención y un ejemplo; el modelo las lee.
+- **Campos obligatorios con valor "vacío" explícito** (por ejemplo `citations: []`) en lugar de campos opcionales ausentes: simplifica tu código y encaja con los límites de parámetros opcionales.
+- **Estructura para la salida final, herramientas para las acciones.** OpenAI lo resume así: si estructuras la respuesta al usuario usa el formato de respuesta; si conectas el modelo con funciones de tu sistema, usa _function calling_ (siguiente lección).
+- **Compatibilidad entre proveedores:** encapsula la llamada en tu código para poder cambiar el nombre del parámetro o de modelo sin tocar el resto.
+
+## Errores comunes en producción
+
+- **Parsear sin mirar `stop_reason`.** Un rechazo o un corte por `max_tokens` llega con apariencia de respuesta normal y rompe el parseo.
+- **Confundir "JSON válido" con "dato correcto".** Validar sintaxis no sustituye validar semántica ni reglas de negocio.
+- **Esquemas gigantes "por si acaso".** Más latencia, más fallos de compilación y más tokens, sin mejorar la calidad.
+- **Cambiar el esquema en cada petición.** Pierdes la caché de gramática y la de prompt.
+- **Pedir restricciones no soportadas** (`minLength`, rangos numéricos) y asumir que se cumplen. Valídalas tú después.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo garantizas que un LLM devuelva JSON válido?"_ Pista: decodificación restringida por esquema frente a "pedirlo en el prompt"; aun así valida en tu lado y trata los rechazos y el corte por `max_tokens`.
+- _"¿Qué diferencia hay entre modo JSON y salidas estructuradas?"_ Pista: el modo JSON solo asegura sintaxis; las salidas estructuradas aseguran el esquema.
+- _"El JSON cumple el esquema pero la cita no existe en el documento. ¿Qué hiciste mal?"_ Pista: nada en el esquema; falta verificación semántica (comprobar la cita contra el contexto).
+
+</Callout>
+
+<KeyTakeaways>
+
+- Hay tres niveles: **prompt** (sin garantía), **modo JSON** (sintaxis válida) y **salidas estructuradas** (cumple tu esquema).
+- La **decodificación restringida** enmascara los tokens que violarían el esquema antes de muestrear; por eso puede garantizar la forma.
+- La garantía se rompe con **rechazos**, **`max_tokens`** y capitalización de enums. Comprueba el motivo de parada antes de parsear.
+- **Forma válida no es contenido verdadero:** valida la semántica (por ejemplo, que las citas existan).
+- Mantén los esquemas **simples**, usa `enum` y descripciones, y **valida siempre en tu lado**.
+
+</KeyTakeaways>
