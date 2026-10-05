@@ -12,8 +12,8 @@
 | F1 Núcleo de teoría | ✅ hecha, en `main` y desplegada | Layouts, Pagefind, KaTeX, Mermaid, progreso, **M00 completo (8 lecciones)** |
 | F2 Motor de tests | ✅ hecha, en `main` y desplegada | Quiz, examen, Leitner, panel de progreso, **65 preguntas de M00** |
 | F3 Laboratorios | ✅ hecha, en `main` y desplegada (verificada en producción) | 3 labs, Pyodide, CodeMirror, e2e en navegador real |
-| **Pausa de revisión tras F3** | ⏸️ **ACTIVA: esperando el visto bueno del usuario** | **No empezar F4 hasta que el usuario lo apruebe.** Ya se le dio el resumen de F3 |
-| F4 Contenido Parte I (RAG, M01–M09) | ⬜ | |
+| **Pausa de revisión tras F3** | ✅ superada | El usuario aprobó (2026-10-05, "haz todo lo que queda"): hacer F4–F7 completas |
+| F4 Contenido Parte I (RAG, M01–M09) | 🟡 en curso (rama `fase-4-rag`) | Ver "F4: avance" |
 | F5 Contenido Parte II (Agentes, M10–M17) | ⬜ | |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |

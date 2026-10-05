@@ -1,0 +1,100 @@
+lesson: m02-ingesta-chunking/02-estrategias-de-chunking
+questions:
+  - id: m02-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué problema tiene un fragmento **demasiado grande**?'
+    options:
+      - 'Mezcla varios temas, su embedding se vuelve borroso y consume más ventana y coste.'
+      - 'Nunca se puede indexar.'
+      - 'Siempre mejora la precisión.'
+      - 'Elimina la necesidad de metadatos.'
+    answer: [0]
+    explanation: 'Un fragmento grande diluye la señal relevante y encarece cada consulta. Los fragmentos demasiado pequeños tienen el problema contrario: pierden contexto. Ninguno de los dos elimina la necesidad de metadatos.'
+    ref: '#intuición-el-fragmento-es-la-unidad-de-todo'
+
+  - id: m02-02-q2
+    type: order
+    difficulty: 2
+    prompt: 'Ordena los separadores que usa un troceado recursivo, del primero que intenta al último.'
+    options:
+      - 'Doble salto de línea (párrafo).'
+      - 'Salto de línea.'
+      - 'Punto (frase).'
+      - 'Espacio (palabra).'
+    explanation: 'El troceado recursivo prueba primero el separador más grande y solo baja al siguiente si el trozo sigue superando el tamaño máximo. Así respeta la estructura natural del texto todo lo posible.'
+    ref: '#las-estrategias-de-la-más-simple-a-la-más-elaborada'
+
+  - id: m02-02-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué concluyen Qu et al. sobre el chunking semántico?'
+    options:
+      - 'Que sus costes computacionales no están justificados por mejoras de rendimiento consistentes.'
+      - 'Que siempre supera a cualquier otra estrategia.'
+      - 'Que no se puede aplicar a texto en español.'
+      - 'Que reduce el coste de indexación a cero.'
+    answer: [0]
+    explanation: 'Su estudio no encuentra mejoras consistentes que justifiquen el coste del chunking semántico frente a opciones más simples. Por eso conviene compararlo con el recursivo en tus propios datos antes de adoptarlo.'
+    ref: '#las-estrategias-de-la-más-simple-a-la-más-elaborada'
+
+  - id: m02-02-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué es indexar por **proposiciones** y cuál es su principal coste?'
+    options:
+      - 'Indexar expresiones atómicas y autocontenidas de un solo hecho; hay que generarlas, normalmente con un LLM, lo que encarece la ingesta.'
+      - 'Indexar solo los títulos de los documentos; no tiene coste.'
+      - 'Indexar el documento completo; el coste es de almacenamiento.'
+      - 'Indexar letras sueltas; el coste es la memoria.'
+    answer: [0]
+    explanation: 'Las proposiciones son unidades finas que expresan un hecho; Chen et al. muestran que pueden mejorar la recuperación, pero generarlas y validarlas con un LLM cuesta y puede introducir errores.'
+    ref: '#las-estrategias-de-la-más-simple-a-la-más-elaborada'
+
+  - id: m02-02-q5
+    type: truefalse
+    difficulty: 2
+    prompt: 'Existe un tamaño de fragmento óptimo universal que sirve para cualquier corpus y modelo de embeddings.'
+    answer: [1]
+    explanation: 'Es falso. El tamaño depende de los documentos, de la longitud máxima y el rango óptimo del modelo de embeddings y del tipo de pregunta. Por eso se mide con un golden set en lugar de copiar un valor.'
+    ref: '#tamaño-y-solapamiento-cómo-elegirlos'
+
+  - id: m02-02-q6
+    type: code-output
+    difficulty: 3
+    prompt: '¿Qué imprime este código?'
+    code: |-
+      def chunk_fijo(texto, tam, solape):
+          if solape >= tam:
+              raise ValueError("el solape debe ser menor que el tamaño")
+          palabras = texto.split()
+          paso = tam - solape
+          chunks = []
+          for inicio in range(0, len(palabras), paso):
+              chunks.append(" ".join(palabras[inicio : inicio + tam]))
+              if inicio + tam >= len(palabras):
+                  break
+          return chunks
+
+      print(len(chunk_fijo("a b c d e f", 3, 1)))
+    options:
+      - '2'
+      - '3'
+      - '4'
+      - '6'
+    answer: [1]
+    explanation: 'Con 6 palabras, tamaño 3 y solape 1 el paso es 2: ventanas "a b c", "c d e" y "e f". La última llega al final del texto y se detiene. Salen 3 fragmentos, y sin la condición de parada se generaría uno de más.'
+    ref: '#un-ejemplo-ejecutable'
+
+  - id: m02-02-q7
+    type: single
+    difficulty: 3
+    prompt: '¿Cuál es el procedimiento recomendado para elegir tamaño y solapamiento?'
+    options:
+      - 'Probar varias configuraciones sobre un conjunto de preguntas representativas y medir recall@k y calidad final.'
+      - 'Usar siempre el valor del primer tutorial que encuentres.'
+      - 'Elegir el tamaño más grande posible.'
+      - 'Elegir el solape del 50 % por seguridad.'
+    answer: [0]
+    explanation: 'Se mide con un golden set y se repite al cambiar el modelo de embeddings. Un solape excesivo duplica el índice y llena el top-k de fragmentos casi iguales, y un tamaño máximo diluye la señal.'
+    ref: '#tamaño-y-solapamiento-cómo-elegirlos'

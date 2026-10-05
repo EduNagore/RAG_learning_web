@@ -1,0 +1,73 @@
+---
+title: Chunking por estructura de Markdown
+description: Trocea un documento Markdown por sus encabezados y guarda en cada fragmento la ruta de títulos como metadato, la base de las citas con contexto.
+part: rag
+module: m02-ingesta-chunking
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - chunking por estructura
+  - ruta de encabezados
+  - metadatos de sección
+  - bloques de código
+packages: []
+hints:
+  - Recorre el texto línea a línea. Una línea es un encabezado si empieza por entre 1 y 6 `#` seguidos de un espacio.
+  - 'Mantén una lista `headers`. Al encontrar un encabezado de nivel `n` con título `t`, haz `headers = headers[: n - 1] + [t]`: así se descartan los títulos más profundos que había antes.'
+  - Acumula en un buffer las líneas del cuerpo de la sección actual y, al llegar al siguiente encabezado (o al final), conviértelo en fragmento si no está vacío.
+  - Lleva un booleano `in_code` que cambie al encontrar una línea que empiece por tres acentos graves, y no trates ninguna línea como encabezado mientras esté activo.
+  - Si el cuerpo de una sección supera `max_chars`, divídelo por párrafos (separados por una línea en blanco) con el mismo método voraz del laboratorio anterior.
+relatedLessons:
+  - m02-ingesta-chunking/02-estrategias-de-chunking
+  - m02-ingesta-chunking/03-chunking-con-contexto
+---
+
+## Objetivo
+
+Cuando el documento tiene estructura (Markdown, HTML bien formado, documentación técnica), lo más natural es **trocear por secciones** y guardar en cada fragmento **dónde está** dentro del documento. Esa ruta de títulos es contexto gratuito: permite mostrarla al usuario, usarla para filtrar y anteponerla al texto al indexar.
+
+## Qué tienes que hacer
+
+Implementa `chunk_markdown(text, max_chars=500)` que devuelva una lista de diccionarios con esta forma:
+
+```python
+{"text": "cuerpo del fragmento", "headers": ["Devoluciones", "Plazos"], "path": "Devoluciones > Plazos"}
+```
+
+Reglas:
+
+1. Un **encabezado** es una línea que empieza por 1 a 6 `#` y un espacio (`# Título`, `## Subtítulo`…). Su nivel es el número de `#`.
+2. Cada sección produce uno o más fragmentos con el **cuerpo** de la sección **sin la línea del encabezado**.
+3. `headers` es la ruta de títulos hasta esa sección, del nivel más alto al más bajo. Al aparecer un encabezado de nivel `n`, se descartan los títulos de nivel `n` o más profundo anteriores. `path` es esa lista unida por `" > "`.
+4. El texto anterior al primer encabezado tiene `headers == []` y `path == ""`.
+5. Las secciones **sin cuerpo** (solo espacios) no generan fragmento.
+6. Si el cuerpo de una sección supera `max_chars`, se divide por **párrafos** (separados por línea en blanco), juntando párrafos mientras quepan; todos los fragmentos de esa sección comparten la misma ruta. Un párrafo que por sí solo supera el máximo se corta a la fuerza cada `max_chars` caracteres.
+7. Dentro de un bloque de código delimitado por ```` ``` ```` una línea que empieza por `#` **no** es un encabezado.
+
+## Ejemplo
+
+```python
+doc = """# Devoluciones
+
+Introducción.
+
+## Plazos
+
+14 días naturales.
+
+## Reembolsos
+
+7 días hábiles."""
+
+for c in chunk_markdown(doc):
+    print(c["path"], "|", c["text"])
+# Devoluciones | Introducción.
+# Devoluciones > Plazos | 14 días naturales.
+# Devoluciones > Reembolsos | 7 días hábiles.
+```
+
+<Callout type="consejo" title="Por qué importa la ruta">
+
+Un fragmento que dice «14 días naturales.» es ambiguo. Con la ruta «Devoluciones > Plazos» ya sabes de qué plazo habla. En la lección sobre contexto verás cómo anteponerla al texto que se indexa para mejorar la recuperación.
+
+</Callout>

@@ -1,0 +1,171 @@
+---
+title: Devolver el contexto a los fragmentos
+description: Por qué un fragmento aislado es ambiguo y tres formas de arreglarlo, encabezados contextuales, Contextual Retrieval y late chunking, con sus costes y la evidencia disponible.
+module: m02-ingesta-chunking
+order: 3
+level: avanzado
+estimatedMinutes: 17
+objectives:
+  - Explicar el problema de los fragmentos sin contexto con un ejemplo concreto.
+  - Comparar encabezados contextuales, Contextual Retrieval y late chunking.
+  - Interpretar las cifras de mejora de Contextual Retrieval y sus condiciones.
+  - Decidir qué técnica de contexto aplicar según el coste y el tipo de corpus.
+prerequisites:
+  - m02-ingesta-chunking/02-estrategias-de-chunking
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: Introducing Contextual Retrieval
+    url: https://www.anthropic.com/news/contextual-retrieval
+    type: blog
+    authors: Anthropic
+    year: 2024
+  - title: "Late Chunking: Contextual Chunk Embeddings Using Long-Context Embedding Models"
+    url: https://arxiv.org/abs/2409.04701
+    type: paper
+    authors: Günther et al.
+    year: 2024
+  - title: "Reconstructing Context: Evaluating Advanced Chunking Strategies for Retrieval-Augmented Generation"
+    url: https://arxiv.org/abs/2504.19754
+    type: paper
+    authors: Merola, Singh
+    year: 2025
+  - title: Prompt caching (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    type: docs
+    authors: Anthropic
+    year: 2026
+relatedLabs:
+  - rag-04-chunk-markdown
+---
+
+## Intuición: «su plazo es de 14 días»
+
+Supón que tu índice contiene este fragmento, extraído de un documento largo:
+
+> «El plazo es de 14 días naturales. Pasado ese tiempo no se aceptan cambios.»
+
+¿Plazo de qué? ¿De devolución, de garantía, de reclamación, de entrega? ¿Para qué tipo de cliente? Dentro del documento original, el título y los párrafos anteriores lo dejaban claro. Pero tras el troceado, **el fragmento ha perdido su contexto**. Cuando un usuario pregunte «¿cuántos días tengo para devolver un pedido?», un fragmento que nunca menciona la palabra «devolución» tiene pocas probabilidades de recuperarse, tanto por búsqueda léxica (no comparte términos) como por búsqueda semántica (el embedding no sabe de qué trata).
+
+Este es el fallo más típico de un RAG con fragmentos pequeños y es el motivo de las técnicas de esta lección: **devolver a cada fragmento la información que su documento le daba**.
+
+## Cómo funciona
+
+### Nivel 1: encabezados contextuales (barato y determinista)
+
+La solución más sencilla es **anteponer** a cada fragmento información que ya tienes: el título del documento, la ruta de secciones, el departamento. El texto indexado pasa de ser «El plazo es de 14 días naturales…» a:
+
+```
+Documento: Política de devoluciones › Plazos
+El plazo es de 14 días naturales. Pasado ese tiempo no se aceptan cambios.
+```
+
+Ventajas: no cuesta nada (no usa ningún LLM), es reproducible y soluciona buena parte del problema cuando los documentos tienen buenos títulos. Se aplica **al texto que se indexa** (para el embedding y para BM25) y se puede mostrar el fragmento original al usuario. Es el laboratorio de «chunks con cabecera de contexto», y suele ser la primera mejora que conviene probar.
+
+### Nivel 2: Contextual Retrieval (contexto generado por un LLM)
+
+Cuando los títulos no bastan, se puede pedir a un LLM que **redacte una breve explicación** de dónde encaja cada fragmento dentro del documento completo y anteponérsela. Anthropic describió esta técnica en septiembre de 2024 como **Contextual Retrieval**, que combina dos usos: **embeddings contextuales** y **BM25 contextual**, ambos construidos sobre el fragmento con su contexto generado antepuesto.
+
+<Snapshot date="2026-10">
+
+Cifras publicadas por Anthropic (septiembre de 2024) para su técnica, medidas como **reducción de la tasa de fallo de recuperación en los 20 primeros fragmentos**: con embeddings contextuales solos, un **35 %** menos (de 5,7 % a 3,7 %); combinados con BM25 contextual, un **49 %** menos (de 5,7 % a 2,9 %); y añadiendo además un reranker, un **67 %** menos (de 5,7 % a 1,9 %). Estiman un coste de unos **1,02 dólares por millón de tokens de documento** al usar prompt caching para no reenviar el documento completo en cada fragmento. También señalan que si tu base de conocimiento tiene menos de unos **200 000 tokens** (unas 500 páginas), puedes incluirla entera en el prompt sin recuperación. Son resultados del propio proveedor, sobre sus conjuntos de datos y con sus modelos: considéralos una **indicación** y reprodúcelos con tus datos. Los precios y los modelos cambian: consulta la fuente.
+
+</Snapshot>
+
+Cómo se usa en la práctica: para cada fragmento se llama a un modelo con el documento completo y el fragmento, pidiéndole un contexto breve que lo sitúe. Como el documento se repite en todas las llamadas de un mismo documento, el **prompt caching** (lección de coste del módulo 0) abarata mucho el proceso: el documento largo queda en la caché y solo cambia el fragmento. Es un coste **una sola vez, en la indexación**, no en cada consulta.
+
+Qué conviene saber:
+
+- **Es caro frente al nivel 1**, porque exige una llamada al modelo por fragmento.
+- **Puede inventar.** El contexto generado debe validarse por muestreo: una explicación errónea contamina la recuperación.
+- **Sus mejores resultados llegan combinándolo** con búsqueda léxica y reranking, como muestran las cifras anteriores.
+- **Sube la calidad más cuando los fragmentos son ambiguos fuera de su documento**, y menos cuando ya se entienden solos.
+
+### Nivel 3: late chunking (contexto dentro del embedding)
+
+Una alternativa que no usa un LLM generativo es el **late chunking** (Günther et al., 2024). En lugar de trocear primero y calcular el embedding de cada trozo por separado, se hace al revés: se pasa **todo el documento largo** por un modelo de embeddings de contexto largo y se obtiene el embedding de **cada token teniendo en cuenta todo el documento**; solo después se agrupan los tokens de cada fragmento (el troceado se aplica «justo antes del promediado final», según los autores). El resultado, afirman, son embeddings de fragmento que **capturan la información contextual completa**.
+
+La ventaja es que no hay que generar texto ni pagar una llamada por fragmento; el requisito es disponer de un **modelo de embeddings de contexto largo** y que el documento quepa en su ventana.
+
+### ¿Cuál elegir?
+
+Merola y Singh (2025) compararon estos enfoques y observaron que Contextual Retrieval **preserva mejor la coherencia semántica pero exige más recursos de cómputo**, mientras que late chunking **ofrece mayor eficiencia pero tiende a sacrificar relevancia y completitud**. Es una sola comparación en unas condiciones concretas, pero resume el compromiso real: más calidad de contexto cuesta más.
+
+<Diagram
+  caption="Tres niveles para devolver contexto, de menor a mayor coste. Cada uno modifica qué se indexa."
+  code={`flowchart LR
+  F["Fragmento aislado"] --> N1["Nivel 1: anteponer título y ruta (sin LLM)"]
+  F --> N2["Nivel 2: anteponer contexto generado por LLM"]
+  F --> N3["Nivel 3: late chunking, embedding con todo el documento"]
+  N1 --> I[("Índice")]
+  N2 --> I
+  N3 --> I`}
+/>
+
+## Metadatos y jerarquías: otra forma de recuperar contexto
+
+No todo el contexto tiene que ir dentro del texto que se indexa. Otra familia de técnicas **guarda la relación entre fragmentos** y la usa al recuperar:
+
+- **Parent-document / small-to-big:** se indexan fragmentos pequeños (precisos para buscar) pero, al recuperarlos, se entrega al modelo el **fragmento padre** (la sección completa) para que tenga contexto. Lo verás en el módulo 5.
+- **Ventana de frases:** se recupera una frase y se entregan también las vecinas.
+- **Metadatos de jerarquía:** se guarda el camino de títulos y se muestra en el prompt junto al fragmento.
+
+La idea común es separar **la unidad con la que se busca** de **la unidad con la que se responde**.
+
+## Un ejemplo ejecutable
+
+El nivel 1 en código: construir el texto que se indexa sin tocar el texto original que se muestra.
+
+```python
+def con_contexto(doc: dict, fragmento: str, ruta: list[str]) -> str:
+    """Texto para indexar: cabecera de contexto + fragmento original."""
+    cabecera = f"Documento: {doc['title']} | Ruta: {' > '.join(ruta)} | Área: {doc['department']}"
+    return f"{cabecera}\n{fragmento}"
+
+doc = {"title": "Política de devoluciones", "department": "Devoluciones"}
+fragmento = "El plazo es de 14 días naturales."
+indexado = con_contexto(doc, fragmento, ["Plazos"])
+print(indexado)
+# Documento: Política de devoluciones | Ruta: Plazos | Área: Devoluciones
+# El plazo es de 14 días naturales.
+```
+
+Con esta cabecera, una consulta sobre «devolución» ya comparte términos con el fragmento. El texto original se conserva aparte para mostrarlo y citarlo.
+
+## Trade-offs
+
+| Técnica | Calidad de contexto | Coste de indexación | Complejidad |
+| --- | --- | --- | --- |
+| Encabezados contextuales | Media (depende de los títulos) | Nulo | Baja |
+| Contextual Retrieval | Alta | Alto (una llamada a un LLM por fragmento, atenuado por la caché) | Media |
+| Late chunking | Media-alta | Medio (modelo de contexto largo) | Media |
+| Parent-document | Alta en la respuesta | Bajo en indexación, más tokens por consulta | Media |
+
+## Errores comunes en producción
+
+- **Contexto que contamina.** Un contexto generado con información errónea o demasiado genérico («este fragmento trata de la empresa») no ayuda y puede perjudicar la búsqueda.
+- **Mostrar al usuario el texto con la cabecera.** La cabecera es para indexar; al citar, muestra el fragmento original.
+- **Aplicarlo sin medir.** Es una técnica que cuesta; comprueba con tu golden set que sube el recall antes de generalizarla.
+- **Olvidar reindexar.** Si cambias la cabecera o el prompt de contexto, todos los vectores existentes quedan desfasados.
+- **Asumir que el contexto sustituye al buen troceado.** Un fragmento mal cortado sigue siendo un mal fragmento, con o sin contexto.
+- **Fiarse de las cifras del proveedor sin reproducirlas.** Son indicativas; tu corpus puede comportarse distinto.
+- **Generar el contexto sin el documento completo.** Si el LLM solo ve el fragmento, no puede situarlo; el contexto útil nace de ver el documento entero (de ahí el valor de la caché).
+- **No versionar el prompt de contexto.** Cambiarlo altera todos los vectores: guarda qué versión generó cada índice para saber qué reindexar y poder comparar resultados.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué problema resuelve Contextual Retrieval y cómo?"_ Pista: fragmentos que pierden su contexto al trocear; se antepone al fragmento una explicación generada por un LLM de dónde encaja en el documento, usada en embeddings y en BM25.
+- _"¿Cómo se abarata el coste de generar contexto para miles de fragmentos?"_ Pista: prompt caching del documento completo; el coste se paga una vez, en la indexación.
+- _"¿Diferencia entre late chunking y Contextual Retrieval?"_ Pista: el primero incorpora el contexto en el embedding con un modelo de contexto largo, sin generar texto; el segundo genera texto de contexto con un LLM; más calidad frente a más eficiencia.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un fragmento aislado es **ambiguo**; recuperar bien exige devolverle el contexto que el documento le daba.
+- **Nivel 1:** anteponer título y ruta (gratis, determinista). **Nivel 2:** Contextual Retrieval, contexto generado por LLM (más calidad, más coste de indexación). **Nivel 3:** late chunking, contexto dentro del embedding.
+- Las cifras de Anthropic (35 %, 49 % y 67 % menos de fallos en el top-20) son del proveedor y **hay que reproducirlas** en tu corpus.
+- Más calidad de contexto cuesta más cómputo (Merola y Singh); elige según tu presupuesto y mide.
+- Indexa con contexto pero **muestra y cita el fragmento original**.
+
+</KeyTakeaways>

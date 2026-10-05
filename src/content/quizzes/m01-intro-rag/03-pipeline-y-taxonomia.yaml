@@ -1,0 +1,95 @@
+lesson: m01-intro-rag/03-pipeline-y-taxonomia
+questions:
+  - id: m01-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es **Naive RAG**?'
+    options:
+      - 'El esquema de tres pasos: indexar, recuperar los k fragmentos más cercanos y generar.'
+      - 'Un sistema con agentes que deciden cuándo recuperar.'
+      - 'Un RAG sin documentos.'
+      - 'Un RAG que solo funciona con imágenes.'
+    answer: [0]
+    explanation: 'Naive RAG es el pipeline básico sin técnicas adicionales. El control por parte de un agente corresponde a Agentic RAG, y los otros enunciados no describen ninguna variante real.'
+    ref: '#naive-rag'
+
+  - id: m01-03-q2
+    type: order
+    difficulty: 2
+    prompt: 'Ordena las etapas de la consulta en un pipeline de Advanced RAG.'
+    options:
+      - 'Reformular o enrutar la pregunta.'
+      - 'Recuperar candidatos.'
+      - 'Reordenar y filtrar los candidatos.'
+      - 'Construir el contexto del prompt.'
+      - 'Generar la respuesta con citas.'
+    explanation: 'Se prepara la consulta, se recuperan candidatos, se reordenan y filtran, se construye el contexto y al final se genera. Reordenar antes de recuperar no tendría sentido porque aún no hay candidatos.'
+    ref: '#consulta-online'
+
+  - id: m01-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es la idea clave de **Modular RAG**?'
+    options:
+      - 'Los componentes son módulos intercambiables y reordenables en lugar de una cadena fija.'
+      - 'Solo se puede usar un módulo a la vez.'
+      - 'Cada documento es un módulo de código.'
+      - 'Se elimina la etapa de generación.'
+    answer: [0]
+    explanation: 'En Modular RAG la arquitectura es una composición de módulos que se pueden recombinar, repetir o saltar según la consulta y que se evalúan y sustituyen por separado.'
+    ref: '#modular-rag'
+
+  - id: m01-03-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué distingue a **Agentic RAG**?'
+    options:
+      - 'Un agente decide si hace falta buscar, qué buscar, si los resultados bastan o si debe reformular.'
+      - 'Siempre ejecuta recuperar y generar exactamente una vez.'
+      - 'No utiliza ningún modelo de lenguaje.'
+      - 'Solo funciona con bases de datos relacionales.'
+    answer: [0]
+    explanation: 'En el RAG agéntico la recuperación queda bajo el control de un agente que gestiona la estrategia de forma dinámica, frente al esquema fijo de recuperar siempre y generar.'
+    ref: '#agentic-rag'
+
+  - id: m01-03-q5
+    type: truefalse
+    difficulty: 2
+    prompt: 'Naive, Advanced, Modular y Agentic RAG son niveles de madurez que todo proyecto debería ir subiendo.'
+    answer: [1]
+    explanation: 'Es falso. Cada salto añade latencia, coste y puntos de fallo, y solo compensa si ataca un fallo medido. Un sistema sencillo y bien evaluado puede funcionar muy bien como Naive RAG.'
+    ref: '#la-taxonomía'
+
+  - id: m01-03-q6
+    type: multiple
+    difficulty: 2
+    prompt: '¿Cuáles son fallos típicos del RAG ingenuo? Marca todos los correctos.'
+    options:
+      - 'Se recuperan fragmentos irrelevantes o incompletos.'
+      - 'La pregunta del usuario está mal formulada para buscar.'
+      - 'Se rellena el contexto con ruido y redundancia.'
+      - 'Un índice vectorial no puede almacenar ningún metadato.'
+    answer: [0, 1, 2]
+    explanation: 'Los tres primeros son fallos habituales del esquema simple. Los índices vectoriales sí almacenan metadatos, y de hecho se usan para filtrar por permisos o fechas.'
+    ref: '#naive-rag'
+
+  - id: m01-03-q7
+    type: single
+    difficulty: 3
+    prompt: 'Tu RAG responde mal a algunas preguntas. ¿Cuál es el primer paso de diagnóstico recomendado?'
+    options:
+      - 'Cambiar a la arquitectura más avanzada posible.'
+      - 'Medir por separado la recuperación y la generación con un conjunto de preguntas representativas y mirar cuáles fallan.'
+      - 'Aumentar el tamaño del modelo sin medir.'
+      - 'Quitar todos los documentos.'
+    answer: [1]
+    explanation: 'Sin medir cada etapa por separado no se sabe si falló la recuperación, la generación o los datos. Cambiar de arquitectura o de modelo a ciegas puede no atacar la causa.'
+    ref: '#cómo-decidir-cuánta-complejidad-añadir'
+
+  - id: m01-03-q8
+    type: truefalse
+    difficulty: 3
+    prompt: 'En el corpus pequeño de Nimbus Logística medido en la lección, la fusión híbrida no mejoró el resultado de BM25 en el porcentaje de preguntas con el fragmento correcto entre los 3 primeros.'
+    answer: [0]
+    explanation: 'Es verdadero: BM25 y la combinación híbrida quedaron igualadas (89 %). El embedder de juguete no entiende sinónimos, así que no aportó información complementaria. Una técnica avanzada no mejora siempre un caso concreto.'
+    ref: '#cómo-decidir-cuánta-complejidad-añadir'

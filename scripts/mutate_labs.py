@@ -147,6 +147,119 @@ MUTANTS = [
         'Message("tool", result, tool_call_id=call.id)',
         'Message("tool", result)',
     ),
+    # --- rag-02-chunk-fijo ---
+    (
+        "rag-02-chunk-fijo",
+        "sin condición de parada (fragmento final redundante)",
+        "        if start + size >= len(words):\n            break\n",
+        "",
+    ),
+    ("rag-02-chunk-fijo", "ignora el solape (paso = size)", "step = size - overlap", "step = size"),
+    (
+        "rag-02-chunk-fijo",
+        "no valida los parámetros",
+        "if size <= 0 or overlap < 0 or overlap >= size:",
+        "if False:",
+    ),
+    ("rag-02-chunk-fijo", "split(' ') genera palabras vacías", "text.split()", 'text.split(" ")'),
+    (
+        "rag-02-chunk-fijo",
+        "pierde la cola si no encaja exacto",
+        "range(0, len(words), step)",
+        "range(0, len(words) - size + 1, step)",
+    ),
+    (
+        "rag-02-chunk-fijo",
+        "solape de más (usa overlap + 1)",
+        "step = size - overlap",
+        "step = size - overlap - 1",
+    ),
+    # --- rag-03-chunk-recursivo ---
+    (
+        "rag-03-chunk-recursivo",
+        "no fusiona piezas (una por fragmento)",
+        "if len(candidate) <= max_chars:",
+        "if False:",
+    ),
+    (
+        "rag-03-chunk-recursivo",
+        "no trocea las piezas demasiado grandes",
+        "chunks.extend(chunk_recursive(piece, max_chars, remaining))",
+        "chunks.append(piece)",
+    ),
+    (
+        "rag-03-chunk-recursivo",
+        "sin corte duro",
+        "return [text[i : i + max_chars] for i in range(0, len(text), max_chars)]",
+        "return [text]",
+    ),
+    (
+        "rag-03-chunk-recursivo",
+        "pierde el último fragmento acumulado",
+        "        if current:\n            chunks.append(current)\n        return chunks",
+        "        return chunks",
+    ),
+    (
+        "rag-03-chunk-recursivo",
+        "no descarta piezas vacías",
+        "pieces = [p.strip() for p in text.split(sep) if p.strip()]",
+        "pieces = text.split(sep)",
+    ),
+    (
+        "rag-03-chunk-recursivo",
+        "ignora los separadores indicados",
+        "for i, sep in enumerate(separators):",
+        'for i, sep in enumerate(("\\n\\n", "\\n", " ")):',
+    ),
+    (
+        "rag-03-chunk-recursivo",
+        "usa siempre todos los separadores al recursar",
+        "chunk_recursive(piece, max_chars, remaining)",
+        "chunk_recursive(piece, max_chars, ())",
+    ),
+    # --- rag-04-chunk-markdown ---
+    (
+        "rag-04-chunk-markdown",
+        "no descarta títulos más profundos",
+        "headers = headers[: level - 1] + [match.group(2)]",
+        "headers = headers + [match.group(2)]",
+    ),
+    (
+        "rag-04-chunk-markdown",
+        "trata '#' de código como encabezado",
+        "match = None if in_code else HEADER.match(line)",
+        "match = HEADER.match(line)",
+    ),
+    (
+        "rag-04-chunk-markdown",
+        "incluye la línea del encabezado en el texto",
+        "            flush()\n            level = len(match.group(1))",
+        "            buffer.append(line)\n            flush()\n            level = len(match.group(1))",
+    ),
+    (
+        "rag-04-chunk-markdown",
+        "no divide secciones largas",
+        "    if len(body) <= max_chars:\n        return [body]",
+        "    return [body]",
+    ),
+    (
+        "rag-04-chunk-markdown",
+        "path con otro separador",
+        '"path": " > ".join(headers)',
+        '"path": "/".join(headers)',
+    ),
+    (
+        "rag-04-chunk-markdown",
+        "genera fragmentos vacíos",
+        "        if not body:\n            return\n",
+        "",
+    ),
+    (
+        "rag-04-chunk-markdown",
+        "los párrafos largos no se cortan",
+        "chunks.extend(paragraph[i : i + max_chars] for i in range(0, len(paragraph), max_chars))",
+        "chunks.append(paragraph)",
+    ),
 ]
 
 survivors = []

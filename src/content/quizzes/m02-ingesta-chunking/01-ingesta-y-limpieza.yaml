@@ -1,0 +1,82 @@
+lesson: m02-ingesta-chunking/01-ingesta-y-limpieza
+questions:
+  - id: m02-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Por qué es difícil extraer texto fiable de un PDF?'
+    options:
+      - 'Porque un PDF guarda posiciones de glifos y no estructura, así que hay que reconstruir el orden de lectura, las columnas y las tablas.'
+      - 'Porque los PDF están cifrados siempre.'
+      - 'Porque los PDF solo contienen imágenes.'
+      - 'Porque los PDF no pueden contener texto.'
+    answer: [0]
+    explanation: 'Un PDF describe dónde se dibuja cada carácter, no qué es un párrafo o una tabla. Extraer el texto exige reconstruir esa estructura. No siempre están cifrados ni son solo imágenes (los escaneados sí lo son y requieren OCR).'
+    ref: '#por-qué-un-pdf-no-es-texto'
+
+  - id: m02-01-q2
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué ruido conviene eliminar en la limpieza antes de indexar? Marca todo lo correcto.'
+    options:
+      - 'Cabeceras y pies de página repetidos en cada hoja.'
+      - 'Menús y avisos de cookies de las páginas web.'
+      - 'Guiones de división de palabras al final de línea.'
+      - 'La tabla de plazos de la política de devoluciones.'
+    answer: [0, 1, 2]
+    explanation: 'Cabeceras, pies, navegación web y artefactos de extracción son ruido que distorsiona la búsqueda. La tabla de plazos es contenido valioso: debe conservarse, idealmente con su estructura.'
+    ref: '#limpieza-quitar-lo-que-estorba'
+
+  - id: m02-01-q3
+    type: truefalse
+    difficulty: 2
+    prompt: 'Dos textos que solo difieren en mayúsculas y espacios múltiples producen el mismo hash si el contenido se normaliza antes de calcularlo.'
+    answer: [0]
+    explanation: 'Es verdadero. Normalizar (minúsculas y espacios) antes del hash hace que variantes triviales se detecten como duplicado exacto y que se pueda detectar si un documento cambió realmente.'
+    ref: '#ingesta-incremental-e-idempotente'
+
+  - id: m02-01-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Para qué sirve guardar el nivel de acceso (público, interno, restringido) como metadato de cada fragmento?'
+    options:
+      - 'Para filtrar en la recuperación qué fragmentos puede ver cada usuario.'
+      - 'Para que el modelo escriba con un tono más formal.'
+      - 'Para reducir el tamaño de los embeddings.'
+      - 'Para acelerar el tokenizador.'
+    answer: [0]
+    explanation: 'El nivel de acceso permite aplicar permisos en la recuperación. No influye en el tono, el tamaño de los embeddings ni la tokenización.'
+    ref: '#metadatos-lo-que-hace-usable-el-índice'
+
+  - id: m02-01-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Qué significa que una ingesta sea **idempotente**?'
+    options:
+      - 'Ejecutarla dos veces con la misma entrada deja el índice igual, sin duplicados.'
+      - 'Que borra todo el índice antes de cada ejecución.'
+      - 'Que solo funciona una vez.'
+      - 'Que ignora los documentos nuevos.'
+    answer: [0]
+    explanation: 'La idempotencia se consigue con identificadores estables, de modo que reejecutar el proceso no duplica fragmentos. Reconstruir todo desde cero es otra cosa y no es incremental.'
+    ref: '#ingesta-incremental-e-idempotente'
+
+  - id: m02-01-q6
+    type: truefalse
+    difficulty: 3
+    prompt: 'Filtrar por permisos la respuesta ya generada protege igual que filtrar los fragmentos en la recuperación.'
+    answer: [1]
+    explanation: 'Es falso. Si el modelo ya ha recibido contenido restringido en su contexto, puede filtrarlo en la respuesta. Los permisos deben aplicarse en la recuperación, antes de construir el prompt.'
+    ref: '#datos-sensibles'
+
+  - id: m02-01-q7
+    type: single
+    difficulty: 3
+    prompt: 'Tienes la política de devoluciones de 2024 y la de 2026 indexadas a la vez, sin marcar. ¿Cuál es el problema y la mejor decisión?'
+    options:
+      - 'El asistente puede mezclar versiones y dar respuestas contradictorias; conviene indexar la vigente y marcar la antigua como histórica.'
+      - 'No hay ningún problema: más documentos siempre mejoran el resultado.'
+      - 'Hay que borrar los metadatos para evitar confusión.'
+      - 'Hay que subir la temperatura del modelo.'
+    answer: [0]
+    explanation: 'Mezclar versiones produce respuestas contradictorias. Lo recomendable es quedarse con la vigente y señalar la antigua como histórica mediante metadatos. Quitar los metadatos agravaría el problema.'
+    ref: '#deduplicación'

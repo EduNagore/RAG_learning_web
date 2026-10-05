@@ -1,0 +1,181 @@
+---
+title: Ingesta, limpieza y metadatos
+description: Cómo convertir documentos reales (PDF, HTML, tablas, escaneados) en texto limpio y bien anotado, la etapa menos vistosa de RAG y la que más condiciona el resultado.
+module: m02-ingesta-chunking
+order: 1
+level: intermedio
+estimatedMinutes: 17
+objectives:
+  - Explicar por qué extraer texto de un PDF es un problema de reconstrucción de estructura y no de copia.
+  - Elegir una estrategia de parsing según el tipo de documento (nativo, escaneado, con tablas).
+  - Diseñar una limpieza con deduplicación, metadatos útiles y tratamiento de datos sensibles.
+  - Plantear una ingesta incremental e idempotente que soporte actualizaciones y borrados.
+prerequisites:
+  - m01-intro-rag/03-pipeline-y-taxonomia
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: Docling Technical Report
+    url: https://arxiv.org/abs/2408.09869
+    type: paper
+    authors: Auer et al. (IBM Research)
+    year: 2024
+  - title: "Retrieval-Augmented Generation for Large Language Models: A Survey"
+    url: https://arxiv.org/abs/2312.10997
+    type: paper
+    authors: Gao et al.
+    year: 2023
+  - title: "Lost in the Middle: How Language Models Use Long Contexts"
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu et al.
+    year: 2023
+relatedLabs:
+  - rag-02-chunk-fijo
+---
+
+## Intuición: basura que entra, basura que se recupera
+
+En un sistema RAG, la ingesta es la parte que nadie enseña en las demos y la que más veces explica por qué un asistente «no encuentra» algo que **sí está en los documentos**. Si el PDF de la política de devoluciones se extrae con las dos columnas mezcladas, la tabla de plazos convertida en una sopa de números y el pie de página «Página 7 de 32 · Confidencial» repetido en cada fragmento, ningún modelo de embeddings ni ningún reranker lo arreglará: el texto que llega al índice **ya está roto**.
+
+Hay una asimetría que conviene tener presente. Los errores de ingesta se pagan **una vez por cada consulta futura** y son difíciles de ver, porque no producen un fallo visible: producen una recuperación peor de lo que debería. Por eso merece la pena invertir en inspeccionar el texto extraído **con tus propios ojos** antes de optimizar nada más.
+
+## Cómo funciona
+
+### Cada formato tiene su problema
+
+| Formato | Dificultad principal | Estrategia habitual |
+| --- | --- | --- |
+| HTML | Mucho ruido: menús, banners, scripts, plantillas repetidas | Extraer el contenido principal y conservar los títulos |
+| Markdown / texto | Poco ruido; la estructura está en los encabezados | Aprovechar los encabezados como metadatos |
+| DOCX / presentaciones | Estilos, notas, texto en cuadros y tablas | Convertir conservando títulos, listas y tablas |
+| PDF nativo | No guarda estructura, solo posiciones de glifos | Análisis de layout y reconstrucción del orden de lectura |
+| PDF escaneado / imágenes | No contiene texto, solo píxeles | OCR o modelos que leen la imagen |
+| Tablas | La relación fila-columna se pierde al aplanar | Reconocimiento de estructura de tabla y conversión a un formato que la conserve |
+| Código y registros | La indentación y los saltos de línea son significativos | No normalizar espacios; trocear por unidades lógicas |
+
+### Por qué un PDF no es texto
+
+Un PDF describe **dónde se dibuja cada carácter en la página**, no qué es un párrafo, una columna, una tabla o un título. Extraer «el texto» consiste en reconstruir, a partir de coordenadas, el orden de lectura y la estructura. Los extractores ingenuos leen de arriba abajo y de izquierda a derecha, de modo que una página a dos columnas se convierte en frases mezcladas, y una tabla, en una lista de celdas sin relación entre sí.
+
+Por eso existen herramientas especializadas. **Docling**, por ejemplo, se presenta en su informe técnico (Auer et al., 2024) como un paquete de código abierto con licencia MIT para convertir PDF, que emplea **modelos específicos para el análisis de layout y el reconocimiento de la estructura de tablas**, funciona de forma eficiente en hardware estándar y ofrece una interfaz extensible. Hay otras opciones (bibliotecas de extracción de texto, servicios de documentos de los proveedores de nube, herramientas de código abierto de conversión a Markdown); el criterio para elegir es el mismo: **prueba con tus documentos más difíciles** y compara la salida.
+
+Para los **escaneados** hace falta OCR (reconocimiento óptico de caracteres), con su propia tasa de errores que depende de la calidad de la imagen. Para figuras, gráficos y diapositivas llenas de imágenes existen modelos de visión capaces de describirlas o de leer su contenido; es una línea en rápida evolución y conviene medir su utilidad en tus documentos antes de adoptarla. Y para los casos en que el contenido es imagen (planos, fotografías de producto) la recuperación multimodal, que veremos en el módulo 7, evita pasar por texto.
+
+### Limpieza: quitar lo que estorba
+
+Tras convertir a texto hay que eliminar el ruido que se repite entre documentos o dentro de ellos:
+
+- **Cabeceras, pies de página y números de página** que aparecen en cada hoja. Si no se quitan, cientos de fragmentos comparten la misma cadena y la distorsionan en la búsqueda léxica y en los embeddings.
+- **Navegación y plantillas web:** menús, «Aceptar cookies», pie legal, listas de enlaces relacionados.
+- **Artefactos de extracción:** guiones de división de palabras al final de línea («devo-lución»), saltos de línea en mitad de frases, caracteres de control.
+- **Normalización:** espacios múltiples, comillas y guiones tipográficos, codificación Unicode coherente. Cuidado con normalizar en exceso: en código, tablas o fórmulas el espacio importa.
+
+Un buen hábito es **medir la limpieza**: tomar una muestra de, por ejemplo, veinte documentos de cada fuente y revisar a mano el texto resultante. Es un ejercicio aburrido que descubre más problemas que cualquier métrica.
+
+### Deduplicación
+
+Los corpus reales repiten contenido: la misma política en tres versiones, el mismo artículo publicado y archivado, plantillas con un 90 % de texto común. Los duplicados perjudican de dos maneras: **ocupan huecos** del top-k con fragmentos casi idénticos (menos diversidad de evidencia) y **cuestan** almacenamiento e indexación. Hay dos niveles:
+
+- **Duplicados exactos:** se detectan comparando un hash del contenido normalizado.
+- **Casi duplicados:** textos con pequeñas diferencias (una fecha, un párrafo añadido). Se detectan con técnicas de similitud aproximada sobre fragmentos del texto (_shingles_ y firmas como MinHash) o con umbrales de similitud entre embeddings.
+
+Ante dos versiones del mismo documento, la decisión suele ser **quedarse con la vigente y marcar la antigua como histórica**, no mezclar las dos: un asistente que mezcla la política de 2024 con la de 2026 es peor que uno que ignora la antigua.
+
+### Metadatos: lo que hace usable el índice
+
+Cada documento (y, heredados, cada fragmento) debería llevar metadatos. No son decorativos: habilitan funciones que la similitud semántica sola no da.
+
+| Metadato | Para qué sirve |
+| --- | --- |
+| `id` estable y `fuente` (URL o ruta) | Citar y volver al original; reindexar sin duplicar |
+| `titulo` y ruta de encabezados | Dar contexto al fragmento; mostrar al usuario |
+| `fecha_actualizacion` y `version` | Preferir lo reciente; invalidar lo obsoleto |
+| `departamento`, `tipo` | Filtrar por ámbito |
+| `acceso` (público, interno, restringido) | **Control de permisos** en la recuperación |
+| `idioma` | Elegir modelo y tokenizador adecuados |
+
+En el corpus ficticio de Nimbus Logística cada documento incluye `department`, `kind`, `updated` y `access`; el laboratorio de recuperación con permisos (módulo 9) los usa para que un usuario solo vea lo que le corresponde.
+
+### Datos sensibles
+
+Un índice concentra texto de muchas fuentes y, con él, **datos personales y confidenciales** (nombres, correos, números de cuenta, información de salud o de recursos humanos). Antes de indexar hay que decidir, documento a documento o por fuente, entre tres opciones:
+
+1. **No indexar** lo que no debe estar en un asistente.
+2. **Enmascarar o eliminar** los campos sensibles con detectores de datos personales (reglas para formatos fijos como correos o IBAN, y modelos para nombres y direcciones) y aceptando que ninguno es perfecto.
+3. **Indexar con control de acceso:** conservar el contenido pero asegurar que solo lo recupera quien tiene permiso.
+
+Esto no es asesoramiento legal: los requisitos dependen de tu jurisdicción y sector, y conviene implicar al equipo de privacidad. Lo que sí es técnico y no negociable es que **el filtro de permisos se aplique en la recuperación**, no después de generar la respuesta.
+
+## Ingesta incremental e idempotente
+
+Un corpus vivo cambia: se editan documentos, se añaden otros y se borran algunos. Una ingesta que solo sabe «borrar todo y reconstruir» es lenta, cara y arriesgada. Una ingesta bien diseñada es:
+
+- **Idempotente:** ejecutarla dos veces con la misma entrada deja el índice igual, sin duplicados. Se consigue con `id` estables por documento y por fragmento.
+- **Incremental:** reprocesa solo lo que cambió, detectándolo con un **hash del contenido** (y la fecha) comparado con el guardado.
+- **Consciente de los borrados:** cuando un documento desaparece de la fuente, sus fragmentos se eliminan del índice (lápidas o comparación periódica de la lista de ids).
+- **Versionada:** guarda qué versión del parser, del troceado y del modelo de embeddings produjo cada vector, para saber qué reindexar cuando cambie uno de ellos.
+
+```python
+import hashlib
+import re
+
+def limpiar(texto: str) -> str:
+    """Limpieza mínima: pies de página repetidos, guiones de fin de línea y espacios."""
+    texto = re.sub(r"Página \d+ de \d+ · Confidencial", "", texto)
+    texto = re.sub(r"(\w)-\n(\w)", r"\1\2", texto)       # devo-\nlución -> devolución
+    texto = re.sub(r"[ \t]+", " ", texto)                 # espacios múltiples
+    texto = re.sub(r"\n{3,}", "\n\n", texto)              # líneas en blanco de más
+    return texto.strip()
+
+def huella(texto: str) -> str:
+    """Hash del contenido normalizado: sirve para detectar cambios y duplicados exactos."""
+    normalizado = " ".join(texto.lower().split())
+    return hashlib.sha256(normalizado.encode("utf-8")).hexdigest()[:16]
+
+bruto = "La devo-\nlución es en 14 días.   \n\n\n\nPágina 7 de 32 · Confidencial"
+limpio = limpiar(bruto)
+print(repr(limpio))                      # 'La devolución es en 14 días.'
+print(huella(limpio) == huella("la devolución  es en 14 días."))   # True
+```
+
+El segundo `print` muestra la utilidad del hash sobre texto normalizado: dos variantes que solo difieren en mayúsculas y espacios producen la misma huella, de modo que se detectan como duplicado.
+
+## Trade-offs
+
+| Decisión | Ventaja | Coste o riesgo |
+| --- | --- | --- |
+| Parser especializado (layout y tablas) | Texto mucho más fiel en PDF complejos | Más lento y con más dependencias |
+| Limpieza agresiva | Menos ruido en el índice | Puedes borrar contenido útil (notas al pie, avisos legales relevantes) |
+| Deduplicación estricta | Menos redundancia y coste | Riesgo de descartar variantes legítimas (otra versión, otro país) |
+| Mucho metadato | Filtros y citas ricos | Más trabajo de ingesta y de mantenimiento |
+| Enmascarar datos sensibles | Menor riesgo de fuga | Pérdida de información útil y falsos negativos del detector |
+
+## Errores comunes en producción
+
+- **No mirar el texto extraído.** Asumir que «el PDF se convierte bien» sin revisar una muestra es la causa más frecuente de recuperaciones inexplicables.
+- **Aplanar las tablas.** Una tabla de plazos convertida en una cadena de números pierde qué valor corresponde a qué fila; mejor convertirla a un formato que conserve la estructura o a frases autocontenidas.
+- **Mezclar versiones.** Indexar a la vez la política vigente y las anteriores sin marcar cuál es cuál produce respuestas contradictorias.
+- **Ingesta no idempotente.** Reejecutar el proceso duplica los fragmentos y distorsiona el ranking (el mismo texto aparece varias veces en el top-k).
+- **Olvidar los borrados.** El documento retirado por motivos legales sigue apareciendo en las respuestas porque su fragmento sigue en el índice.
+- **Perder la fuente.** Sin un `id` y una ruta al original no se puede citar ni auditar una respuesta.
+- **Aplicar el permiso al final.** Filtrar la respuesta ya generada no protege: el modelo ya ha visto el contenido y puede filtrarlo.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué es difícil extraer texto de un PDF?"_ Pista: guarda posiciones, no estructura; hay que reconstruir orden de lectura, columnas y tablas; los escaneados requieren OCR.
+- _"¿Qué metadatos guardarías con cada fragmento y por qué?"_ Pista: id y fuente para citar, fecha y versión para frescura, departamento y nivel de acceso para filtrar y aplicar permisos.
+- _"¿Cómo diseñas una ingesta que soporte actualizaciones y borrados?"_ Pista: ids estables, hash de contenido para detectar cambios, idempotencia, eliminación de fragmentos de documentos retirados y versionado de parser y modelo.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Los errores de ingesta **contaminan todas las consultas futuras** y no dan ningún aviso: **inspecciona el texto extraído**.
+- Un PDF guarda posiciones, no estructura; **layout, tablas y OCR** exigen herramientas específicas, y se eligen probando con tus documentos más difíciles.
+- La limpieza quita cabeceras, pies, navegación y artefactos; la **deduplicación** evita redundancia y versiones mezcladas.
+- Los **metadatos** (id, fuente, fecha, versión, departamento, acceso) hacen posible citar, filtrar y aplicar permisos.
+- Decide qué hacer con los **datos sensibles** antes de indexar y aplica los permisos **en la recuperación**.
+- La ingesta debe ser **idempotente, incremental, consciente de los borrados y versionada**.
+
+</KeyTakeaways>

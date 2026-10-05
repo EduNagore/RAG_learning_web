@@ -1,0 +1,166 @@
+---
+title: El pipeline de RAG y su taxonomía
+description: Las etapas de un sistema RAG en detalle y la evolución de Naive RAG a Advanced, Modular y Agentic RAG, con un mapa de qué problema resuelve cada mejora.
+module: m01-intro-rag
+order: 3
+level: intermedio
+estimatedMinutes: 16
+objectives:
+  - Describir las etapas del pipeline de indexación y de consulta con sus entradas y salidas.
+  - Distinguir Naive, Advanced, Modular y Agentic RAG y qué añade cada uno.
+  - Asociar cada fallo típico del RAG ingenuo con la técnica que lo mitiga.
+  - Decidir cuánta complejidad añadir con una evaluación que lo justifique.
+prerequisites:
+  - m01-intro-rag/01-que-es-rag
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: "Retrieval-Augmented Generation for Large Language Models: A Survey"
+    url: https://arxiv.org/abs/2312.10997
+    type: paper
+    authors: Gao et al.
+    year: 2023
+  - title: Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
+    url: https://arxiv.org/abs/2005.11401
+    type: paper
+    authors: Lewis et al.
+    year: 2020
+  - title: "Agentic Retrieval-Augmented Generation: A Survey on Agentic RAG"
+    url: https://arxiv.org/abs/2501.09136
+    type: paper
+    authors: Singh et al.
+    year: 2025
+---
+
+## Intuición: el mismo esquema, cada vez más piezas
+
+Un sistema RAG empieza siendo tres cajas (indexar, recuperar, generar) y, a medida que se prueba con usuarios reales, se le van añadiendo piezas para arreglar fallos concretos: reformular la pregunta, combinar dos tipos de búsqueda, reordenar resultados, comprobar si la respuesta está respaldada. La literatura ha ido poniendo nombre a esas etapas de evolución. El resumen de Gao et al. (2023) distingue tres paradigmas, **Naive RAG, Advanced RAG y Modular RAG**, y analiza lo que llama la base tripartita de cualquier RAG: **recuperación, generación y aumentación**. Un estudio posterior (Singh et al., 2025) añade el siguiente escalón, el **RAG agéntico**.
+
+Conocer esta taxonomía sirve para dos cosas: tener un vocabulario común en una entrevista o en un equipo y, sobre todo, **no añadir complejidad sin motivo**. Cada mejora es un parche para un fallo; solo vale la pena si ese fallo aparece en tus datos.
+
+## El pipeline completo
+
+### Indexación (offline)
+
+Ocurre una vez y se repite cuando cambian los documentos:
+
+1. **Ingesta:** leer los documentos de sus fuentes (PDF, HTML, wikis, tickets) y convertirlos a texto limpio con su estructura (títulos, tablas).
+2. **Limpieza y metadatos:** quitar ruido, deduplicar, anotar cada documento con su origen, fecha, departamento y nivel de acceso.
+3. **Troceado (_chunking_):** dividir el texto en fragmentos del tamaño adecuado para recuperar y para caber en el prompt.
+4. **Vectorización:** calcular un embedding por fragmento (y, opcionalmente, una representación dispersa).
+5. **Almacenamiento:** guardar vectores y metadatos en un índice que permita búsqueda aproximada y filtros.
+
+### Consulta (online)
+
+Ocurre en cada pregunta y debe ser rápida:
+
+1. **Comprensión de la consulta:** a veces se reformula, se descompone o se enruta (módulo 5).
+2. **Recuperación:** obtener candidatos con búsqueda vectorial, léxica o híbrida.
+3. **Reordenación y filtrado:** reordenar con un modelo más preciso, filtrar por permisos y descartar lo irrelevante.
+4. **Construcción del contexto:** seleccionar, ordenar y comprimir los fragmentos que entran en el prompt (módulo 6).
+5. **Generación:** pedir al modelo la respuesta, con citas y la opción de abstenerse.
+6. **Verificación (opcional):** comprobar que la respuesta está respaldada por los fragmentos.
+
+<Diagram
+  caption="Pipeline ampliado. Las cajas punteadas son las que se añaden al pasar de Naive a Advanced RAG."
+  code={`flowchart LR
+  Q["Pregunta"] -.-> QR["Reformular / enrutar"]
+  QR -.-> R["Recuperar candidatos"]
+  Q --> R
+  R -.-> RR["Reordenar y filtrar"]
+  R --> C["Construir contexto"]
+  RR -.-> C
+  C --> G["Generar con citas"]
+  G -.-> V["Verificar"]
+  V -.-> A["Respuesta"]
+  G --> A`}
+/>
+
+## La taxonomía
+
+### Naive RAG
+
+Es el esquema de tres pasos: indexar, recuperar los k fragmentos más cercanos y generar. Es fácil de construir (un tutorial lo hace en una tarde) y suficiente para empezar, pero sufre fallos reconocibles:
+
+- La recuperación trae fragmentos **irrelevantes o incompletos** (precisión y recall bajos).
+- La pregunta del usuario está **mal formulada** para buscar («lo de antes», jerga distinta a la del documento).
+- El modelo **ignora** la evidencia o la **mezcla** con lo que ya sabía.
+- Se rellena el contexto con **ruido y redundancia**.
+
+### Advanced RAG
+
+Añade técnicas **antes** y **después** de la recuperación para atacar esos fallos:
+
+| Fallo del RAG ingenuo | Mejora | Módulo |
+| --- | --- | --- |
+| Fragmentos cortados sin contexto | Mejor troceado, metadatos, contexto del documento | 2 |
+| Pregunta mal formulada | Reescritura, multiconsulta, HyDE | 5 |
+| Falla la búsqueda semántica con términos exactos | Búsqueda híbrida (vectorial + léxica) | 5 |
+| Resultados mal ordenados | Reranking con un modelo más preciso | 5 |
+| Mucho ruido en el contexto | Filtrado, compresión, parent-document | 5 y 6 |
+| El modelo inventa | Citas, abstención, verificación | 6 |
+
+### Modular RAG
+
+Cuando se acumulan muchas técnicas, el pipeline deja de ser lineal: los componentes se vuelven **módulos intercambiables** que se pueden reordenar, repetir o saltar según la consulta. Un módulo de enrutado decide a qué fuente ir; otro decide si hace falta recuperar; otro itera. La idea clave es que **la arquitectura es una composición**, no una cadena fija, y que cada módulo se puede evaluar y sustituir por separado.
+
+### Agentic RAG
+
+El siguiente paso es poner la recuperación **bajo el control de un agente**: en lugar de ejecutar siempre «recuperar y generar», un modelo **decide** si necesita buscar, qué buscar, con qué herramienta, si los resultados bastan o si debe reformular y volver a intentarlo. Singh et al. (2025) describen cómo estos sistemas incorporan patrones agénticos (reflexión, planificación, uso de herramientas y colaboración entre varios agentes) para gestionar la estrategia de recuperación de forma dinámica. Lo estudiaremos en el módulo 7 y, en profundidad, en la parte de agentes.
+
+<Callout type="aviso" title="No es una escalera obligatoria">
+
+Naive, Advanced, Modular y Agentic no son «niveles de madurez» que haya que subir. Un sistema de preguntas frecuentes sobre una documentación pequeña y estable puede funcionar muy bien como Naive RAG con buen troceado y buena evaluación. Cada salto añade **latencia, coste y puntos de fallo**.
+
+</Callout>
+
+## Trade-offs de cada paradigma
+
+| Paradigma | Qué ganas | Qué pagas |
+| --- | --- | --- |
+| Naive RAG | Simplicidad, rapidez de desarrollo, fácil de depurar | Calidad limitada con consultas difíciles o corpus ruidosos |
+| Advanced RAG | Mejor precisión y robustez ante preguntas mal formuladas | Más latencia por etapa, más piezas que mantener y evaluar |
+| Modular RAG | Flexibilidad: cambiar un módulo sin rehacer todo | Complejidad de orquestación y de pruebas |
+| Agentic RAG | Capacidad de resolver preguntas multi-paso y adaptar la estrategia | Latencia y coste altos, comportamiento menos predecible, más superficie de seguridad |
+
+Una consecuencia práctica es el **presupuesto de latencia**. Si tu asistente debe responder en un par de segundos, cada etapa extra (reformular con un LLM, reordenar con un modelo, verificar con otra llamada) consume parte de ese margen. Por eso las mejoras baratas (buen troceado, metadatos, búsqueda híbrida) suelen preceder a las caras (varias llamadas al modelo por consulta). Y por eso las arquitecturas agénticas se reservan para consultas que de verdad lo necesitan, que se pueden **enrutar** a esa vía mientras las sencillas siguen por la rápida.
+
+Otra consideración es la **trazabilidad**: cuantas más etapas, más importante es registrar qué hizo cada una (consulta reformulada, candidatos recuperados, orden final, fragmentos usados). Sin esa traza, depurar un fallo en un pipeline modular es adivinar.
+
+## Cómo decidir cuánta complejidad añadir
+
+El método que evita sobreingeniería es siempre el mismo:
+
+1. **Empieza con el pipeline más simple** que pueda funcionar.
+2. **Mide** con un conjunto de preguntas representativas (golden set): recuperación y generación **por separado**.
+3. **Diagnostica** dónde se pierde la calidad: ¿no se recuperó el fragmento, se recuperó mal ordenado, se ignoró?
+4. **Añade una técnica** que ataque ese fallo concreto y **vuelve a medir**.
+5. **Quédate con ella solo si mejora** las métricas a un coste aceptable.
+
+Para ver por qué importa medir, hicimos justo esto sobre el corpus ficticio de Nimbus Logística con las 28 preguntas respondibles del conjunto de evaluación y el código de los laboratorios. Con una búsqueda léxica BM25 simple, el fragmento correcto aparece entre los 3 primeros en el **89 %** de los casos (25 de 28). Con el embedder de juguete del curso, que no entiende sinónimos, baja al **75 %**. Y combinar ambos con fusión por rangos **no mejora** el resultado de BM25 (89 %) en ese corpus pequeño. Los tres fallos de BM25 son de **morfología** («reembolsan» frente a «reembolso», «seguir» frente a «seguimiento», «contraseña» frente a «contraseñas»): justo el tipo de problema que unos embeddings reales o un buen preprocesado resolverían. La lección es doble: **no des por hecho que una técnica avanzada mejora tu caso** (aquí la híbrida no aportó nada) y **mira qué preguntas fallan antes de elegir la mejora**.
+
+## Errores comunes en producción
+
+- **Saltar directamente a una arquitectura agéntica** sin haber medido el RAG simple. Es más caro, más lento y más difícil de depurar.
+- **Añadir técnicas por moda.** Reranking, HyDE o GraphRAG son útiles cuando atacan un fallo medido, no por defecto.
+- **Evaluar solo la respuesta final.** Si no separas recuperación y generación, no sabrás qué etapa arreglar.
+- **Pipeline sin versionar.** Cambiar a la vez el troceado, el modelo de embeddings y el prompt hace imposible saber qué mejoró o empeoró.
+- **No pensar en latencia.** Cada etapa extra (reformular, reordenar, verificar) suma tiempo; el usuario lo nota.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"Diferencia entre Naive y Advanced RAG."_ Pista: añadir técnicas antes y después de la recuperación (reescritura, híbrida, reranking, filtrado) para atacar fallos concretos del esquema simple.
+- _"¿Qué es Modular RAG?"_ Pista: componentes intercambiables y reordenables en lugar de una cadena fija; enrutado, iteración y evaluación por módulo.
+- _"Tu RAG responde mal. ¿Cómo lo diagnosticas?"_ Pista: golden set, medir recuperación y generación por separado, mirar qué preguntas fallan y por qué, y cambiar una cosa cada vez.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un RAG tiene **pipeline de indexación** (ingesta, limpieza, troceado, vectorización, almacenamiento) y **pipeline de consulta** (comprender, recuperar, reordenar, construir contexto, generar, verificar).
+- **Naive** (tres pasos), **Advanced** (mejoras antes y después de recuperar), **Modular** (componentes recombinables) y **Agentic** (un agente decide cuándo y cómo recuperar).
+- Cada mejora ataca un **fallo concreto**; no son niveles que haya que subir.
+- Método: empieza simple, **mide por etapas**, diagnostica y añade una técnica cada vez.
+- Una técnica avanzada **puede no mejorar** tu caso: en nuestro corpus pequeño, la búsqueda híbrida no superó a BM25.
+
+</KeyTakeaways>

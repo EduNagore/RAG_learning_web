@@ -90,6 +90,13 @@ for (const [id, { file, data, body }] of lessons) {
     err(f, `order ${data.order} repetido en ${data.module} (también en ${orderByModule.get(key)})`);
   orderByModule.set(key, f);
 
+  // Un ": " dentro de un texto YAML sin comillas lo convierte en un diccionario: hay que citarlo.
+  for (const field of ['objectives', 'prerequisites', 'relatedLabs'])
+    if ((data[field] ?? []).some((v) => typeof v !== 'string'))
+      err(f, `${field}: todos los elementos deben ser texto (¿falta citar uno que contiene ": "?)`);
+  for (const s of data.sources ?? [])
+    if (typeof s.title !== 'string')
+      err(f, `una fuente tiene un título que no es texto (¿falta citarlo?): ${JSON.stringify(s.title)}`);
   for (const p of data.prerequisites ?? []) {
     if (!lessons.has(p)) err(f, `prerequisito inexistente: ${p}`);
     if (p === id) err(f, 'es prerequisito de sí misma');

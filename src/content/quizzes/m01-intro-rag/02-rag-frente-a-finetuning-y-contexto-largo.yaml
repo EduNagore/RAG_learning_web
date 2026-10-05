@@ -1,0 +1,82 @@
+lesson: m01-intro-rag/02-rag-frente-a-finetuning-y-contexto-largo
+questions:
+  - id: m01-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué cambian respectivamente RAG y el ajuste fino (*fine-tuning*)?'
+    options:
+      - 'RAG cambia qué sabe el modelo al responder; el ajuste fino cambia cómo se comporta.'
+      - 'RAG cambia los pesos del modelo; el ajuste fino cambia el prompt.'
+      - 'Ambos añaden conocimiento de la misma forma.'
+      - 'Ninguno de los dos cambia nada del modelo.'
+    answer: [0]
+    explanation: 'RAG aporta conocimiento en cada petición, mientras que el ajuste fino modifica los pesos y por tanto el comportamiento (estilo, formato, vocabulario). Son técnicas con objetivos distintos.'
+    ref: '#intuición-tres-herramientas-para-tres-problemas'
+
+  - id: m01-02-q2
+    type: truefalse
+    difficulty: 2
+    prompt: 'Según el estudio de Ovadia et al., el ajuste fino supera de forma consistente a RAG para inyectar conocimiento nuevo.'
+    answer: [1]
+    explanation: 'Es falso. Su conclusión fue la contraria: RAG obtuvo mejores resultados de forma consistente, tanto con conocimiento ya visto en el entrenamiento como con conocimiento completamente nuevo.'
+    ref: '#rag-frente-a-fine-tuning-qué-dice-la-evidencia'
+
+  - id: m01-02-q3
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué criterios conviene considerar para elegir entre contexto largo, RAG y ajuste fino? Marca todos los correctos.'
+    options:
+      - 'Con qué frecuencia cambia el conocimiento.'
+      - 'Si necesitas citar la fuente de cada dato.'
+      - 'Si hay permisos distintos por usuario.'
+      - 'El lenguaje de programación del front-end de la web.'
+    answer: [0, 1, 2]
+    explanation: 'La frecuencia de cambio, la necesidad de citas y los permisos por usuario condicionan directamente la elección. El lenguaje del front-end no influye en cómo se aporta conocimiento al modelo.'
+    ref: '#cómo-comparar-cuatro-preguntas'
+
+  - id: m01-02-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué propone **Self-Route** (Li et al.)?'
+    options:
+      - 'Decidir, según una autorreflexión del modelo, si cada consulta se resuelve con RAG o con contexto largo.'
+      - 'Sustituir siempre RAG por contexto largo.'
+      - 'Reentrenar el modelo en cada consulta.'
+      - 'Eliminar la ventana de contexto.'
+    answer: [0]
+    explanation: 'Self-Route enruta cada consulta al enfoque más conveniente para reducir el cómputo manteniendo un rendimiento comparable al del contexto largo. No elimina ni sustituye ninguno de los dos enfoques por completo.'
+    ref: '#rag-frente-a-contexto-largo'
+
+  - id: m01-02-q5
+    type: single
+    difficulty: 2
+    prompt: 'Tu modelo admite un millón de tokens de contexto. ¿Cuál es la mejor razón para seguir usando RAG con un corpus grande?'
+    options:
+      - 'Cada petición con contexto largo vuelve a pagar y procesar todo el material, el rendimiento puede degradarse con contextos muy largos y el corpus puede superar la ventana.'
+      - 'Porque los modelos con contexto largo no entienden documentos.'
+      - 'Porque RAG siempre da mejores respuestas que cualquier otra técnica.'
+      - 'Porque el contexto largo está prohibido en producción.'
+    answer: [0]
+    explanation: 'Coste y latencia por petición, degradación con contexto largo y corpus mayor que la ventana son razones reales. No es cierto que RAG gane siempre ni que el contexto largo no entienda documentos.'
+    ref: '#rag-frente-a-contexto-largo'
+
+  - id: m01-02-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'RAG, contexto largo y ajuste fino se pueden combinar en un mismo sistema.'
+    answer: [0]
+    explanation: 'Es verdadero. Es habitual usar un modelo ajustado para el estilo y la estructura de salida, RAG para los hechos y caché para el prefijo estable. No son enfoques excluyentes.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m01-02-q7
+    type: single
+    difficulty: 3
+    prompt: 'Una empresa tiene precios y políticas que cambian cada semana y necesita citar el documento de origen en cada respuesta. ¿Qué enfoque principal elegirías para el conocimiento?'
+    options:
+      - 'Ajuste fino con los documentos actuales.'
+      - 'RAG (o contexto largo si cabe), porque se actualiza al instante y mantiene la fuente visible.'
+      - 'Reentrenar el modelo desde cero cada semana.'
+      - 'No usar ningún documento y confiar en el modelo.'
+    answer: [1]
+    explanation: 'Con conocimiento que cambia y requisito de citas, RAG encaja: se actualiza editando el índice y cada fragmento es citable. El ajuste fino mezcla los datos en los pesos y no puede citar ni borrar un dato concreto con facilidad.'
+    ref: '#trade-offs-tabla-de-decisión'

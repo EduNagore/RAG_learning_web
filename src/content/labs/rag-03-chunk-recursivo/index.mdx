@@ -1,0 +1,52 @@
+---
+title: Chunking recursivo por separadores
+description: Implementa el troceado que respeta la estructura natural del texto, intentando dividir primero por párrafos, después por líneas y por último por palabras.
+part: rag
+module: m02-ingesta-chunking
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - chunking recursivo
+  - separadores jerárquicos
+  - fusión voraz
+  - corte duro
+packages: []
+hints:
+  - Busca el primer separador de la lista que aparezca en el texto y divide por él. Si ninguno aparece, hay que cortar a la fuerza cada `max_chars` caracteres.
+  - Recorre las piezas acumulando en `current`. Si `current + separador + pieza` cabe, añádela; si no, guarda `current` como fragmento y empieza uno nuevo con la pieza.
+  - Si una pieza por sí sola supera `max_chars`, no la mezcles. Guarda lo acumulado y trocea esa pieza llamando de nuevo a la función con los separadores que quedan (`separators[i + 1:]`).
+  - Descarta las piezas vacías (`if piece.strip()`) para no devolver fragmentos vacíos cuando haya varias líneas en blanco seguidas.
+relatedLessons:
+  - m02-ingesta-chunking/02-estrategias-de-chunking
+---
+
+## Objetivo
+
+El troceado por tamaño fijo corta por donde cae el contador. El troceado **recursivo** intenta respetar la estructura del texto: parte por el separador más «grande» (el párrafo) y solo baja a uno más fino (la línea, la palabra) cuando una pieza sigue siendo demasiado larga. Es la opción por defecto razonable en muchos proyectos y lo vas a implementar tú.
+
+## Qué tienes que hacer
+
+Implementa `chunk_recursive(text, max_chars, separators=("\n\n", "\n", " "))`:
+
+1. Si `text` (sin espacios en los extremos) cabe en `max_chars`, devuelve `[text]`. Si está vacío, devuelve `[]`.
+2. Si no cabe, usa el **primer separador** de la lista que aparezca en el texto y divídelo en piezas (descarta las piezas vacías).
+3. **Fusiona** las piezas de forma voraz: ve juntando piezas consecutivas, unidas por ese mismo separador, mientras el resultado no supere `max_chars`.
+4. Una pieza que **por sí sola** supera `max_chars` se trocea recursivamente con los separadores que quedan.
+5. Si no queda ningún separador (o ninguno aparece), corta a la fuerza cada `max_chars` caracteres.
+6. Devuelve los fragmentos en orden, sin fragmentos vacíos y todos con longitud `<= max_chars`.
+
+## Ejemplo
+
+```python
+texto = "Primer párrafo corto.\n\nSegundo párrafo corto.\n\nTercero."
+print(chunk_recursive(texto, max_chars=50))
+# ['Primer párrafo corto.\n\nSegundo párrafo corto.', 'Tercero.']
+```
+
+Los dos primeros párrafos caben juntos (45 caracteres), pero el tercero haría superar el límite, así que abre un fragmento nuevo.
+
+<Callout type="nota" title="Qué se pierde y qué no">
+
+Al cortar entre dos fragmentos se pierde el separador del límite (la línea en blanco), pero las palabras se conservan todas y en el mismo orden. Ese es el comportamiento que comprueban los tests.
+
+</Callout>

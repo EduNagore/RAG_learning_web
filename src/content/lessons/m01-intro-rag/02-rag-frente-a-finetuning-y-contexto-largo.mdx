@@ -1,0 +1,147 @@
+---
+title: RAG frente a fine-tuning y contexto largo
+description: Tres formas de dar conocimiento a un modelo, qué evidencia hay sobre cada una y un criterio práctico para elegir sin dogmatismos.
+module: m01-intro-rag
+order: 2
+level: intermedio
+estimatedMinutes: 16
+objectives:
+  - Distinguir qué problema resuelve cada técnica, si añadir conocimiento o cambiar comportamiento.
+  - Resumir la evidencia de estudios que comparan RAG con fine-tuning y con contexto largo.
+  - Aplicar un criterio de decisión con coste, actualización, trazabilidad y permisos.
+  - Explicar por qué en la práctica se combinan en lugar de excluirse.
+prerequisites:
+  - m01-intro-rag/01-que-es-rag
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: "Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs"
+    url: https://arxiv.org/abs/2312.05934
+    type: paper
+    authors: Ovadia et al.
+    year: 2023
+  - title: Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach
+    url: https://arxiv.org/abs/2407.16833
+    type: paper
+    authors: Li et al.
+    year: 2024
+  - title: "Lost in the Middle: How Language Models Use Long Contexts"
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu et al.
+    year: 2023
+  - title: Context windows (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/context-windows
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Prompt caching (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    type: docs
+    authors: Anthropic
+    year: 2026
+---
+
+## Intuición: tres herramientas para tres problemas
+
+Cuando un modelo no responde bien sobre tu negocio, hay tres reacciones habituales: **darle los documentos en el prompt** (contexto largo), **buscar los fragmentos relevantes y dárselos** (RAG) o **seguir entrenándolo con tus datos** (_fine-tuning_). Se discuten como si compitieran, pero resuelven problemas distintos:
+
+- **Contexto largo y RAG** cambian **qué sabe el modelo en el momento de responder**. El conocimiento llega en cada petición.
+- **Fine-tuning** cambia **cómo se comporta el modelo** (estilo, formato, vocabulario, razonamiento en un dominio). El cambio queda en los pesos.
+
+Esta distinción evita el error más común: intentar enseñar con fine-tuning datos que cambian cada semana, o intentar corregir el tono con RAG.
+
+## Cómo comparar: cuatro preguntas
+
+Antes de elegir, responde a cuatro preguntas sobre tu caso.
+
+1. **¿Cuánto cambia el conocimiento?** Si cambia a diario (precios, políticas, incidencias), reentrenar es inviable; RAG o contexto largo se actualizan al instante.
+2. **¿Necesitas citar la fuente?** El fine-tuning mezcla lo aprendido en los pesos y no puede decirte de dónde sale un dato. RAG y contexto largo mantienen el documento visible.
+3. **¿Importan los permisos por usuario?** Con RAG puedes filtrar qué fragmentos ve cada persona. Un modelo ajustado con datos confidenciales los contiene para todos sus usuarios.
+4. **¿El conocimiento cabe en el prompt y se reutiliza?** Si sí, contexto largo con caché puede ser lo más simple; si es enorme o muy variable, RAG.
+
+## RAG frente a fine-tuning: qué dice la evidencia
+
+Ovadia et al. (2023) compararon directamente cómo «inyectar conocimiento» en un modelo con ajuste fino frente a RAG, tanto para conocimiento que el modelo ya había visto en su entrenamiento como para conocimiento **completamente nuevo**. Su conclusión es clara: RAG obtuvo mejores resultados de forma consistente en ambos casos. Es un resultado a tener en cuenta, aunque no una ley universal: depende de los modelos, los datos y la tarea evaluados.
+
+Lo que ese estudio mide es **conocimiento factual**. No dice que el fine-tuning no sirva: dice que no es la mejor forma de añadir hechos. Para lo que sí sirve:
+
+- **Formato y estilo estables** (siempre responder en un esquema, con un tono concreto).
+- **Terminología de un dominio** muy especializado, donde el modelo base tropieza.
+- **Reducir el tamaño del prompt** o el coste por llamada incorporando instrucciones repetidas a los pesos.
+- **Mejorar el uso de las herramientas** o el razonamiento en un tipo de tarea concreto.
+
+En muchos sistemas se combinan: un modelo ajustado para el estilo y la estructura de salida, y RAG para los hechos.
+
+## RAG frente a contexto largo
+
+Con ventanas de contexto de un millón de tokens, la pregunta es inevitable: ¿para qué recuperar si puedo meterlo todo?
+
+<Snapshot date="2026-10">
+
+La documentación de Claude indica que la mayoría de sus modelos actuales tienen una ventana de **1 millón de tokens** (con hasta 128 000 de salida), a precio estándar sin cabeceras especiales. Con prompt caching, un prefijo repetido se lee a una fracción del precio de entrada (0,1× en general, 0,05× en Opus 5.5, según su documentación), siempre que la petición llegue dentro de la vida de la caché (5 minutos por defecto). Estas cifras cambian con cada generación de modelos: consulta la documentación vigente.
+
+</Snapshot>
+
+La respuesta de la investigación es matizada. Li et al. (2024) compararon ambos enfoques con varios modelos y encontraron que, **con recursos suficientes, el contexto largo supera de forma consistente a RAG en rendimiento medio**, pero que **el coste mucho menor de RAG sigue siendo una ventaja clara**. Proponen **Self-Route**, un método que decide, a partir de la autorreflexión del modelo, si una consulta se resuelve con RAG o con contexto largo, y que según sus autores reduce de forma significativa el cómputo manteniendo un rendimiento comparable al del contexto largo.
+
+Lo que se deduce para la práctica:
+
+- **El contexto largo no es gratis.** Cada petición vuelve a pagar (y a procesar) todo el material; el caching abarata el prefijo repetido, pero no elimina el coste ni la latencia de leer un millón de tokens.
+- **Cabe no significa se usa bien.** Ya viste el fenómeno _lost in the middle_ (Liu et al.): la información situada en el centro de un contexto largo se aprovecha peor, y la documentación de Claude describe el _context rot_.
+- **RAG escala más allá de la ventana.** Si tu corpus tiene decenas de millones de tokens, no cabe en ningún contexto; hay que recuperar.
+- **Los permisos y la actualización favorecen RAG.** Un prompt gigante común a todos no distingue usuarios, y regenerarlo cuando cambia un documento tiene un coste.
+
+Una regla práctica útil para empezar: si el conocimiento **cabe cómodamente, cambia poco y se reutiliza mucho**, prueba primero contexto largo con caché; en cuanto crezca, cambie a menudo o haya permisos, RAG.
+
+## Tres casos prácticos
+
+Aplicar los cuatro criterios a casos concretos ayuda a ver que no hay una respuesta única:
+
+**Caso 1: asistente sobre un manual de 80 páginas que casi no cambia.** El manual cabe de sobra en la ventana, se consulta cientos de veces al día y no hay permisos distintos por usuario. Aquí un prompt con el manual completo y caché de prefijo es lo más sencillo: sin índice, sin troceado, sin fallos de recuperación. Se paga la lectura del prefijo en cada consulta, pero a una fracción del precio si se reutiliza dentro de la vida de la caché.
+
+**Caso 2: soporte sobre 50 000 documentos con permisos por departamento y cambios diarios.** No cabe en ninguna ventana, hay que respetar quién puede ver qué y los contenidos se actualizan a diario. Es el territorio natural de RAG: se recupera solo lo relevante, se filtra por permisos y se reindexa lo cambiado.
+
+**Caso 3: asistente que debe responder siempre con un esquema JSON y el vocabulario técnico de un dominio muy especializado.** Aquí el problema no es de conocimiento sino de comportamiento. Una primera aproximación es mejorar el prompt y usar salidas estructuradas; si no basta y hay suficientes ejemplos de calidad, el ajuste fino puede ayudar. Y si además el asistente necesita hechos actuales, se añade RAG para ellos.
+
+El patrón común es **empezar por la opción más simple que cumpla los requisitos** y complicar solo cuando una limitación medida lo exija.
+
+## Trade-offs: tabla de decisión
+
+| Necesidad | Contexto largo | RAG | Fine-tuning |
+| --- | --- | --- | --- |
+| Conocimiento que cambia a menudo | Sí | Sí | No |
+| Citar la fuente | Sí | Sí | No |
+| Permisos por usuario | Difícil | Sí | No |
+| Corpus mayor que la ventana | No | Sí | Parcial |
+| Coste por consulta bajo con mucho material | No (cada llamada lee todo) | Sí | Sí (tras el entrenamiento) |
+| Cambiar estilo o formato | No | No | Sí |
+| Complejidad de implantación | Baja | Media-alta | Alta |
+
+## Errores comunes en producción
+
+- **Elegir por moda.** «Hacemos RAG» o «hacemos fine-tuning» sin medir. Compara con una evaluación sobre tus preguntas reales y la línea base del modelo solo.
+- **Ajustar el modelo con datos que caducan.** A los pocos meses el modelo repite políticas antiguas con total seguridad y no puedes borrar un dato concreto.
+- **Meter el corpus entero «porque cabe».** Pagas por cada turno, aumenta la latencia y empeora la atención sobre el dato clave.
+- **Ignorar la combinación.** Los enfoques no se excluyen: RAG para los hechos, ajuste para la forma, caché para el prefijo estable.
+- **Comparar sin una línea base.** Antes de invertir en cualquiera de las tres técnicas, mide cómo responde el modelo solo a tus preguntas reales; a veces el problema era un prompt ambiguo y no la falta de conocimiento.
+- **Olvidar el coste de mantenimiento.** Reentrenar, reindexar o regenerar un prompt gigante son procesos recurrentes con coste en tiempo y dinero: inclúyelos en la comparación, no solo el precio por consulta.
+- **Generalizar un benchmark.** Un estudio que compara dos técnicas en unas tareas y modelos concretos no garantiza el mismo resultado en tu dominio. Reproduce la comparación con tus datos.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cuándo usarías fine-tuning en lugar de RAG?"_ Pista: para cambiar comportamiento, estilo o formato, o vocabulario muy especializado, no para añadir hechos que cambian.
+- _"Tu modelo admite 1M de tokens. ¿Por qué construir un sistema RAG?"_ Pista: coste y latencia por consulta, degradación con contexto largo, corpus mayor que la ventana, permisos y actualización.
+- _"¿Qué es Self-Route?"_ Pista: enrutar cada consulta a RAG o a contexto largo según una autorreflexión del modelo, para ahorrar cómputo sin perder mucho rendimiento.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Contexto largo y RAG cambian **qué sabe el modelo al responder**; el fine-tuning cambia **cómo se comporta**.
+- Para **inyectar conocimiento factual**, la evidencia citada (Ovadia et al.) favorece a RAG frente al ajuste fino, también con conocimiento nuevo.
+- Con recursos suficientes el contexto largo suele rendir más que RAG, pero RAG es **mucho más barato** (Li et al.); Self-Route combina ambos.
+- Decide con cuatro criterios: **frecuencia de cambio, citas, permisos y tamaño** del conocimiento.
+- Los enfoques **se combinan**: RAG para hechos, fine-tuning para la forma, caché para lo estable.
+
+</KeyTakeaways>
