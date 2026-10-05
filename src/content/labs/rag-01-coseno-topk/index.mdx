@@ -1,0 +1,72 @@
+---
+title: Similitud coseno y búsqueda top-k desde cero
+description: Implementa con NumPy la similitud coseno y la búsqueda de los k vectores más parecidos, la operación central de cualquier base de datos vectorial.
+part: rag
+module: m03-embeddings
+difficulty: 1
+estimatedMinutes: 20
+concepts:
+  - similitud coseno
+  - producto escalar
+  - vectorización con NumPy
+  - top-k
+packages:
+  - numpy
+hints:
+  - La similitud coseno es el producto escalar dividido por el producto de las normas. Con NumPy, `a @ b` es el producto escalar y `np.linalg.norm(a)` la norma.
+  - Para toda la matriz a la vez, `matrix @ query` calcula el producto escalar de cada fila con la consulta y `np.linalg.norm(matrix, axis=1)` las normas de todas las filas, sin ningún bucle.
+  - Si una norma es 0 no puedes dividir. Con `np.divide(a, b, out=np.zeros_like(a), where=b > 0)` la división solo se hace donde `b` es positivo y en el resto queda 0.
+  - Para ordenar de mayor a menor con desempate por índice, usa `np.argsort(-scores, kind="stable")` y recorta con `[:k]`.
+relatedLessons:
+  - m00-fundamentos-llm/06-embeddings-intuicion
+---
+
+## Objetivo
+
+En la lección sobre embeddings viste que buscar por significado consiste en convertir la consulta en un vector y encontrar los vectores de documentos **más cercanos**. Aquí implementas esa operación desde cero, sin ninguna librería de búsqueda.
+
+## Qué tienes que hacer
+
+Completa dos funciones en el editor.
+
+### `cosine_similarity(a, b)`
+
+Devuelve la similitud coseno entre dos vectores de una dimensión:
+
+$$
+\cos(a, b) = \frac{a \cdot b}{\lVert a \rVert \, \lVert b \rVert}
+$$
+
+Si alguno de los dos vectores es el vector cero devuelve `0.0` (la fórmula no está definida, pero tu función **no debe lanzar ninguna excepción**).
+
+### `cosine_top_k(query, matrix, k=3)`
+
+Dada una consulta de forma `(d,)` y una matriz de forma `(n, d)` con un vector por fila, devuelve una tupla `(indices, scores)` con los `k` vectores más parecidos:
+
+- Ambos son arrays de NumPy ordenados de **mayor a menor** similitud.
+- Si `k` es mayor que el número de filas, devuelve todas las que haya.
+- En caso de **empate**, va primero el índice menor.
+- Una fila de ceros tiene similitud `0.0` (nunca `NaN`).
+- **No debe modificar** la matriz ni la consulta que recibe.
+- Hazlo **vectorizado**, sin recorrer las filas con un bucle de Python.
+
+## Ejemplo
+
+Con los vectores de la lección (inventados, de tres dimensiones):
+
+```python
+import numpy as np
+
+docs = np.array([[0.80, 0.20, 0.10], [0.10, 0.90, 0.30], [0.85, 0.05, 0.25]])
+consulta = np.array([0.90, 0.10, 0.20])
+
+indices, scores = cosine_top_k(consulta, docs, k=2)
+print(indices)  # [2 0]
+print(scores)   # [0.99641291 0.98659707]
+```
+
+<Callout type="consejo" title="Por qué importa la vectorización">
+
+Una base de datos vectorial compara una consulta con millones de vectores. Un bucle de Python sobre cada fila es órdenes de magnitud más lento que una única multiplicación de matrices. Fíjate en cómo `matrix @ query` hace en una sola operación el trabajo de miles de productos escalares.
+
+</Callout>

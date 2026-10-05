@@ -52,7 +52,9 @@ def run_code(source: str) -> dict:
     """Ejecuta el código del alumno y devuelve su salida: {"stdout": str, "error": str | None}."""
     out = io.StringIO()
     error = None
-    module = types.ModuleType("student")
+    # Como "Ejecutar" simula lanzar el script, el código corre con __name__ == "__main__":
+    # así el bloque `if __name__ == "__main__":` del starter solo se ejecuta aquí y no al comprobar.
+    module = types.ModuleType("__main__")
     try:
         with contextlib.redirect_stdout(out):
             exec(compile(source, STUDENT_FILE, "exec"), module.__dict__)  # noqa: S102 - ejecutar código del alumno es el objetivo de este módulo

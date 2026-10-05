@@ -1,0 +1,79 @@
+---
+title: BM25 desde cero
+description: Implementa el algoritmo de ranking léxico BM25 y úsalo para buscar en el corpus de Nimbus Logística. Es la mitad "dispersa" de la búsqueda híbrida.
+part: rag
+module: m05-recuperacion-avanzada
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - búsqueda léxica
+  - TF-IDF
+  - BM25
+  - saturación de frecuencia y normalización por longitud
+packages:
+  - numpy
+hints:
+  - Calcula primero una sola vez lo que es común a todos los documentos, como el número de documentos `N` y la longitud media `avgdl`, y luego recorre los documentos.
+  - Para cada término único de la consulta necesitas `n`, el número de documentos que lo contienen (no cuántas veces aparece en total). Después `idf = log(1 + (N - n + 0.5) / (n + 0.5))` con `math.log`.
+  - La frecuencia de un término en un documento es `doc.count(termino)`. Si es 0, ese término no suma nada a ese documento.
+  - Para `bm25_search`, tokeniza con `tokenize(titulo + " " + texto)` para que el título también cuente, y ordena con `sorted(..., key=lambda x: (-x[1], x[2]))` para desempatar por posición.
+relatedLessons:
+  - m00-fundamentos-llm/06-embeddings-intuicion
+---
+
+## Objetivo
+
+En la lección de embeddings viste que los vectores **densos** capturan significado y que la búsqueda **dispersa** captura palabras exactas. BM25 es el algoritmo de referencia de esta segunda familia, y la base de buscadores como Elasticsearch u OpenSearch. Lo vas a implementar tú.
+
+## La fórmula
+
+Para una consulta $Q$ con términos $t$ y un documento $D$:
+
+$$
+\text{score}(D, Q) = \sum_{t \in Q} \text{IDF}(t) \cdot \frac{f(t, D)\,(k_1 + 1)}{f(t, D) + k_1\left(1 - b + b\,\dfrac{|D|}{\text{avgdl}}\right)}
+$$
+
+- $f(t, D)$: cuántas veces aparece el término $t$ en el documento $D$.
+- $|D|$: longitud del documento (en tokens) y $\text{avgdl}$ la longitud media de todos los documentos.
+- $k_1$ controla cuánto **satura** la frecuencia (a partir de cierto punto, repetir una palabra aporta cada vez menos) y $b$ cuánto se **normaliza por longitud**.
+- El peso de rareza del término es:
+
+$$
+\text{IDF}(t) = \ln\!\left(1 + \frac{N - n_t + 0{,}5}{n_t + 0{,}5}\right)
+$$
+
+donde $N$ es el número total de documentos y $n_t$ cuántos de ellos contienen $t$.
+
+## Qué tienes que hacer
+
+### `bm25_scores(query_tokens, docs_tokens, k1=1.5, b=0.75)`
+
+Recibe la consulta como lista de tokens y los documentos como lista de listas de tokens. Devuelve una lista con la puntuación BM25 de **cada documento**, en el mismo orden.
+
+- Los términos repetidos en la consulta **cuentan una sola vez**.
+- Un término que no aparece en ningún documento no aporta nada.
+- Si no hay documentos, o todos están vacíos, devuelve ceros (sin dividir por cero).
+
+### `bm25_search(query, corpus, top_k=3)`
+
+Recibe la consulta como texto y el corpus como lista de diccionarios con `id`, `title` y `text`. Tokeniza con `ragkit.text.tokenize` (consulta y documentos, usando el título **y** el texto de cada documento) y devuelve una lista de tuplas `(id, puntuación)` con los `top_k` mejores, de mayor a menor.
+
+- Solo incluye documentos con puntuación **mayor que 0**.
+- Ante un empate gana el documento que aparece antes en el corpus.
+
+## Un ejemplo para comprobar a mano
+
+Con tres documentos de juguete y la consulta `["a"]`:
+
+```python
+docs = [["a", "b", "a"], ["b", "c"], ["c", "c", "d", "e"]]
+bm25_scores(["a"], docs)   # [1.40118, 0.0, 0.0] aproximadamente
+```
+
+Aquí $N = 3$, $n_a = 1$, así que $\text{IDF}(a) = \ln(1 + 2{,}5/1{,}5) \approx 0{,}981$. El documento tiene longitud 3 y $\text{avgdl} = 3$, de modo que el denominador vale $2 + 1{,}5 = 3{,}5$ y el factor de frecuencia $2 \cdot 2{,}5 / 3{,}5 \approx 1{,}429$. El producto da $\approx 1{,}401$.
+
+<Callout type="nota" title="El límite de la búsqueda léxica">
+
+Cuando tengas `bm25_search` funcionando, prueba con la consulta `"contraseña longitud mínima"`. Verás que **no** encuentra el documento sobre la política de contraseñas, porque ese texto dice «contraseñas» en plural y BM25 compara palabras exactas, sin entender que son la misma. Es justo el tipo de fallo que los embeddings densos resuelven, y la razón por la que se combinan ambos en la búsqueda híbrida (módulo 5).
+
+</Callout>

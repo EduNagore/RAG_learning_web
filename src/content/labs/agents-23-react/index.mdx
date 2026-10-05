@@ -1,0 +1,83 @@
+---
+title: El bucle de un agente (ReAct) con herramientas
+description: Implementa el bucle central de un agente, que alterna llamadas al modelo y ejecución de herramientas hasta obtener una respuesta o agotar el presupuesto de pasos.
+part: agentes
+module: m10-fundamentos-agentes
+difficulty: 2
+estimatedMinutes: 40
+concepts:
+  - bucle del agente
+  - ReAct
+  - tool calling
+  - manejo de errores de herramientas
+  - límite de pasos
+packages: []
+hints:
+  - El esqueleto es un `for paso in range(max_steps)`. Dentro llamas al modelo con `llm.generate(messages, tools=...)` y miras `response.tool_calls`.
+  - Si `response.tool_calls` está vacío, el modelo ha terminado. Devuelve `AgentResult(answer=response.text, steps=paso + 1, stopped="final", trace=trace)`.
+  - Antes de ejecutar las herramientas, añade a `messages` el mensaje del asistente con sus `tool_calls`, y después un mensaje `Message("tool", resultado, tool_call_id=llamada.id)` por cada herramienta ejecutada. El modelo necesita ver ambos.
+  - Una herramienta que no existe o que lanza una excepción no debe romper el agente. Convierte el problema en un resultado de texto que empiece por `error:` y devuélveselo al modelo, que puede corregirse.
+  - Si el bucle termina sin que el modelo responda, devuelve `AgentResult(None, max_steps, "max_steps", trace)`.
+relatedLessons:
+  - m00-fundamentos-llm/05-tool-calling
+---
+
+## Objetivo
+
+En la lección de *tool calling* viste que el modelo **propone** una llamada y tu código la **ejecuta**. Un agente es, en esencia, ese ciclo repetido hasta que el modelo da una respuesta final. Aquí implementas ese bucle, con las protecciones que lo hacen usable en producción.
+
+No necesitas ninguna clave de API: el modelo es un `MockLLM` con un guion fijo, así que los resultados son reproducibles.
+
+## El bucle
+
+<Diagram
+  caption="El bucle de un agente: el modelo propone, tu código ejecuta, y se repite hasta la respuesta final o el límite de pasos."
+  code={`flowchart TD
+  A["Mensaje del usuario"] --> B["Llamar al modelo"]
+  B --> C{"¿Pide herramientas?"}
+  C -- "no" --> D["Respuesta final"]
+  C -- "sí" --> E["Ejecutar cada herramienta"]
+  E --> F["Añadir resultados a la conversación"]
+  F --> G{"¿Quedan pasos?"}
+  G -- "sí" --> B
+  G -- "no" --> H["Detener: max_steps"]`}
+/>
+
+## Qué tienes que hacer
+
+Implementa `run_agent(llm, tools, question, max_steps=5)`:
+
+- `llm` tiene un método `generate(messages, tools=None)` que devuelve un `LLMResponse` con `text` y `tool_calls` (una lista de `ToolCall` con `id`, `name` y `arguments`).
+- `tools` es un diccionario `{nombre: función}`. Se llama con los argumentos como parámetros con nombre: `tools[nombre](**arguments)`.
+- La conversación es una lista de `Message`. Empieza con `Message("user", question)`.
+
+Reglas:
+
+1. Cada vuelta del bucle es **una llamada al modelo** (un «paso»), con un máximo de `max_steps`.
+2. Si el modelo no pide herramientas, su `text` es la respuesta: devuelve un `AgentResult` con `stopped="final"`.
+3. Si pide herramientas, añade a la conversación el mensaje del asistente (con sus `tool_calls`) y luego, **en el orden en que se pidieron**, un mensaje `Message("tool", resultado, tool_call_id=...)` por cada una. El resultado es siempre una cadena de texto.
+4. Una herramienta que **no existe** o que **lanza una excepción** no debe romper el agente: su resultado es un texto que empieza por `error:` y el bucle continúa.
+5. Si se agotan los pasos sin respuesta final, devuelve `AgentResult(answer=None, ...)` con `stopped="max_steps"` y `steps` igual a `max_steps`.
+6. Registra en `trace` una entrada por cada herramienta ejecutada: `{"tool": nombre, "arguments": {...}, "result": texto}`.
+
+## Ejemplo
+
+```python
+from ragkit.llm import MockLLM
+
+llm = MockLLM(script=[
+    {"tool": "buscar", "args": {"consulta": "plazo de devolución"}},
+    "Tienes 14 días naturales desde la entrega.",
+])
+tools = {"buscar": lambda consulta: "Los particulares tienen 14 días naturales."}
+
+resultado = run_agent(llm, tools, "¿Cuántos días tengo para devolver?")
+print(resultado.answer)   # Tienes 14 días naturales desde la entrega.
+print(resultado.steps)    # 2
+```
+
+<Callout type="aviso" title="Por qué importan el límite de pasos y los errores">
+
+Sin `max_steps`, un modelo que se equivoca y pide la misma herramienta una y otra vez genera un bucle infinito que **consume tokens y dinero** sin parar. Y si una excepción de una herramienta rompe el agente, el usuario ve un fallo en lugar de una respuesta. Devolver el error al modelo como texto le da la oportunidad de corregirse. Es la protección más básica de un agente en producción (módulos 10 y 17).
+
+</Callout>
