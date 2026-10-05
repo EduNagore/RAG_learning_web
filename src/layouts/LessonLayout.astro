@@ -1,0 +1,141 @@
+---
+import 'katex/dist/katex.min.css';
+import type { MarkdownHeading } from 'astro';
+import BaseLayout from './BaseLayout.astro';
+import Sidebar from '../components/layout/Sidebar.astro';
+import Toc from '../components/layout/Toc.astro';
+import Breadcrumbs from '../components/layout/Breadcrumbs.astro';
+import SourceList from '../components/content/SourceList.astro';
+import ReadToggle from '../components/progress/ReadToggle';
+import { lessonHref, type Lesson, type Module } from '../lib/content';
+import { url } from '../lib/url';
+
+interface Props {
+  lesson: Lesson;
+  module: Module;
+  headings: MarkdownHeading[];
+  prev?: Lesson;
+  next?: Lesson;
+  prerequisites: Lesson[];
+}
+const { lesson, module, headings, prev, next, prerequisites } = Astro.props;
+const { data } = lesson;
+
+const reviewed = data.lastReviewed.toISOString().slice(0, 10);
+const volatilityLabel = { low: 'Estable', medium: 'Cambia a veces', high: 'Cambia con rapidez' }[
+  data.volatility
+];
+---
+
+<BaseLayout title={data.title} description={data.description} wide>
+  <div class="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)_14rem]">
+    <aside class="lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto">
+      <details class="rounded-lg border border-slate-200 p-3 lg:hidden dark:border-slate-800">
+        <summary class="cursor-pointer font-medium">Índice del curso</summary>
+        <div class="mt-3">
+          <Sidebar currentLessonId={lesson.id} />
+        </div>
+      </details>
+      <div class="hidden lg:block">
+        <Sidebar currentLessonId={lesson.id} />
+      </div>
+    </aside>
+
+    <article data-pagefind-body class="min-w-0">
+      <Breadcrumbs
+        items={[
+          { label: 'Teoría', href: url('/teoria/') },
+          { label: module.data.title, href: url(`/teoria/#${module.id}`) },
+          { label: data.title },
+        ]}
+      />
+      <header class="mb-8">
+        <h1 class="text-3xl font-bold tracking-tight">{data.title}</h1>
+        <p class="mt-2 text-lg text-slate-600 dark:text-slate-400">{data.description}</p>
+        <ul class="mt-4 flex flex-wrap gap-2 text-xs">
+          <li class="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
+            Nivel {data.level}
+          </li>
+          <li class="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+            ~{data.estimatedMinutes} min de lectura
+          </li>
+          <li class="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+            Revisada el {reviewed}
+          </li>
+          <li
+            class:list={[
+              'rounded-full px-2.5 py-1',
+              data.volatility === 'high'
+                ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
+                : 'bg-slate-100 dark:bg-slate-800',
+            ]}
+          >
+            Vigencia: {volatilityLabel}
+          </li>
+        </ul>
+
+        <section class="mt-6 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+          <h2 class="text-sm font-semibold">Al terminar sabrás…</h2>
+          <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
+            {data.objectives.map((o) => (
+              <li>{o}</li>
+            ))}
+          </ul>
+          {prerequisites.length > 0 && (
+            <p class="mt-3 text-sm text-slate-600 dark:text-slate-400">
+              Antes conviene haber leído:{' '}
+              {prerequisites.map((p, i) => (
+                <>
+                  {i > 0 && ', '}
+                  <a
+                    class="text-indigo-700 hover:underline dark:text-indigo-300"
+                    href={lessonHref(p)}
+                  >
+                    {p.data.title}
+                  </a>
+                </>
+              ))}
+            </p>
+          )}
+        </section>
+      </header>
+
+      <div class="prose prose-slate max-w-none dark:prose-invert prose-headings:scroll-mt-24">
+        <slot />
+      </div>
+
+      <SourceList sources={data.sources} lastReviewed={data.lastReviewed} />
+
+      <div class="mt-8 flex flex-wrap items-center justify-between gap-4">
+        <ReadToggle client:load lessonId={lesson.id} />
+      </div>
+
+      <nav aria-label="Lección anterior y siguiente" class="mt-8 grid gap-4 sm:grid-cols-2">
+        {prev ? (
+          <a
+            href={lessonHref(prev)}
+            class="rounded-lg border border-slate-200 p-4 hover:border-indigo-400 dark:border-slate-800"
+          >
+            <span class="text-xs text-slate-500">← Anterior</span>
+            <span class="block font-medium">{prev.data.title}</span>
+          </a>
+        ) : (
+          <span />
+        )}
+        {next && (
+          <a
+            href={lessonHref(next)}
+            class="rounded-lg border border-slate-200 p-4 text-right hover:border-indigo-400 dark:border-slate-800"
+          >
+            <span class="text-xs text-slate-500">Siguiente →</span>
+            <span class="block font-medium">{next.data.title}</span>
+          </a>
+        )}
+      </nav>
+    </article>
+
+    <aside class="hidden xl:sticky xl:top-20 xl:block xl:max-h-[calc(100vh-6rem)] xl:self-start xl:overflow-y-auto">
+      <Toc headings={headings} />
+    </aside>
+  </div>
+</BaseLayout>

@@ -1,0 +1,8 @@
+part: agentes
+order: 14
+title: 'Frameworks de agentes'
+description: 'Panorama comparado de los frameworks principales y criterios para elegir (o no usar) uno.'
+objectives:
+  - 'Comparar frameworks por modelo mental, estado y durabilidad.'
+  - 'Elegir framework según el caso de uso.'
+  - 'Saber cuándo no usar un framework.'

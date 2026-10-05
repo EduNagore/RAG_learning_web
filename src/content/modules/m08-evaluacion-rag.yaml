@@ -1,0 +1,8 @@
+part: rag
+order: 8
+title: 'Evaluación de RAG'
+description: 'Métricas de recuperación y generación, LLM-as-a-judge y construcción de golden sets.'
+objectives:
+  - 'Calcular métricas de recuperación como recall@k, MRR y nDCG.'
+  - 'Medir faithfulness y relevancia con LLM-as-a-judge conociendo sus sesgos.'
+  - 'Construir y mantener un golden set.'

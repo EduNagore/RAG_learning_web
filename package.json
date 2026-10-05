@@ -21,7 +21,20 @@
     "test:labs": "uv run pytest"
   },
   "dependencies": {
-    "astro": "^7.3.5"
+    "@astrojs/markdown-remark": "^7.3.1",
+    "@astrojs/mdx": "^8.0.2",
+    "@astrojs/react": "^7.0.0",
+    "@astrojs/sitemap": "^3.7.4",
+    "@nanostores/react": "^2.0.1",
+    "astro": "^7.3.5",
+    "astro-pagefind": "^2.0.1",
+    "katex": "^0.19.0",
+    "mermaid": "^12.1.0",
+    "nanostores": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
@@ -30,6 +43,8 @@
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "eslint": "^10.12.0",
     "eslint-plugin-astro": "^3.2.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",

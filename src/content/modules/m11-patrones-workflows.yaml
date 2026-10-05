@@ -1,0 +1,8 @@
+part: agentes
+order: 11
+title: 'Patrones de workflows agénticos'
+description: 'Prompt chaining, routing, paralelización, orchestrator-workers y evaluator-optimizer.'
+objectives:
+  - 'Reconocer los cinco patrones básicos de workflow.'
+  - 'Elegir el patrón adecuado para un problema.'
+  - 'Conocer plan-and-execute, ReWOO y LLMCompiler.'

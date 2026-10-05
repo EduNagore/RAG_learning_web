@@ -1,0 +1,8 @@
+part: agentes
+order: 13
+title: 'Protocolos e interoperabilidad'
+description: 'Tool calling, MCP, A2A, Agent Skills y cómo encajan entre sí.'
+objectives:
+  - 'Explicar la arquitectura de MCP.'
+  - 'Explicar A2A y en qué se diferencia de MCP.'
+  - 'Evaluar riesgos de seguridad de los protocolos.'

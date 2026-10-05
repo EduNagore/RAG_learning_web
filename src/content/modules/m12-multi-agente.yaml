@@ -1,0 +1,8 @@
+part: agentes
+order: 12
+title: 'Arquitecturas multi-agente'
+description: 'Cuándo usar multi-agente, topologías, estado compartido y modos de fallo.'
+objectives:
+  - 'Decidir con argumentos si un problema necesita multi-agente.'
+  - 'Comparar topologías supervisor, red, handoffs y blackboard.'
+  - 'Identificar los modos de fallo típicos.'

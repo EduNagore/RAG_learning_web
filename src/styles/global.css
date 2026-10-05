@@ -1,2 +1,69 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+/* Modo oscuro controlado por la clase `dark` en <html> (ver BaseLayout). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  @apply bg-white text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200;
+}
+
+/* Prosa de las lecciones: enlaces y código legibles en ambos temas. */
+.prose {
+  --tw-prose-links: theme(--color-indigo-700);
+}
+.prose a {
+  @apply font-medium text-indigo-700 underline-offset-2 hover:underline dark:text-indigo-300;
+}
+.prose :where(code):not(:where(pre *)) {
+  @apply rounded bg-slate-100 px-1.5 py-0.5 text-[0.9em] font-normal text-slate-800 dark:bg-slate-800 dark:text-slate-100;
+}
+.prose :where(code):not(:where(pre *))::before,
+.prose :where(code):not(:where(pre *))::after {
+  content: none;
+}
+.prose pre {
+  @apply rounded-lg border border-slate-200 dark:border-slate-800;
+}
+/* Shiki genera estilos inline para el tema claro; en oscuro usamos sus variables. */
+html.dark .astro-code,
+html.dark .astro-code span {
+  color: var(--shiki-dark, inherit) !important;
+  background-color: var(--shiki-dark-bg, #0f172a) !important;
+}
+
+/* Enfoque visible para navegación por teclado. */
+:focus-visible {
+  @apply outline-2 outline-offset-2 outline-indigo-600 dark:outline-indigo-400;
+}
+
+/* Marca de lección leída (la activa un script con progress.ts). */
+[data-lesson-id] .read-mark {
+  @apply hidden;
+}
+[data-lesson-id][data-read='true'] .read-mark {
+  @apply inline;
+}

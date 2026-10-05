@@ -1,0 +1,8 @@
+part: rag
+order: 4
+title: 'Índices y bases de datos vectoriales'
+description: 'Búsqueda aproximada de vecinos, índices y cómo elegir una base de datos vectorial.'
+objectives:
+  - 'Explicar HNSW, IVF y PQ y sus trade-offs.'
+  - 'Aplicar filtrado por metadatos correctamente.'
+  - 'Elegir una base de datos vectorial según requisitos.'

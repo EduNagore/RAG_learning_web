@@ -1,0 +1,58 @@
+---
+interface Source {
+  title: string;
+  url: string;
+  type: 'paper' | 'docs' | 'blog' | 'spec' | 'book' | 'video';
+  authors?: string;
+  year: number;
+}
+interface Props {
+  sources: Source[];
+  lastReviewed: Date;
+}
+const { sources, lastReviewed } = Astro.props;
+
+const labels: Record<Source['type'], string> = {
+  paper: 'Paper',
+  docs: 'Documentación',
+  blog: 'Blog técnico',
+  spec: 'Especificación',
+  book: 'Libro',
+  video: 'Vídeo',
+};
+const reviewed = lastReviewed.toISOString().slice(0, 10);
+---
+
+<section
+  class="not-prose mt-10 border-t border-slate-200 pt-6 dark:border-slate-800"
+  aria-labelledby="fuentes"
+>
+  <h2 id="fuentes" class="text-lg font-semibold">
+    Fuentes
+  </h2>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+    Contenido revisado contra estas fuentes el {reviewed}.
+  </p>
+  <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm">
+    {sources.map((s) => (
+      <li>
+        <a
+          href={s.url}
+          rel="noopener noreferrer"
+          target="_blank"
+          class="font-medium text-indigo-700 hover:underline dark:text-indigo-300"
+        >
+          {s.title}
+        </a>
+        <span class="text-slate-500 dark:text-slate-400">
+          {' '}
+          · {s.authors ? `${s.authors}, ` : ''}
+          {s.year}
+        </span>
+        <span class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">
+          {labels[s.type]}
+        </span>
+      </li>
+    ))}
+  </ol>
+</section>

@@ -4,7 +4,9 @@ const PORT = 4321;
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  fullyParallel: true,
+  // Un solo worker: con varios Chromium arrancando a la vez en Windows aparecen parones de ~10 s
+  // por test (sin causa raíz identificada). La suite es pequeña y en serie tarda segundos.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',

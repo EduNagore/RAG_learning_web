@@ -1,0 +1,84 @@
+---
+import {
+  PART_LABELS,
+  getLessonsByModule,
+  getModules,
+  groupByPart,
+  lessonHref,
+} from '../../lib/content';
+import { url } from '../../lib/url';
+
+interface Props {
+  currentLessonId?: string;
+}
+const { currentLessonId } = Astro.props;
+
+const [modules, byModule] = await Promise.all([getModules(), getLessonsByModule()]);
+const currentModule = currentLessonId?.split('/')[0];
+---
+
+<nav aria-label="Índice del curso" class="text-sm">
+  <a
+    href={url('/teoria/')}
+    class="mb-3 block font-semibold text-slate-900 hover:underline dark:text-slate-100"
+  >
+    Índice de teoría
+  </a>
+  {groupByPart(modules).map(([part, mods]) => (
+    <section class="mb-4">
+      <h2 class="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {PART_LABELS[part]}
+      </h2>
+      {mods.map((mod) => {
+        const lessons = byModule.get(mod.id) ?? [];
+        return (
+          <details open={mod.id === currentModule} class="group">
+            <summary class="cursor-pointer list-none rounded px-2 py-1.5 font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+              <span
+                aria-hidden="true"
+                class="mr-1 inline-block transition-transform group-open:rotate-90"
+              >
+                ›
+              </span>
+              {mod.data.title}
+              {lessons.length === 0 && (
+                <span class="ml-1 text-xs font-normal text-slate-400">(próximamente)</span>
+              )}
+            </summary>
+            {lessons.length > 0 && (
+              <ul class="ml-4 border-l border-slate-200 dark:border-slate-800">
+                {lessons.map((lesson) => (
+                  <li data-lesson-id={lesson.id}>
+                    <a
+                      href={lessonHref(lesson)}
+                      aria-current={lesson.id === currentLessonId ? 'page' : undefined}
+                      class:list={[
+                        'block rounded-r px-3 py-1 hover:bg-slate-100 dark:hover:bg-slate-800',
+                        lesson.id === currentLessonId
+                          ? 'bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                          : 'text-slate-600 dark:text-slate-400',
+                      ]}
+                    >
+                      {lesson.data.title}
+                      <span class="read-mark text-emerald-600 dark:text-emerald-400" title="Leída">
+                        ✓
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
+        );
+      })}
+    </section>
+  ))}
+</nav>
+
+<script>
+  import { loadProgress } from '../../lib/progress';
+  const { lessonsRead } = loadProgress();
+  document.querySelectorAll<HTMLElement>('[data-lesson-id]').forEach((el) => {
+    if (el.dataset.lessonId && el.dataset.lessonId in lessonsRead) el.dataset.read = 'true';
+  });
+</script>

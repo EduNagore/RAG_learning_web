@@ -1,0 +1,23 @@
+---
+interface Props {
+  /** Fecha de verificación en formato AAAA-MM (o AAAA-MM-DD). */
+  date: string;
+  title?: string;
+}
+const { date, title = 'Foto del momento' } = Astro.props;
+---
+
+<aside class="not-prose my-6 rounded-lg border border-dashed border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/30">
+  <p class="mb-1 flex flex-wrap items-center gap-2 text-sm font-semibold">
+    <span>{title}</span>
+    <span class="rounded bg-amber-200 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+      verificado a fecha de {date}
+    </span>
+  </p>
+  <div class="text-[0.95rem] leading-relaxed [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
+    <slot />
+  </div>
+  <p class="mt-2 text-xs text-amber-800 dark:text-amber-300">
+    Este contenido cambia con rapidez: contrasta siempre con la fuente oficial antes de decidir.
+  </p>
+</aside>

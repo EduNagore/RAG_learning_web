@@ -1,0 +1,29 @@
+---
+interface Props {
+  type?: 'nota' | 'consejo' | 'aviso' | 'peligro' | 'entrevista';
+  title?: string;
+}
+const { type = 'nota', title } = Astro.props;
+
+const styles = {
+  nota: ['Nota', 'border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40'],
+  consejo: [
+    'Consejo',
+    'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40',
+  ],
+  aviso: ['Aviso', 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40'],
+  peligro: ['Cuidado', 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/40'],
+  entrevista: [
+    'En una entrevista',
+    'border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/40',
+  ],
+} as const;
+const [label, classes] = styles[type];
+---
+
+<aside class={`not-prose my-6 rounded-lg border-l-4 p-4 ${classes}`}>
+  <p class="mb-1 text-sm font-semibold">{title ?? label}</p>
+  <div class="callout-body text-[0.95rem] leading-relaxed [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
+    <slot />
+  </div>
+</aside>

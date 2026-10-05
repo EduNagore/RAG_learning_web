@@ -1,0 +1,55 @@
+---
+import Search from 'astro-pagefind/components/Search.astro';
+import ThemeToggle from './ThemeToggle.astro';
+import { url } from '../../lib/url';
+
+const nav = [
+  { href: url('/teoria/'), label: 'Teoría', match: '/teoria/' },
+  { href: url('/practica/'), label: 'Práctica', match: '/practica/' },
+  { href: url('/proyectos/'), label: 'Proyectos', match: '/proyectos/' },
+  { href: url('/entrevistas/'), label: 'Entrevistas', match: '/entrevistas/' },
+  { href: url('/glosario/'), label: 'Glosario', match: '/glosario/' },
+];
+const path = Astro.url.pathname;
+const isActive = (href: string) => path.startsWith(href);
+---
+
+<header class="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+  <div class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+    <a href={url('/')} class="flex shrink-0 items-center gap-2 font-semibold">
+      <img src={url('favicon.svg')} alt="" width="24" height="24" />
+      <span class="hidden sm:inline">RAG &amp; Multi-Agent Academy</span>
+      <span class="sm:hidden">RMA</span>
+    </a>
+    <nav aria-label="Principal" class="-mx-1 flex-1 overflow-x-auto">
+      <ul class="flex items-center gap-1 whitespace-nowrap">
+        {nav.map((item) => (
+          <li>
+            <a
+              href={item.href}
+              aria-current={isActive(item.href) ? 'page' : undefined}
+              class:list={[
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                isActive(item.href)
+                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+              ]}
+            >
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+    <div class="hidden w-64 md:block">
+      <Search />
+    </div>
+    <a
+      href={url('/buscar/')}
+      class="rounded-md px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 md:hidden dark:text-slate-300 dark:hover:bg-slate-800"
+    >
+      Buscar
+    </a>
+    <ThemeToggle />
+  </div>
+</header>

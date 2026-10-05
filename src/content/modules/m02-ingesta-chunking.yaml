@@ -1,0 +1,8 @@
+part: rag
+order: 2
+title: 'Ingesta y chunking'
+description: 'Cómo convertir documentos reales en fragmentos recuperables sin perder información.'
+objectives:
+  - 'Parsear y limpiar documentos de distintos formatos.'
+  - 'Elegir una estrategia de chunking y justificar tamaño y solapamiento.'
+  - 'Enriquecer los fragmentos con metadatos y contexto.'

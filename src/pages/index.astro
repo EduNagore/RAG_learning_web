@@ -1,19 +1,105 @@
 ---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import {
+  PART_LABELS,
+  getModules,
+  getOrderedLessons,
+  groupByPart,
+  lessonHref,
+} from '../lib/content';
 import { url } from '../lib/url';
-import '../styles/global.css';
+
+const [modules, lessons] = await Promise.all([getModules(), getOrderedLessons()]);
+const lessonList = lessons.map((l) => ({ id: l.id, title: l.data.title, href: lessonHref(l) }));
+
+const cards = [
+  {
+    href: url('/teoria/'),
+    title: 'Teoría',
+    text: 'Lecciones por partes y módulos, con fuentes primarias y fecha de revisión.',
+  },
+  {
+    href: url('/practica/'),
+    title: 'Práctica',
+    text: 'Tests tipo test, modo examen y laboratorios de código que se corrigen solos.',
+  },
+  {
+    href: url('/entrevistas/'),
+    title: 'Entrevistas',
+    text: 'Preguntas, system design y casos de estudio para prepararte para una empresa de IA.',
+  },
+];
 ---
 
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <link rel="icon" type="image/svg+xml" href={url('favicon.svg')} />
-    <title>RAG &amp; Multi-Agent Academy</title>
-  </head>
-  <body class="mx-auto max-w-2xl p-8">
-    <h1 class="text-3xl font-bold">RAG &amp; Multi-Agent Academy</h1>
-    <p class="mt-4">Hello world: el despliegue en GitHub Pages funciona.</p>
-    <img src={url('favicon.svg')} alt="Logo" width="32" height="32" class="mt-4" />
-  </body>
-</html>
+<BaseLayout title="RAG & Multi-Agent Academy">
+  <section class="py-8 text-center">
+    <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">RAG &amp; Multi-Agent Academy</h1>
+    <p class="mx-auto mt-4 max-w-2xl text-lg text-slate-600 dark:text-slate-400">
+      Aprende y practica RAG y sistemas multi-agente, de los fundamentos al nivel que piden las
+      empresas de IA. Todo en tu navegador, sin cuentas ni claves de API.
+    </p>
+    <div class="mt-6 flex flex-wrap justify-center gap-3">
+      <a
+        href={url('/teoria/')}
+        class="rounded-md bg-indigo-600 px-5 py-2.5 font-medium text-white hover:bg-indigo-700"
+      >
+        Empezar el curso
+      </a>
+      <a
+        id="continue"
+        href={url('/teoria/')}
+        hidden
+        data-lessons={JSON.stringify(lessonList)}
+        class="rounded-md border border-slate-300 px-5 py-2.5 font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+      >
+        Continuar
+      </a>
+    </div>
+  </section>
+
+  <section class="mt-8 grid gap-4 md:grid-cols-3">
+    {cards.map((c) => (
+      <a
+        href={c.href}
+        class="rounded-lg border border-slate-200 p-5 hover:border-indigo-400 dark:border-slate-800"
+      >
+        <h2 class="text-lg font-semibold">{c.title}</h2>
+        <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">{c.text}</p>
+      </a>
+    ))}
+  </section>
+
+  <section class="mt-12">
+    <h2 class="text-2xl font-semibold">Ruta de aprendizaje</h2>
+    <ol class="mt-4 grid gap-4 md:grid-cols-2">
+      {groupByPart(modules).map(([part, mods]) => (
+        <li class="rounded-lg border border-slate-200 p-5 dark:border-slate-800">
+          <h3 class="font-semibold">{PART_LABELS[part]}</h3>
+          <ul class="mt-2 list-disc space-y-0.5 pl-5 text-sm text-slate-600 dark:text-slate-400">
+            {mods.map((m) => (
+              <li>{m.data.title}</li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ol>
+  </section>
+</BaseLayout>
+
+<script>
+  import { loadProgress } from '../lib/progress';
+
+  const link = document.getElementById('continue') as HTMLAnchorElement | null;
+  if (link) {
+    const lessons: { id: string; title: string; href: string }[] = JSON.parse(
+      link.dataset.lessons ?? '[]',
+    );
+    const { lessonsRead } = loadProgress();
+    const next = lessons.find((l) => !(l.id in lessonsRead));
+    if (next && Object.keys(lessonsRead).length > 0) {
+      link.href = next.href;
+      link.textContent = `Continuar: ${next.title}`;
+      link.hidden = false;
+    }
+  }
+</script>

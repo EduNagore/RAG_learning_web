@@ -1,0 +1,8 @@
+part: rag
+order: 1
+title: 'Introducción a RAG'
+description: 'Qué es RAG, qué problema resuelve y cómo se compara con fine-tuning y contexto largo.'
+objectives:
+  - 'Explicar el pipeline de indexación, recuperación y generación.'
+  - 'Decidir entre RAG, fine-tuning y contexto largo.'
+  - 'Distinguir Naive, Advanced, Modular y Agentic RAG.'

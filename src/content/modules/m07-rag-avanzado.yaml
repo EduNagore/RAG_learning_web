@@ -1,0 +1,8 @@
+part: rag
+order: 7
+title: 'RAG avanzado'
+description: 'GraphRAG, Self-RAG, CRAG, Agentic RAG y RAG multimodal o sobre datos estructurados.'
+objectives:
+  - 'Explicar cuándo aporta GraphRAG frente a RAG vectorial.'
+  - 'Describir Self-RAG, CRAG y Adaptive-RAG.'
+  - 'Diseñar RAG sobre datos estructurados y multimodales.'

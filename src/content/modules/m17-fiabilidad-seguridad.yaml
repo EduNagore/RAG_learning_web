@@ -1,0 +1,8 @@
+part: agentes
+order: 17
+title: 'Fiabilidad y seguridad en producción'
+description: 'Prompt injection, sandboxing, mínimo privilegio, control de coste y observabilidad.'
+objectives:
+  - 'Explicar prompt injection directa e indirecta y la lethal trifecta.'
+  - 'Aplicar sandboxing y mínimo privilegio.'
+  - 'Controlar coste, bucles y aprobaciones humanas.'

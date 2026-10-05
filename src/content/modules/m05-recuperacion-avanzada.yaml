@@ -1,0 +1,8 @@
+part: rag
+order: 5
+title: 'Recuperación avanzada'
+description: 'Búsqueda híbrida, reranking, transformación de consulta y estrategias de contexto.'
+objectives:
+  - 'Combinar búsqueda léxica y semántica con RRF.'
+  - 'Añadir reranking y transformación de consultas.'
+  - 'Aplicar parent-document y Contextual Retrieval.'

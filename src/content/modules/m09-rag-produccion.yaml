@@ -1,0 +1,8 @@
+part: rag
+order: 9
+title: 'RAG en producción'
+description: 'Latencia, coste, seguridad, observabilidad y operación de sistemas RAG reales.'
+objectives:
+  - 'Reducir latencia y coste con cachés y arquitectura.'
+  - 'Proteger el sistema frente a inyección indirecta y fugas de datos.'
+  - 'Instrumentar trazas y observabilidad.'

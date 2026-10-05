@@ -1,0 +1,73 @@
+---
+interface Props {
+  /** Código Mermaid del diagrama. */
+  code: string;
+  /** Descripción accesible y pie de figura. */
+  caption: string;
+}
+const { code, caption } = Astro.props;
+---
+
+<figure class="not-prose my-8">
+  <div
+    class="mermaid-diagram overflow-x-auto rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+    data-code={code}
+    role="img"
+    aria-label={caption}
+  >
+    <!-- Sin JavaScript se ve el código fuente del diagrama. -->
+    <pre class="text-xs text-slate-600 dark:text-slate-400">{code}</pre>
+  </div>
+  <figcaption class="mt-2 text-center text-sm text-slate-500 dark:text-slate-400">
+    {caption}
+  </figcaption>
+</figure>
+
+<script>
+  // Mermaid es pesado: se importa solo cuando hay un diagrama visible en pantalla.
+  type MermaidApi = typeof import('mermaid').default;
+  let mermaidPromise: Promise<MermaidApi> | undefined;
+  let counter = 0;
+
+  const isDark = () => document.documentElement.classList.contains('dark');
+
+  async function render(el: HTMLElement) {
+    const code = el.dataset.code;
+    if (!code) return;
+    mermaidPromise ??= import('mermaid').then((m) => m.default);
+    const mermaid = await mermaidPromise;
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: isDark() ? 'dark' : 'default',
+    });
+    try {
+      const { svg } = await mermaid.render(`mermaid-${counter++}`, code);
+      el.innerHTML = svg;
+    } catch (err) {
+      console.error('Error al renderizar el diagrama', err);
+    }
+  }
+
+  const diagrams = Array.from(document.querySelectorAll<HTMLElement>('.mermaid-diagram'));
+  const visible = new Set<HTMLElement>();
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const el = entry.target as HTMLElement;
+        observer.unobserve(el);
+        visible.add(el);
+        void render(el);
+      }
+    },
+    { rootMargin: '200px' },
+  );
+  diagrams.forEach((el) => observer.observe(el));
+
+  // Al cambiar de tema se vuelven a dibujar los diagramas ya renderizados.
+  new MutationObserver(() => visible.forEach((el) => void render(el))).observe(
+    document.documentElement,
+    { attributes: true, attributeFilter: ['class'] },
+  );
+</script>
