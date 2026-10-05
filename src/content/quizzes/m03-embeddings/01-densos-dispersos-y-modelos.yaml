@@ -1,0 +1,82 @@
+lesson: m03-embeddings/01-densos-dispersos-y-modelos
+questions:
+  - id: m03-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué diferencia fundamental hay entre un embedding **denso** y uno **disperso**?'
+    options:
+      - 'El denso reparte el significado en todas las dimensiones; el disperso tiene una dimensión por palabra y casi todo ceros.'
+      - 'El denso solo sirve para imágenes y el disperso solo para texto.'
+      - 'No hay ninguna diferencia, son sinónimos.'
+      - 'El denso siempre es más lento y el disperso más preciso.'
+    answer: [0]
+    explanation: 'La representación densa distribuye el significado en todas sus dimensiones y captura paráfrasis; la dispersa asigna una dimensión a cada palabra, por lo que es exacta con términos concretos pero no entiende sinónimos.'
+    ref: '#intuición-dos-formas-de-decir-parecido'
+
+  - id: m03-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué concluye **BEIR** sobre BM25?'
+    options:
+      - 'Que es una línea base robusta que cuesta superar fuera del dominio de entrenamiento de los modelos densos.'
+      - 'Que es siempre peor que cualquier modelo denso.'
+      - 'Que ya no se puede usar con corpus modernos.'
+      - 'Que solo funciona en inglés.'
+    answer: [0]
+    explanation: 'BEIR evaluó recuperación sin entrenamiento específico en 18 conjuntos de datos y encontró que BM25 es una línea base robusta; los mejores resultados medios los lograron los modelos de reordenación e interacción tardía, a un coste alto.'
+    ref: '#lo-que-dice-beir-ningún-enfoque-gana-siempre'
+
+  - id: m03-01-q3
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué criterios sirven para preseleccionar un modelo de embeddings? Marca todos los correctos.'
+    options:
+      - 'Calidad en la tarea de recuperación y en tu idioma.'
+      - 'Longitud máxima de entrada, porque el texto sobrante se trunca.'
+      - 'Dimensión del vector, coste y licencia.'
+      - 'El color del logotipo del proveedor.'
+    answer: [0, 1, 2]
+    explanation: 'La calidad en recuperación e idioma, la longitud máxima, la dimensión, el coste, el alojamiento y la licencia son criterios reales. El logotipo no tiene relación con la calidad del modelo.'
+    ref: '#criterios-para-preseleccionar-candidatos'
+
+  - id: m03-01-q4
+    type: truefalse
+    difficulty: 2
+    prompt: 'El modelo que lidera la media global de MTEB es siempre la mejor opción para tu sistema RAG.'
+    answer: [1]
+    explanation: 'Es falso. La media mezcla tareas que no son la tuya, el idioma y el dominio pueden no coincidir, y los autores de MTEB observan que ningún método domina todas las tareas. Hay que mirar la tarea de recuperación, tu idioma y medir en tus datos.'
+    ref: '#cómo-leer-mteb'
+
+  - id: m03-01-q5
+    type: single
+    difficulty: 2
+    prompt: 'Al consultar la clasificación de MTEB para un sistema RAG, ¿qué columna debes mirar primero?'
+    options:
+      - 'La de recuperación (retrieval), filtrada por tu idioma.'
+      - 'La de clasificación de sentimiento.'
+      - 'La de agrupación de textos.'
+      - 'La media de todas las tareas sin más.'
+    answer: [0]
+    explanation: 'Para RAG importa la tarea de recuperación. La media global mezcla clasificación, agrupación y otras tareas que no reflejan tu caso de uso.'
+    ref: '#cómo-leer-mteb'
+
+  - id: m03-01-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Cambiar de modelo de embeddings obliga a reindexar todo el corpus.'
+    answer: [0]
+    explanation: 'Es verdadero. Los vectores de modelos distintos viven en espacios distintos y no son comparables, así que hay que recalcular todos los embeddings. Por eso el coste de migrar forma parte de la decisión.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m03-01-q7
+    type: single
+    difficulty: 3
+    prompt: '¿Qué es **SPLADE**?'
+    options:
+      - 'Un modelo neuronal que produce representaciones dispersas aprendidas, con expansión de términos, compatibles con índices invertidos.'
+      - 'Una base de datos vectorial.'
+      - 'Un tipo de caché de prompts.'
+      - 'Un algoritmo de troceado de texto.'
+    answer: [0]
+    explanation: 'SPLADE conserva la coincidencia exacta de términos y la eficiencia de los índices invertidos, pero con pesos y expansión aprendidos. No es una base de datos, una caché ni un chunker.'
+    ref: '#dispersas-bm25-y-su-versión-aprendida'

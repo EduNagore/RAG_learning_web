@@ -1,0 +1,85 @@
+lesson: m03-embeddings/02-dimension-matryoshka-cuantizacion
+questions:
+  - id: m03-02-q1
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código (tamaño aproximado de los vectores en GB)?'
+    code: |-
+      N, d = 2_000_000, 768
+      print(N * d * 4 // 10**9)
+    options:
+      - '1'
+      - '3'
+      - '6'
+      - '12'
+    answer: [2]
+    explanation: 'Son N × d × 4 bytes (float32): 2 000 000 × 768 × 4 = 6 144 000 000 bytes, que con la división entera entre mil millones da 6 GB. Con int8 serían cuatro veces menos y en binario treinta y dos veces menos.'
+    ref: '#la-aritmética-del-almacenamiento'
+
+  - id: m03-02-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Cuánto reduce el tamaño de los vectores la cuantización **binaria** respecto a float32?'
+    options:
+      - '32 veces'
+      - '2 veces'
+      - '4 veces'
+      - 'No lo reduce'
+    answer: [0]
+    explanation: 'Pasar de 32 bits a 1 bit por valor reduce el tamaño 32 veces. La cuantización escalar int8, que usa 8 bits, lo reduce 4 veces.'
+    ref: '#cuantización-menos-bytes-por-valor'
+
+  - id: m03-02-q3
+    type: single
+    difficulty: 3
+    prompt: '¿Qué es una representación **Matryoshka**?'
+    options:
+      - 'Un embedding entrenado para que sus primeras dimensiones formen por sí solas una buena representación más pequeña.'
+      - 'Un embedding que se divide en tantos fragmentos como idiomas.'
+      - 'Un método para cifrar vectores.'
+      - 'Un tipo de base de datos de documentos.'
+    answer: [0]
+    explanation: 'Matryoshka Representation Learning entrena representaciones anidadas, como las muñecas rusas, de modo que se pueden usar prefijos de distintos tamaños. Eso permite elegir después el compromiso entre calidad y coste.'
+    ref: '#matryoshka-dimensiones-anidadas'
+
+  - id: m03-02-q4
+    type: truefalse
+    difficulty: 2
+    prompt: 'Cortar las últimas dimensiones de cualquier modelo de embeddings mantiene siempre la calidad de la recuperación.'
+    answer: [1]
+    explanation: 'Es falso. Solo es seguro con modelos entrenados para ello (Matryoshka o los que lo documentan). Truncar otros puede degradar mucho el resultado, por lo que hay que comprobar la documentación y medir.'
+    ref: '#matryoshka-dimensiones-anidadas'
+
+  - id: m03-02-q5
+    type: single
+    difficulty: 3
+    prompt: '¿Cómo se recupera calidad con la cuantización binaria?'
+    options:
+      - 'Recuperando más candidatos de los necesarios con vectores binarios y reordenándolos con el producto escalar de la consulta completa y los vectores cuantizados.'
+      - 'Usando siempre vectores más cortos.'
+      - 'Aumentando la temperatura del modelo.'
+      - 'Borrando los vectores más antiguos.'
+    answer: [0]
+    explanation: 'La reordenación (rescoring) combina la velocidad de la búsqueda binaria con la precisión de un cálculo posterior con la consulta completa sobre unos pocos candidatos.'
+    ref: '#cuantización-menos-bytes-por-valor'
+
+  - id: m03-02-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Tras acortar manualmente un embedding hay que volver a normalizarlo para que el producto escalar equivalga al coseno.'
+    answer: [0]
+    explanation: 'Es verdadero. Al quitar dimensiones la norma deja de ser 1, así que hay que renormalizar el vector; de lo contrario el producto escalar ya no coincide con el coseno.'
+    ref: '#acortar-la-dimensión'
+
+  - id: m03-02-q7
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento de la lección con 28 preguntas, el truncado a 256 dimensiones puntuó más que el de 512. ¿Cómo se interpreta?'
+    options:
+      - 'Como ruido de una muestra muy pequeña: un solo acierto mueve 3,6 puntos, así que no se pueden sacar conclusiones finas.'
+      - 'Como prueba de que menos dimensiones son siempre mejores.'
+      - 'Como un error del lenguaje de programación.'
+      - 'Como prueba de que la cuantización no funciona.'
+    answer: [0]
+    explanation: 'Con tan pocas preguntas las diferencias pequeñas son azar. El experimento enseña el método de medición, no valores universales; hay que repetirlo con más preguntas representativas.'
+    ref: '#medirlo-en-el-laboratorio'
