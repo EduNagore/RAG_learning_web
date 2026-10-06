@@ -15,7 +15,7 @@
 | **Pausa de revisión tras F3** | ✅ superada | El usuario aprobó (2026-10-05, "haz todo lo que queda"): hacer F4–F7 completas |
 | F4 Contenido Parte I (RAG, M01–M09) | ✅ hecha, en `main` y desplegada | 37 lecciones, 22 labs, 287 preguntas |
 | F5 Contenido Parte II (Agentes, M10–M17) | ✅ hecha (en `main` y desplegada) | 63 lecciones en total, 35 labs, 495 preguntas |
-| F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ siguiente | |
+| F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | 🟡 en curso (rama `fase-6-profesional`) | Ver «F6: avance» |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
 Contadores (fin de F5: 63 lecciones, 495 preguntas, 35 labs, 92 tests unitarios, 176 tests pytest, 310 mutantes, 32 e2e). Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 preguntas, 22 labs, 76 tests unitarios, 111 tests pytest de labs, 184 mutantes de labs (todos detectados), 30 e2e, `main` = merge de `fase-4-rag` (6d54145), desplegado y verificado en producción.
@@ -39,6 +39,12 @@ Hecho: ver «F5: HECHA».
 
 ### Siguiente paso
 F6 (rama `fase-6-profesional`): M18 system design (3–4 lecciones, casos de §7.5), `/entrevistas/` (≥80 preguntas ES/EN y ≥6 casos de system design), glosario ES/EN, `/fuentes/`, 5 proyectos en `projects/` + `/proyectos/`, playground opcional «LLM real» (clave solo en `localStorage`), hojas de resumen imprimibles. Después F7 (Lighthouse ≥90, a11y, `content-freshness.yml`, README completo, checklist PLAN §11).
+
+## F6: avance (rama `fase-6-profesional`)
+
+- ✅ M18 (3 lecciones: método, depurar RAG/agente, señales por nivel). ✅ Zona de entrevistas: colecciones `interview` (`src/content/interview/*.yaml`, 80 preguntas ES/EN) y `cases` (`src/content/cases/*.mdx`, 6 casos), página `/entrevistas/` con navegador (filtros, idioma, flashcards) y `/entrevistas/system-design/<caso>/`; el validador exige ≥80 preguntas, ≥6 casos y secciones fijas. e2e en `tests/e2e/interview.spec.ts`.
+- ⬜ **Falta, en este orden:** glosario ES/EN (`/glosario/`), página `/fuentes/` generada de los `sources` de las lecciones, 5 proyectos (`projects/<id>/` + `/proyectos/`), playground «LLM real» opcional (clave solo en `localStorage`; verificar la API vigente en la documentación), hojas de resumen imprimibles por parte, y cierre de F6 (docs, puerta completa, CI, merge a `main`).
+- Notas: al escribir preguntas/casos, citar solo hechos ya verificados en las lecciones; los precios y latencias de los casos son ilustrativos y se rotulan así.
 
 ## F3: HECHA (referencia histórica)
 
