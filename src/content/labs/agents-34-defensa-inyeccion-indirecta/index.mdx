@@ -1,0 +1,47 @@
+---
+title: Defensa frente a inyección indirecta con una puerta de herramientas
+description: Implementa dos defensas estructurales contra la inyección indirecta de prompts, delimitar el contenido no fiable y una puerta de herramientas con lista blanca, aprobación humana y bloqueo de la tríada letal.
+part: agentes
+module: m17-fiabilidad-seguridad
+difficulty: 3
+estimatedMinutes: 45
+concepts:
+  - inyección indirecta
+  - tríada letal
+  - lista blanca
+  - aprobación humana
+packages: []
+hints:
+  - 'En `wrap_untrusted` reemplaza primero el cierre dentro del texto con `text.replace("</datos_no_fiables", "&lt;/datos_no_fiables")` y las comillas dobles de la fuente por simples; luego monta el f-string con los saltos de línea indicados.'
+  - '`observe` solo activa banderas: `tainted = True` si `untrusted`, `has_private = True` si `tool in self.private`. Nunca las desactiva.'
+  - 'En `authorize` respeta el orden de la docstring: primero la lista blanca, después la tríada (externa + contaminado + privado), después la aprobación de herramientas sensibles.'
+  - 'La tríada no mira `approved`: ni siquiera una aprobación manual permite el canal externo.'
+relatedLessons:
+  - m17-fiabilidad-seguridad/01-inyeccion-de-prompts-y-triada-letal
+---
+
+## Objetivo
+
+La **inyección indirecta** aparece cuando un agente lee contenido de terceros (una página, un correo, un documento) y el modelo trata como **instrucciones** el texto que solo debía ser **datos**. No existe hoy una forma de que el modelo distinga con garantías ambas cosas, así que las defensas fiables no intentan «detectar al atacante» sino **limitar lo que puede pasar si el modelo se equivoca**. Implementas dos de esas defensas estructurales:
+
+- `wrap_untrusted(text, source)`: presenta el contenido externo como **datos delimitados**, de modo que no pueda cerrar el delimitador y escapar del bloque. Es una ayuda, **no** una garantía.
+- `ToolGate`: una **puerta de herramientas** que decide, antes de cada llamada, si se ejecuta. Aplica una **lista blanca**, exige **aprobación humana** para acciones sensibles cuando el contexto está contaminado y **rompe la tríada letal**: si el contexto contiene **datos privados** y **contenido no fiable**, se bloquea cualquier **canal hacia el exterior**.
+
+## Qué tienes que hacer
+
+Completa `wrap_untrusted`, `ToolGate.__init__`, `observe` y `authorize` siguiendo las docstrings de `starter.py`. Fíjate en el orden de las reglas de `authorize`, en que la aprobación humana **no anula** el bloqueo de la tríada y en que `observe` solo **activa** banderas.
+
+## Un ejemplo para comprobar a mano
+
+```python
+gate = ToolGate(["leer_correos", "leer_web", "enviar_correo"], private=["leer_correos"], external=["enviar_correo"])
+gate.observe("leer_correos")                 # el contexto ya contiene datos privados
+gate.observe("leer_web", untrusted=True)     # y ahora contenido no fiable
+gate.authorize("enviar_correo")              # {'allow': False, 'reason': 'trifecta'}
+```
+
+<Callout type="nota" title="Por qué una regla estructural y no un detector">
+
+Un detector de frases sospechosas («ignora las instrucciones anteriores») se esquiva con una paráfrasis, otro idioma o una codificación. La puerta de herramientas funciona **aunque el ataque tenga éxito sobre el modelo**: si el modelo, engañado, intenta enviar los datos fuera, la llamada se bloquea. Esa es la diferencia entre prevenir y **contener**.
+
+</Callout>

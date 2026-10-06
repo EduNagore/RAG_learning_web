@@ -1,0 +1,95 @@
+lesson: m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana
+questions:
+  - id: m17-02-q1
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué un sandbox necesita aislar tanto el sistema de archivos como la red?'
+    options:
+      - 'Porque así el agente va más rápido.'
+      - 'Sin aislamiento de red se podrían exfiltrar archivos sensibles; sin aislamiento de archivos, un agente comprometido podría escapar y recuperar acceso a la red.'
+      - 'Porque lo exige el sistema operativo.'
+      - 'Porque los modelos solo entienden archivos.'
+    answer: [1]
+    explanation: 'Cada frontera protege a la otra: la red es el canal de salida y los archivos son lo que hay que proteger y lo que permitiría escapar.'
+    ref: '#sandboxing-archivos-y-red-a-la-vez'
+
+  - id: m17-02-q2
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué aplican al mínimo privilegio de un agente? Marca todo lo correcto.'
+    options:
+      - 'Herramientas definidas por tarea mediante una lista blanca.'
+      - 'Credenciales de alcance mínimo, corta vida y por usuario.'
+      - 'Cargar en el contexto solo los datos necesarios.'
+      - 'Una cuenta de servicio con acceso a todo para simplificar.'
+    answer: [0, 1, 2]
+    explanation: 'Cada capacidad concedida es una capacidad que hereda un atacante que controle el agente; una cuenta amplia compartida es justo lo contrario.'
+    ref: '#mínimo-privilegio'
+
+  - id: m17-02-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué acciones deberían requerir aprobación humana?'
+    options:
+      - 'Cualquier lectura.'
+      - 'Las irreversibles o costosas (enviar, pagar, borrar, publicar, desplegar) y las que salen al exterior con datos privados en el contexto.'
+      - 'Solo las que dure más de un segundo.'
+      - 'Ninguna, el modelo decide.'
+    answer: [1]
+    explanation: 'La pregunta que ordena la decisión es si la acción se puede deshacer; las lecturas sin efectos pueden ser autónomas con límites.'
+    ref: '#reversible-o-irreversible'
+
+  - id: m17-02-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, «preguntar siempre» enviaba al humano las 3 acciones dañinas dentro de 40 preguntas. ¿Qué problema ilustra?'
+    options:
+      - 'Que las preguntas son baratas.'
+      - 'Que las pocas acciones que importan quedan escondidas entre muchas triviales y se tiende a aprobar por inercia.'
+      - 'Que las acciones dañinas no existen.'
+      - 'Que el humano es más rápido que el agente.'
+    answer: [1]
+    explanation: 'Con 3 de 40 preguntas relevantes, la atención por pregunta baja. Preguntar menos y con más riesgo por pregunta mejora la calidad de la supervisión.'
+    ref: '#aprobación-humana-bien-hecha'
+
+  - id: m17-02-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, la combinación con sandbox y lista blanca de red dejó 4 preguntas, todas legítimas. ¿Qué principio de diseño refleja?'
+    options:
+      - 'Que hay que preguntar más.'
+      - 'Que lo mejor es hacer imposible la acción dañina con un control técnico y reservar la aprobación humana como último control.'
+      - 'Que el sandbox sustituye a todo.'
+      - 'Que las acciones dañinas desaparecen solas.'
+    answer: [1]
+    explanation: 'Los envíos inyectados no se pueden ejecutar y por tanto no llegan a preguntarse. La aprobación humana es para lo que sí debe poder ocurrir.'
+    ref: '#aprobación-humana-bien-hecha'
+
+  - id: m17-02-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué la aprobación humana debería apoyarse en ejecución duradera (pausar y reanudar con estado guardado)?'
+    options:
+      - 'Porque la aprobación puede tardar horas y el estado debe conservarse sin mantener un proceso bloqueado.'
+      - 'Porque así el agente gasta más tokens.'
+      - 'Porque lo exige el modelo.'
+      - 'No hace falta ninguna relación.'
+    answer: [0]
+    explanation: 'Con checkpoints el agente se pausa, el humano decide cuando pueda y la ejecución se reanuda sin perder el estado.'
+    ref: '#aprobación-humana-bien-hecha'
+
+  - id: m17-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'La cifra del 84 % de avisos de permiso evitados con sandboxing, reportada por Anthropic en su uso interno, se puede extrapolar a cualquier sistema.'
+    answer: [1]
+    explanation: 'Es falso. Es una cifra de un caso concreto; ilustra que un buen sandbox permite pedir menos permisos, no que valga lo mismo en otros sistemas.'
+    ref: '#sandboxing-archivos-y-red-a-la-vez'
+
+  - id: m17-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Las claves de idempotencia ayudan a que reintentar una acción no duplique pagos o envíos.'
+    answer: [0]
+    explanation: 'Es verdadero. Junto al modo simulación y el borrado lógico, es una técnica que reduce el daño de acciones que de otro modo serían irreversibles.'
+    ref: '#reversible-o-irreversible'

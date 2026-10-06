@@ -1554,6 +1554,158 @@ MUTANTS = [
         '"in_order": indices == sorted(indices),',
         '"in_order": True,',
     ),
+    # --- agents-33-guardas ---
+    (
+        "agents-33-guardas",
+        "max_steps se alcanza en vez de superarse",
+        "if self.steps > self.max_steps:",
+        "if self.steps >= self.max_steps:",
+    ),
+    (
+        "agents-33-guardas",
+        "max_tokens se alcanza en vez de superarse",
+        "self.tokens > self.max_tokens",
+        "self.tokens >= self.max_tokens",
+    ),
+    (
+        "agents-33-guardas",
+        "max_cost se alcanza en vez de superarse",
+        "self.cost > self.max_cost",
+        "self.cost >= self.max_cost",
+    ),
+    (
+        "agents-33-guardas",
+        "el timeout se alcanza en vez de superarse",
+        "> self.timeout_s",
+        ">= self.timeout_s",
+    ),
+    (
+        "agents-33-guardas",
+        "el bucle necesita una repetición más",
+        "if self.seen[key] >= self.max_repeats:",
+        "if self.seen[key] > self.max_repeats:",
+    ),
+    (
+        "agents-33-guardas",
+        "la clave del bucle depende del orden de las claves",
+        "json.dumps(action, sort_keys=True)",
+        "json.dumps(action)",
+    ),
+    (
+        "agents-33-guardas",
+        "el motivo de parada no queda fijado",
+        "if self.stopped is not None:",
+        "if False:",
+    ),
+    (
+        "agents-33-guardas",
+        "check no guarda el motivo",
+        "self.stopped = self._reason(action)\n        return self.stopped",
+        "return self._reason(action)",
+    ),
+    (
+        "agents-33-guardas",
+        "los tokens no se acumulan",
+        "self.tokens += tokens",
+        "pass",
+    ),
+    (
+        "agents-33-guardas",
+        "el coste no se acumula",
+        "self.cost += cost",
+        "pass",
+    ),
+    (
+        "agents-33-guardas",
+        "los tokens se evalúan antes que los pasos",
+        "if self.steps > self.max_steps:",
+        "if self.steps > self.max_steps and not (self.max_tokens is not None and self.tokens > self.max_tokens):",
+    ),
+    (
+        "agents-33-guardas",
+        "una acción None cuenta para el bucle",
+        "if action is not None:\n            key",
+        "if True:\n            key",
+    ),
+    (
+        "agents-33-guardas",
+        "run_guarded ejecuta la acción rechazada",
+        'return {"stopped": reason, "executed": executed}',
+        'return {"stopped": reason, "executed": executed + [step["action"]]}',
+    ),
+    (
+        "agents-33-guardas",
+        "run_guarded no devuelve done",
+        '"stopped": "done"',
+        '"stopped": "finish"',
+    ),
+    # --- agents-34-defensa-inyeccion-indirecta ---
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "el contenido puede cerrar el bloque",
+        'text.replace("</datos_no_fiables", "&lt;/datos_no_fiables")',
+        "text",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "la fuente conserva las comillas dobles",
+        "source.replace('\"', \"'\")",
+        "source",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "observe ignora el contenido no fiable",
+        "if untrusted:",
+        "if False:",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "observe ignora los datos privados",
+        "if tool in self.private:",
+        "if False:",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "no hay lista blanca",
+        "if tool not in self.allowed:",
+        "if False:",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "la tríada solo mira la contaminación",
+        "if tool in self.external and self.tainted and self.has_private:",
+        "if tool in self.external and self.tainted:",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "la tríada solo mira los datos privados",
+        "if tool in self.external and self.tainted and self.has_private:",
+        "if tool in self.external and self.has_private:",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "la aprobación anula la tríada",
+        "if tool in self.external and self.tainted and self.has_private:",
+        "if tool in self.external and self.tainted and self.has_private and not approved:",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "la aprobación no se tiene en cuenta",
+        "self.tainted and not approved",
+        "self.tainted",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "las herramientas sensibles piden aprobación siempre",
+        "if tool in self.sensitive and self.tainted and not approved:",
+        "if tool in self.sensitive and not approved:",
+    ),
+    (
+        "agents-34-defensa-inyeccion-indirecta",
+        "el contexto empieza contaminado",
+        "self.tainted = False",
+        "self.tainted = True",
+    ),
 ]
 
 survivors = []

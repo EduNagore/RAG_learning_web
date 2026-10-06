@@ -1,0 +1,95 @@
+lesson: m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad
+questions:
+  - id: m17-03-q1
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué el coste de un agente atascado crece de forma cuadrática con el número de pasos?'
+    options:
+      - 'Porque cada paso reenvía al modelo todo el historial acumulado, que es más largo en cada vuelta.'
+      - 'Porque el modelo se vuelve más caro con el tiempo.'
+      - 'Porque las herramientas cobran más cada vez.'
+      - 'Porque el precio por token sube con la hora.'
+    answer: [0]
+    explanation: 'El paso n envía el contexto base más lo acumulado en los n-1 anteriores, así que la suma de todos los pasos crece de forma cuadrática.'
+    ref: '#un-experimento-lo-que-cuesta-un-agente-atascado'
+
+  - id: m17-03-q2
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, ¿qué guarda resultó más barata para un agente que repite la misma llamada fallida?'
+    options:
+      - 'Ninguna guarda.'
+      - 'El límite de 20 pasos.'
+      - 'La detección de bucle con max_repeats=3, que paró en el paso 3 con 3 150 tokens.'
+      - 'El presupuesto de 100 000 tokens.'
+    answer: [2]
+    explanation: 'Ataca el patrón del fallo: unas 100 veces menos tokens que sin guardas. Los límites generales cuestan más porque dejan pagar pasos inútiles.'
+    ref: '#un-experimento-lo-que-cuesta-un-agente-atascado'
+
+  - id: m17-03-q3
+    type: single
+    difficulty: 3
+    prompt: 'Un presupuesto de tokens se comprueba tras la llamada al modelo. ¿Qué implica para el techo real de gasto?'
+    options:
+      - 'Que nunca se supera el presupuesto.'
+      - 'Que el techo real es el presupuesto más el gasto de un paso, porque la llamada que lo supera ya está hecha.'
+      - 'Que el presupuesto no sirve.'
+      - 'Que el gasto se divide por dos.'
+    answer: [1]
+    explanation: 'Solo se conoce el consumo de una llamada cuando termina, así que el límite se detecta con un paso de retraso; conviene dejar margen.'
+    ref: '#un-experimento-lo-que-cuesta-un-agente-atascado'
+
+  - id: m17-03-q4
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué guardas se implementan en el laboratorio 33? Marca todas las correctas.'
+    options:
+      - 'Tiempo máximo.'
+      - 'Pasos máximos.'
+      - 'Tokens y coste máximos.'
+      - 'Detección de la misma acción repetida.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Se evalúan en un orden fijo y la primera que se cumple fija el motivo de parada, que queda registrado.'
+    ref: '#las-guardas-una-por-una'
+
+  - id: m17-03-q5
+    type: single
+    difficulty: 3
+    prompt: '¿Cuál es la respuesta correcta según el motivo de parada?'
+    options:
+      - 'Un loop se reintenta siempre igual; un timeout nunca.'
+      - 'Un timeout puede reintentarse; un loop casi nunca, porque repetir lo mismo dará lo mismo.'
+      - 'Todos se reintentan igual.'
+      - 'Ninguno requiere atención.'
+    answer: [1]
+    explanation: 'El motivo condiciona la acción: un timeout suele ser transitorio, un bucle indica un problema de planificación y un exceso de coste pide intervención.'
+    ref: '#las-guardas-una-por-una'
+
+  - id: m17-03-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué una acción con efectos (pagar, enviar) debe llevar una clave de idempotencia?'
+    options:
+      - 'Para que sea más rápida.'
+      - 'Para que reintentar o reanudar desde un checkpoint no la ejecute dos veces.'
+      - 'Para cifrarla.'
+      - 'Para que el modelo la entienda mejor.'
+    answer: [1]
+    explanation: 'Tras un reintento o una reanudación, un paso puede ejecutarse otra vez; la clave evita duplicar el efecto.'
+    ref: '#reintentos-seguros'
+
+  - id: m17-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Es buena idea reintentar un error de validación de argumentos con retroceso exponencial hasta que funcione.'
+    answer: [1]
+    explanation: 'Es falso. Un error de validación no es transitorio: debe volver al modelo como observación para que corrija la llamada.'
+    ref: '#reintentos-seguros'
+
+  - id: m17-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'La tasa de paradas por guarda (loop, max_steps, timeout) es una métrica de salud útil para un agente en producción.'
+    answer: [0]
+    explanation: 'Es verdadero. Una subida de max_steps o de loop tras un despliegue es una regresión que de otro modo nadie ve.'
+    ref: '#observabilidad-lo-que-hay-que-ver'

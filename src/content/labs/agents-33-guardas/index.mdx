@@ -1,0 +1,51 @@
+---
+title: Guardas contra bucles y gasto descontrolado
+description: Implementa las guardas que todo agente en producción necesita (límite de pasos, tokens, coste y tiempo, y detección de bucles) y un ejecutor que las aplica antes de cada acción.
+part: agentes
+module: m17-fiabilidad-seguridad
+difficulty: 3
+estimatedMinutes: 40
+concepts:
+  - guardas
+  - presupuesto
+  - bucles
+  - timeout
+packages: []
+hints:
+  - 'En `__init__` guarda todos los parámetros y pon `self.started = clock()`, `steps = tokens = 0`, `cost = 0.0`, `seen = {}` y `stopped = None`.'
+  - 'En `check`, si `self.stopped` ya no es `None` devuelve ese motivo sin tocar nada. Si no, suma el paso, los tokens y el coste, calcula el motivo y guárdalo en `self.stopped`.'
+  - 'Para el bucle usa `key = json.dumps(action, sort_keys=True)` y un diccionario `seen` de contadores; para cuando el contador alcance `max_repeats`.'
+  - 'En `run_guarded` llama a `guard.check(...)` ANTES de añadir la acción a `executed`; si devuelve un motivo, retorna sin ejecutarla.'
+relatedLessons:
+  - m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad
+---
+
+## Objetivo
+
+Un agente es un bucle que decide solo cuántas veces repetirse. Sin límites, un fallo tonto (una herramienta que siempre devuelve el mismo error, un plan que no converge) se convierte en un **bucle infinito que gasta dinero**. Es el riesgo que la lista de OWASP para aplicaciones con LLM llama *consumo no acotado*. Implementas las **guardas** que lo contienen: un presupuesto de pasos, tokens, coste y tiempo y un detector de bucles.
+
+## Qué tienes que hacer
+
+Completa la clase `AgentGuard` y la función `run_guarded`:
+
+- `check(action, tokens, cost)` se llama tras cada respuesta del modelo. Cuenta un paso, acumula el consumo y devuelve `None` (puede seguir) o el **primer** motivo de parada que se cumpla, en este orden: `"timeout"`, `"max_steps"`, `"max_tokens"`, `"max_cost"`, `"loop"`. Los límites se superan, no se alcanzan: con `max_steps=3` se permiten tres pasos.
+- Una vez que la guarda ha parado, el motivo **queda fijado** y no se cuenta nada más.
+- El reloj se **inyecta** (`clock`) para poder probar el tiempo sin esperar.
+- `run_guarded(next_step, guard)` ejecuta pasos mientras `next_step` devuelva acciones, pasa cada una por la guarda **antes** de ejecutarla y devuelve `{"stopped", "executed"}`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+guard = AgentGuard(max_steps=5, max_repeats=3)
+repetido = lambda i: {"action": {"tool": "buscar", "args": {"q": "x"}}}
+print(run_guarded(repetido, guard))
+# {'stopped': 'loop', 'executed': [{'tool': 'buscar', ...}, {'tool': 'buscar', ...}]}
+```
+
+La tercera petición idéntica se rechaza **antes** de ejecutarse: solo se ejecutan dos.
+
+<Callout type="nota" title="Parar bien también es diseño">
+
+Parar no basta: el agente debe dejar un **estado útil** (qué hizo, por qué paró, qué falta) para que un humano o un reintento controlado pueda continuar. Y cada motivo exige una respuesta distinta: un `timeout` puede reintentarse; un `loop` casi nunca, porque repetir lo mismo dará lo mismo.
+
+</Callout>
