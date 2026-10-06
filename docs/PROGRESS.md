@@ -15,8 +15,8 @@
 | **Pausa de revisión tras F3** | ✅ superada | El usuario aprobó (2026-10-05, "haz todo lo que queda"): hacer F4–F7 completas |
 | F4 Contenido Parte I (RAG, M01–M09) | ✅ hecha, en `main` y desplegada | 37 lecciones, 22 labs, 287 preguntas |
 | F5 Contenido Parte II (Agentes, M10–M17) | ✅ hecha (en `main` y desplegada) | 63 lecciones en total, 35 labs, 495 preguntas |
-| F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | 🟡 en curso (rama `fase-6-profesional`) | Ver «F6: avance» |
-| F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
+| F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ✅ hecha, en `main` y desplegada | 66 lecciones, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos |
+| F7 Pulido (Lighthouse, a11y, freshness workflow, README) | 🟡 hecha en la rama `fase-7-pulido`, pendiente de fusión | |
 
 Contadores (fin de F5: 63 lecciones, 495 preguntas, 35 labs, 92 tests unitarios, 176 tests pytest, 310 mutantes, 32 e2e). Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 preguntas, 22 labs, 76 tests unitarios, 111 tests pytest de labs, 184 mutantes de labs (todos detectados), 30 e2e, `main` = merge de `fase-4-rag` (6d54145), desplegado y verificado en producción.
 
@@ -38,16 +38,24 @@ Hecho: ver «F5: HECHA».
 - Notas de trabajo: lecciones ≥1500 palabras sin código (apuntar a ≈1800 desde el principio); `description`/`objectives` sin «: » sin comillas; mutantes añadidos con Edit anclando en el cierre `]` de `MUTANTS`; Mermaid no admite `;` en notas; `ruff format` cambia el texto de las soluciones (formatea antes de escribir mutantes); `uv` no está en el PATH (usar `.venv/Scripts/…`).
 
 ### Siguiente paso
-F6 (rama `fase-6-profesional`): M18 system design (3–4 lecciones, casos de §7.5), `/entrevistas/` (≥80 preguntas ES/EN y ≥6 casos de system design), glosario ES/EN, `/fuentes/`, 5 proyectos en `projects/` + `/proyectos/`, playground opcional «LLM real» (clave solo en `localStorage`), hojas de resumen imprimibles. Después F7 (Lighthouse ≥90, a11y, `content-freshness.yml`, README completo, checklist PLAN §11).
+Hecho: ver «F6: HECHA».
 
-## F6: HECHA salvo fusión y despliegue (rama `fase-6-profesional`)
+## F6: HECHA (rama `fase-6-profesional` fusionada en `main`, merge 46e99c2; CI y despliegue en verde, URLs verificadas en producción)
 
 - ✅ M18 (3 lecciones). ✅ `/entrevistas/` (80 preguntas ES/EN, navegador con filtros, idioma y flashcards; 6 casos en `/entrevistas/system-design/<caso>/`). ✅ `/glosario/` (69 términos). ✅ `/fuentes/` (agregada de las lecciones). ✅ `/hojas/<parte>/` (hojas imprimibles). ✅ 5 proyectos (`projects/<id>/` + `/proyectos/<id>/`). ✅ Playground opcional `/practica/playground/`.
 - Contadores: 66 lecciones, 519 preguntas de quiz, 35 labs, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos.
-- Pendiente de F6: puerta completa, push, CI, fusión a `main` y verificación en producción (ver el final de este bloque cuando se haga).
+- Puerta pasada (2026-10-06): prettier, eslint, astro check, vitest (105), validate, build (151 páginas), ruff, pytest (176), mutación (310/310), snippets (57 bloques) y 40 e2e.
 
-### Siguiente paso
-F7 (rama `fase-7-pulido`): Lighthouse ≥90 (móvil y escritorio) y accesibilidad (axe en e2e), workflow `content-freshness.yml` (avisa de lecciones con `lastReviewed` antiguo según `volatility`), README completo (cómo desarrollar, añadir lecciones y labs, desplegar), revisión del checklist final de `PLAN.md` §11, enlaces rotos y sitemap.
+## F7: HECHA salvo fusión y despliegue (rama `fase-7-pulido`)
+
+- ✅ Accesibilidad: `tests/e2e/a11y.spec.ts` (axe WCAG A/AA en 18 páginas, tema claro y oscuro, y `prefers-reduced-motion`). Arreglos: contraste de los comentarios de código y del texto secundario en oscuro, números de línea y fondo del editor en oscuro, foco del teclado en el editor y enlaces subrayados dentro de texto.
+- ✅ Lighthouse en local (móvil: Performance 92–100, el resto 100; escritorio: 100 en todo).
+- ✅ `scripts/check-freshness.mjs` (con tests) y `.github/workflows/content-freshness.yml` (mensual y manual: lychee sobre enlaces externos más el informe de frescura, y un issue único que se abre, actualiza o cierra).
+- ✅ `tests/e2e/quality.spec.ts` (Pyodide solo en labs, SEO y sitemap). ✅ README completo.
+- Pendiente: puerta completa, push, CI, fusión a `main` y verificación en producción; después, el proyecto está terminado según `PLAN.md` §12.
+
+### Mantenimiento
+Cada mes llega el informe de frescura; al revisar una lección actualiza sus fuentes y `lastReviewed`. Si aparece una nueva edición de un estándar (como OWASP), mira primero si hay `<Snapshot>` que actualizar.
 
 ## F3: HECHA (referencia histórica)
 

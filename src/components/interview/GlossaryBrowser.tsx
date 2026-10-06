@@ -45,7 +45,7 @@ export default function GlossaryBrowser({ terms }: { terms: GlossaryTerm[] }) {
                       {i > 0 && ', '}
                       <a
                         href={l.href}
-                        className="text-indigo-700 hover:underline dark:text-indigo-300"
+                        className="text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
                       >
                         {l.title}
                       </a>

@@ -55,6 +55,32 @@ html.dark .astro-code span {
   background-color: var(--shiki-dark-bg, #0f172a) !important;
 }
 
+/* Los comentarios de github-dark (#6A737D) no llegan a contraste AA sobre su fondo (#24292e). */
+html .astro-code span[style*='#6A737D'],
+html.dark .astro-code span[style*='#6A737D'] {
+  color: #9ba7b4 !important;
+}
+
+/* En el tema oscuro, slate-500 no llega a contraste AA sobre el fondo: se aclara el texto secundario. */
+html.dark .text-slate-500 {
+  color: #94a3b8;
+}
+
+/* Números de línea de CodeMirror (oneDark) con contraste AA. */
+html.dark .cm-editor .cm-gutters,
+html.dark .cm-editor .cm-gutterElement {
+  color: #b4bccb !important;
+}
+/* Fondo más oscuro y sin línea activa resaltada: los colores de oneDark quedaban por debajo de 4,5:1. */
+html.dark .cm-editor,
+html.dark .cm-editor .cm-gutters {
+  background-color: #161a21 !important;
+}
+html.dark .cm-editor .cm-activeLine,
+html.dark .cm-editor .cm-activeLineGutter {
+  background-color: transparent !important;
+}
+
 /* Enfoque visible para navegación por teclado. */
 :focus-visible {
   @apply outline-2 outline-offset-2 outline-indigo-600 dark:outline-indigo-400;
