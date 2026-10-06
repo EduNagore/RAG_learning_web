@@ -107,4 +107,42 @@ const labs = defineCollection({
   }),
 });
 
-export const collections = { modules, lessons, quizzes, labs };
+const langPair = z.object({ q: z.string().min(10), a: z.string().min(40) });
+
+const interview = defineCollection({
+  // Un fichero por tema: src/content/interview/<tema>.yaml con preguntas en español y en inglés.
+  loader: glob({ pattern: '*.yaml', base: './src/content/interview' }),
+  schema: z.object({
+    title: z.string(),
+    order: z.number().int(),
+    questions: z
+      .array(
+        z.object({
+          id: z.string(),
+          level: z.enum(['junior', 'mid', 'senior']),
+          kind: z.enum(['conceptual', 'design', 'debug']),
+          es: langPair,
+          en: langPair,
+          /** Lecciones donde se explica el tema (ids de la colección lessons). */
+          lessons: z.array(z.string()).default([]),
+        }),
+      )
+      .min(1),
+  }),
+});
+
+const cases = defineCollection({
+  // Casos de system design: src/content/cases/<id>.mdx, servidos en /entrevistas/system-design/<id>/.
+  loader: glob({ pattern: '*.mdx', base: './src/content/cases' }),
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    order: z.number().int(),
+    level: z.enum(['mid', 'senior']),
+    estimatedMinutes: z.number().int().positive(),
+    lessons: z.array(z.string()).default([]),
+    lastReviewed: z.coerce.date(),
+  }),
+});
+
+export const collections = { modules, lessons, quizzes, labs, interview, cases };
