@@ -1,0 +1,70 @@
+name: Content freshness
+
+# Revisión mensual del contenido: enlaces externos rotos y lecciones con la revisión vencida.
+# Abre o actualiza un único issue con el informe. No hace fallar nada: es un aviso.
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  freshness:
+    name: Enlaces y frescura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lecciones con la revisión vencida
+        run: node scripts/check-freshness.mjs --out=freshness.md
+
+      - run: pnpm build
+
+      # Solo enlaces externos: las rutas internas llevan el prefijo del `base` y las cubre el e2e.
+      - name: Enlaces externos rotos
+        id: lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress --scheme https --scheme http --max-retries 2 --timeout 20
+            --accept 200,204,206,403,429 './dist/**/*.html'
+          fail: false
+          format: markdown
+          output: lychee/out.md
+          jobSummary: true
+
+      - name: Abrir o actualizar el issue de revisión
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const freshness = fs.readFileSync('freshness.md', 'utf8');
+            const links = fs.existsSync('lychee/out.md')
+              ? fs.readFileSync('lychee/out.md', 'utf8')
+              : 'No se generó informe de enlaces.';
+            const clean = !freshness.includes('necesitan revisión') && '${{ steps.lychee.outputs.exit_code }}' === '0';
+            const title = 'Revisión de contenido: enlaces y frescura';
+            const body = `${freshness}\n\n## Enlaces externos\n\n${links}\n\n_Generado por \`content-freshness.yml\`._`;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100,
+            });
+            const existing = issues.find((i) => i.title === title && !i.pull_request);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number,
+                body, state: clean ? 'closed' : 'open',
+              });
+            } else if (!clean) {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo, title, body,
+              });
+            }
