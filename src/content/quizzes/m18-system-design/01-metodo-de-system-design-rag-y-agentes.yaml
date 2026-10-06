@@ -1,0 +1,95 @@
+lesson: m18-system-design/01-metodo-de-system-design-rag-y-agentes
+questions:
+  - id: m18-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Por dónde conviene empezar un system design de RAG o de agentes?'
+    options:
+      - 'Por elegir la base de datos vectorial.'
+      - 'Por los requisitos y las preguntas de aclaración: quién lo usa, qué coste tiene un error, volumen, latencia y presupuesto.'
+      - 'Por dibujar el diagrama final.'
+      - 'Por elegir el modelo más grande.'
+    answer: [1]
+    explanation: 'Primero el problema, luego los datos y después la solución. Empezar por la tecnología lleva a resolver un problema distinto del planteado.'
+    ref: '#los-siete-pasos'
+
+  - id: m18-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué orden sigue el método de la lección?'
+    options:
+      - 'Modelo, base de datos, prompt, despliegue.'
+      - 'Requisitos, datos, recuperación, generación, evaluación, operación, coste y riesgos.'
+      - 'Coste, modelo, datos, requisitos.'
+      - 'Evaluación, requisitos, agente, datos.'
+    answer: [1]
+    explanation: 'Los siete pasos llevan del problema a la solución y cierran con operación, coste y riesgos.'
+    ref: '#los-siete-pasos'
+
+  - id: m18-01-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué decide la pregunta «¿quién puede ver qué?»?'
+    options:
+      - 'El tamaño del modelo.'
+      - 'El filtrado por permisos antes de la generación y el aislamiento por inquilino.'
+      - 'El idioma de las respuestas.'
+      - 'El color de la interfaz.'
+    answer: [1]
+    explanation: 'Los permisos condicionan el índice y la recuperación; un índice único sin filtros puede filtrar documentos restringidos al modelo.'
+    ref: '#las-preguntas-de-aclaración-que-más-rinden'
+
+  - id: m18-01-q4
+    type: single
+    difficulty: 3
+    prompt: 'En la estimación de ejemplo, ¿qué dominaba el coste por consulta?'
+    options:
+      - 'Los tokens de salida.'
+      - 'Los tokens de entrada, sobre todo los fragmentos recuperados.'
+      - 'El tráfico del servidor.'
+      - 'El almacenamiento del índice.'
+    answer: [1]
+    explanation: 'Con 1 940 tokens de entrada frente a 250 de salida, las palancas más eficaces fueron recuperar menos y mejor y cachear.'
+    ref: '#estimar-con-números-de-orden-de-magnitud'
+
+  - id: m18-01-q5
+    type: single
+    difficulty: 3
+    prompt: 'Con 7 consultas por segundo en pico, ¿qué conclusión es razonable?'
+    options:
+      - 'Hace falta un sistema distribuido de gran escala.'
+      - 'El tráfico no es el problema; la dificultad está en el coste y la latencia por consulta.'
+      - 'No hace falta medir nada.'
+      - 'Hay que usar un agente.'
+    answer: [1]
+    explanation: 'Estimar evita diseñar para una escala que no existe y concentra el esfuerzo en lo que realmente pesa.'
+    ref: '#estimar-con-números-de-orden-de-magnitud'
+
+  - id: m18-01-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué partes tiene un trade-off bien comunicado? Marca todas las correctas.'
+    options:
+      - 'La decisión tomada.'
+      - 'La alternativa descartada.'
+      - 'El criterio que justifica la elección.'
+      - 'La condición que haría cambiar la decisión.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Nombrar las cuatro partes demuestra criterio; «es el estándar» o «es lo mejor» no justifican nada.'
+    ref: '#cómo-hablar-de-trade-offs'
+
+  - id: m18-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'En una entrevista, justificar por qué no eliges un agente cuando un flujo fijo basta demuestra criterio.'
+    answer: [0]
+    explanation: 'Es verdadero. Se empieza por la solución más simple y se añade complejidad solo si mejora los resultados.'
+    ref: '#rag-simple-flujo-o-agente'
+
+  - id: m18-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una estimación de coste solo es válida si los precios y las latencias son exactos.'
+    answer: [1]
+    explanation: 'Es falso. Basta con órdenes de magnitud y con decir los supuestos; el objetivo es saber qué palanca mueve los números.'
+    ref: '#estimar-con-números-de-orden-de-magnitud'

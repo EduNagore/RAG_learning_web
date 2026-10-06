@@ -1,0 +1,179 @@
+---
+title: Un método para el system design de RAG y agentes
+description: Siete pasos para responder un diseño de sistema con RAG o agentes en una entrevista o en el trabajo, desde los requisitos hasta el coste y los riesgos, con una estimación numérica de ejemplo y un modo de comunicarlo sin perderse.
+module: m18-system-design
+order: 1
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Aplicar un método de siete pasos para estructurar un diseño de RAG o de agentes.
+  - Convertir requisitos vagos en preguntas de aclaración y en requisitos medibles.
+  - Hacer una estimación de orden de magnitud de tráfico, tokens, coste y latencia.
+  - Decidir cuándo basta un flujo de RAG y cuándo se justifica un agente.
+prerequisites:
+  - m09-rag-produccion/03-observabilidad-y-guardrails
+  - m10-fundamentos-agentes/01-que-es-un-agente
+volatility: low
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: Introducing Contextual Retrieval
+    url: https://www.anthropic.com/news/contextual-retrieval
+    type: blog
+    authors: Anthropic
+    year: 2024
+  - title: Demystifying evals for AI agents
+    url: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+    type: blog
+    authors: Anthropic
+    year: 2026
+---
+
+## Intuición: la entrevista evalúa cómo piensas, no qué logos dibujas
+
+Una pregunta de system design («diseña un asistente de soporte sobre documentación interna») no tiene una respuesta correcta. Quien entrevista busca ver si **estructuras** un problema ambiguo, **haces preguntas** antes de proponer, **justificas** cada decisión con un trade-off y **cuantificas** lo que importa. Lo mismo vale en el trabajo: la diferencia entre un prototipo y un sistema es que el segundo tiene requisitos, métricas, presupuesto y un plan para cuando falle.
+
+El error más frecuente es empezar por la tecnología («pondré Qdrant con un reranker y un agente de LangGraph») sin saber quién usa el sistema, qué datos hay, cuánto tolera fallar ni cuánto cuesta. Este método impone un orden: **primero el problema, luego los datos, después la solución**.
+
+## Cómo funciona
+
+### Los siete pasos
+
+1. **Requisitos y preguntas de aclaración.** Quién lo usa, para qué decisiones, qué pasa si se equivoca, cuántos usuarios y consultas, qué latencia y qué presupuesto, qué idiomas, qué restricciones legales o de privacidad. Separa requisitos **funcionales** (qué hace) de **no funcionales** (latencia, coste, disponibilidad, seguridad) y define cómo se medirá el éxito.
+2. **Datos.** Qué fuentes hay, en qué formatos, cuánto volumen, con qué frecuencia cambian, quién puede ver qué (permisos), qué calidad tienen y quién es su dueño. La mayor parte de los fallos de un RAG se origina aquí.
+3. **Recuperación.** Troceado, índices (léxico, denso, híbrido), metadatos y filtros por permisos, reranking, reformulación de consultas. Decide con los datos y las preguntas reales, no por moda.
+4. **Generación.** Modelo, prompt, citas, formato de salida, qué hacer cuando no hay evidencia (abstenerse), y si hace falta **un agente** (herramientas, bucle, memoria) o basta un flujo fijo.
+5. **Evaluación.** Conjunto de preguntas de oro, métricas de recuperación y de generación, evaluación de trayectorias si hay agentes, y evaluación continua en producción (módulos M08 y M16).
+6. **Operación.** Despliegue, actualización del índice, observabilidad, caché, límites, reintentos, degradación elegante y propietarios de guardia.
+7. **Coste, riesgos y evolución.** Coste por consulta y mensual, riesgos de seguridad y privacidad (inyección, fugas, permisos), riesgos de calidad (alucinación, datos obsoletos) y cómo evolucionará el sistema.
+
+Una manera de no perderte es **anunciar el esquema al empezar** («voy a ir de requisitos a datos, recuperación, generación, evaluación, operación y coste») y **volver a él** cuando el diálogo se desvíe.
+
+### Las preguntas de aclaración que más rinden
+
+| Pregunta | Qué decide |
+| --- | --- |
+| ¿Qué coste tiene un error? (consejo legal frente a recomendar una receta) | Nivel de exigencia, citas obligatorias, abstención, revisión humana |
+| ¿Quién puede ver qué? | Filtrado por permisos antes de la generación, aislamiento por inquilino |
+| ¿Cuántas consultas, con qué picos y qué latencia tolera? | Arquitectura, caché, modelo más pequeño, streaming |
+| ¿Cómo y cuándo cambian los documentos? | Estrategia de actualización del índice, versiones, borrados |
+| ¿Hay un conjunto de preguntas reales o un histórico de tickets? | Evaluación y conjunto de oro desde el primer día |
+| ¿Las preguntas son de un solo documento o hay que combinar varios? | Recuperación simple o multi-salto, agente |
+| ¿Qué idiomas y qué formatos (tablas, PDF escaneados)? | Ingesta y modelo de embeddings |
+
+### ¿RAG simple, flujo o agente?
+
+La guía de Anthropic sobre agentes propone empezar por **la solución más simple** y añadir complejidad solo cuando mejora los resultados, distinguiendo entre **flujos de trabajo** (rutas de código predefinidas) y **agentes** (el modelo decide el proceso y las herramientas). Un buen criterio para el diseño:
+
+- **RAG de un paso** si las preguntas se resuelven con uno o dos fragmentos y la latencia importa.
+- **Flujo con pasos fijos** (reformular, recuperar, reordenar, verificar) si hay una estructura estable que se puede programar.
+- **Agente** si el número de pasos depende de la pregunta (multi-salto, uso de varias herramientas) y puedes pagar la latencia, el coste y la menor previsibilidad, con guardas (lección de M17).
+
+En la entrevista, **di explícitamente por qué no eliges un agente** cuando no hace falta: demuestra criterio.
+
+### Estimar con números de orden de magnitud
+
+Un diseño sin números es una opinión. No hace falta precisión, sino **órdenes de magnitud** y saber qué palanca los mueve. El ejemplo siguiente estima un asistente de soporte: 50 000 consultas diarias concentradas en 10 horas, con picos de 5 veces la media; cada consulta envía un prompt de sistema, la pregunta y 5 fragmentos de 300 tokens, y genera 250 tokens. Los **precios y las latencias son ilustrativos** (ajústalos al proveedor y modelo que uses).
+
+```python
+consultas_dia = 50_000
+pico = 5  # el pico de tráfico es 5 veces la media
+horas_activas = 10  # el tráfico se concentra en 10 h
+
+media_s = consultas_dia / (horas_activas * 3600)
+pico_s = media_s * pico
+print(f"consultas por segundo: media {media_s:.2f}, pico {pico_s:.2f}")
+
+# Tokens por consulta (ILUSTRATIVO): sistema + pregunta + 5 fragmentos de 300 tokens + respuesta
+entrada = 400 + 40 + 5 * 300
+salida = 250
+PRECIO_ENTRADA, PRECIO_SALIDA = 3.0, 15.0  # USD por millón de tokens (ILUSTRATIVO)
+
+
+def coste_dia(consultas, entrada, salida):
+    return consultas * (entrada * PRECIO_ENTRADA + salida * PRECIO_SALIDA) / 1e6
+
+
+base = coste_dia(consultas_dia, entrada, salida)
+print(f"tokens por consulta: {entrada} de entrada + {salida} de salida")
+print(f"coste base: {base:,.0f} USD/día ({base * 30:,.0f} USD/mes)")
+
+# Palancas: caché de respuestas (30 % de aciertos), 3 fragmentos en lugar de 5 con reranker
+con_cache = coste_dia(consultas_dia * 0.7, entrada, salida)
+menos_contexto = coste_dia(consultas_dia * 0.7, 400 + 40 + 3 * 300, salida)
+for nombre, valor in (("caché 30 %", con_cache), ("caché + 3 fragmentos", menos_contexto)):
+    print(f"{nombre:<22}{valor:>8,.0f} USD/día  ({valor / base - 1:+.0%})")
+
+# Latencia (ILUSTRATIVA, en ms): recuperación + reranker + primer token + 250 tokens a 80 tokens/s
+partes = {"recuperación": 60, "reranker": 150, "primer token": 500, "generación": 250 / 80 * 1000}
+print("latencia total:", f"{sum(partes.values()):.0f} ms", {k: round(v) for k, v in partes.items()})
+```
+
+Salida (determinista):
+
+```text
+consultas por segundo: media 1.39, pico 6.94
+tokens por consulta: 1940 de entrada + 250 de salida
+coste base: 478 USD/día (14,355 USD/mes)
+caché 30 %                 335 USD/día  (-30%)
+caché + 3 fragmentos       272 USD/día  (-43%)
+latencia total: 3835 ms {'recuperación': 60, 'reranker': 150, 'primer token': 500, 'generación': 3125}
+```
+
+Lo que cuenta de esta estimación:
+
+- **El tráfico no es un problema** (7 consultas por segundo en pico): la dificultad no está en la capacidad sino en el **coste y la latencia por consulta**. Saberlo evita diseñar un sistema distribuido que no hace falta.
+- **El coste lo dominan los tokens de entrada**: 1 940 frente a 250 de salida. Las palancas más eficaces son **recuperar menos y mejor** (reranker, contexto más corto), **cachear** y **elegir modelo** según la dificultad (enrutado).
+- **La latencia la domina la generación** (3,1 s de 3,8 s). Con *streaming* el usuario ve el primer token en torno a 0,7 s: la latencia percibida es mucho menor que la total. Por eso conviene preguntar cuál importa.
+- **Cada palanca tiene su coste**: el reranker añade 150 ms y una dependencia; la caché añade invalidación y el riesgo de servir respuestas obsoletas.
+
+Con la misma estructura se pueden estimar el tamaño del índice (documentos × fragmentos × dimensiones × 4 bytes), el coste de ingesta (fragmentos × tokens × precio de *embeddings*) y el de evaluación (preguntas × intentos × precio).
+
+### Cómo hablar de trade-offs
+
+Un trade-off bien dicho tiene cuatro partes: **la decisión, la alternativa, el criterio y la condición que lo cambiaría**. Ejemplo: «Uso búsqueda híbrida con RRF en lugar de solo densa, porque el corpus tiene códigos de producto y términos exactos que los *embeddings* confunden; si las consultas fueran puramente conceptuales y el corpus homogéneo, la densa bastaría y me ahorraría un índice». Frases que conviene evitar: «es lo mejor», «es el estándar», «lo usa todo el mundo». Frases que suman: «depende de X; si X es A, hago esto; si es B, hago aquello».
+
+## Trade-offs
+
+| Decisión de método | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Empezar por requisitos y datos | Diseño ajustado al problema | Parece lento si te lanzas al diagrama |
+| Estimar con órdenes de magnitud | Revela qué importa (coste, latencia) | Los números son aproximados y dependen de supuestos |
+| Elegir la solución más simple | Menos fallos y coste | Puede quedarse corta; hay que decir cuándo evolucionar |
+| Proponer un agente | Cubre preguntas abiertas | Latencia, coste y previsibilidad peores |
+| Evaluar desde el primer día | Cambios medibles | Exige construir un conjunto de oro |
+
+## Errores comunes en entrevistas y en el trabajo
+
+- **Empezar por el logo o la herramienta** en lugar de por el problema.
+- **No preguntar nada** y resolver un problema distinto del planteado.
+- **Diseñar para una escala que no existe** (sistemas distribuidos para 7 consultas por segundo).
+- **Olvidar los permisos**: indexar todo en un único índice sin filtrar por usuario.
+- **No hablar de evaluación**: «lo probaremos» no es un plan.
+- **Ignorar el coste y la latencia**, o dar números sin decir sus supuestos.
+- **Un agente por defecto**, sin justificar por qué no basta un flujo.
+- **Olvidar la operación:** actualización del índice, observabilidad, qué ocurre cuando el proveedor falla.
+- **Presentar certezas** sobre cifras de rendimiento sin medirlas.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"Diseña un asistente de preguntas y respuestas sobre documentación interna."_ Pista: aclara usuarios, permisos y coste del error; datos; recuperación híbrida con filtros; citas y abstención; evaluación con conjunto de oro; operación; coste.
+- _"¿Cómo decides entre RAG simple, un flujo y un agente?"_ Pista: la solución más simple que cumpla; agente solo si el número de pasos depende de la pregunta y se puede pagar el coste y la latencia.
+- _"¿Cómo estimas el coste de un sistema de RAG?"_ Pista: consultas × tokens de entrada y de salida × precio; los tokens de entrada dominan; palancas: menos contexto, caché, enrutado.
+- _"¿Qué haces si el sistema da respuestas obsoletas?"_ Pista: actualización incremental del índice, fechas de versión en metadatos, borrados, caché con invalidación, evaluación continua.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Método: **requisitos → datos → recuperación → generación → evaluación → operación → coste y riesgos**; anúncialo y vuelve a él.
+- Las **preguntas de aclaración** (coste del error, permisos, volumen, frescura, conjunto de preguntas) deciden la arquitectura.
+- Elige **la solución más simple** que cumpla y di por qué no un agente cuando no hace falta.
+- Estima **órdenes de magnitud**: en el ejemplo, el tráfico era trivial y el coste lo dominaban los tokens de entrada y la latencia la generación.
+- Un trade-off bien dicho nombra **decisión, alternativa, criterio y condición de cambio**.
+
+</KeyTakeaways>
