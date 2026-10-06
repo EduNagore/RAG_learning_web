@@ -1,0 +1,227 @@
+title: Agentes, patrones y memoria
+order: 4
+questions:
+  - id: age-01
+    level: junior
+    kind: conceptual
+    lessons: [m10-fundamentos-agentes/01-que-es-un-agente]
+    es:
+      q: ¿Qué diferencia hay entre un workflow y un agente?
+      a: |-
+        En un workflow el flujo está predefinido en código: los pasos y su orden los decide el programador y el modelo ejecuta tareas dentro de ellos. En un agente es el modelo quien decide dinámicamente qué hacer, qué herramientas usar y cuándo terminar, en un bucle con retroalimentación del entorno.
+
+        Los workflows son más previsibles y baratos; los agentes dan flexibilidad a cambio de coste, latencia y menor control. Se empieza por lo más simple que funcione.
+    en:
+      q: What is the difference between a workflow and an agent?
+      a: |-
+        In a workflow the flow is predefined in code: the programmer decides the steps and their order and the model executes tasks within them. In an agent the model dynamically decides what to do, which tools to use and when to stop, in a loop with feedback from the environment.
+
+        Workflows are more predictable and cheaper; agents give flexibility at the cost of price, latency and less control. Start with the simplest thing that works.
+  - id: age-02
+    level: junior
+    kind: conceptual
+    lessons: [m10-fundamentos-agentes/02-bucle-react-y-herramientas]
+    es:
+      q: Describe el bucle de un agente tipo ReAct.
+      a: |-
+        El programa llama al modelo con el historial y las herramientas. Si el modelo pide una herramienta, el programa la ejecuta, añade la petición y el resultado al historial y vuelve a llamar al modelo. Si responde sin pedir herramientas, esa es la respuesta final.
+
+        Se intercalan razonamiento y acción para que lo observado refine el plan. Siempre hacen falta condiciones de parada: límite de pasos, presupuesto de tokens o tiempo, y aprobación humana cuando proceda.
+    en:
+      q: Describe the loop of a ReAct-style agent.
+      a: |-
+        The program calls the model with the history and the tools. If the model requests a tool, the program runs it, appends the request and result to the history and calls the model again. If it answers without requesting tools, that is the final answer.
+
+        Reasoning and acting are interleaved so observations refine the plan. Stopping conditions are always needed: step limit, token or time budget, and human approval where appropriate.
+  - id: age-03
+    level: mid
+    kind: design
+    lessons: [m10-fundamentos-agentes/02-bucle-react-y-herramientas]
+    es:
+      q: ¿Cómo diseñas buenas herramientas para un agente?
+      a: |-
+        Con nombres y descripciones claras que expliquen cuándo usarlas, esquemas de argumentos estrictos con tipos y enumeraciones, pocas herramientas bien delimitadas en lugar de muchas solapadas, resultados concisos y estructurados y errores informativos que digan cómo corregir la llamada.
+
+        Se validan los argumentos en el programa antes de ejecutar y se prueba cada herramienta con casos de evaluación, porque la interfaz agente-herramienta es un fallo frecuente.
+    en:
+      q: How do you design good tools for an agent?
+      a: |-
+        With clear names and descriptions that explain when to use them, strict argument schemas with types and enums, a few well-delimited tools instead of many overlapping ones, concise structured results and informative errors that say how to fix the call.
+
+        Validate arguments in the program before executing and test each tool with evaluation cases, because the agent-tool interface is a frequent failure point.
+  - id: age-04
+    level: mid
+    kind: conceptual
+    lessons: [m11-patrones-workflows/01-encadenado-routing-y-paralelizacion]
+    es:
+      q: ¿Qué patrones de workflows existen y cuándo usas cada uno?
+      a: |-
+        Encadenado de prompts (tareas secuenciales con comprobaciones), enrutado (clasificar la entrada y dirigirla a un manejador especializado), paralelización (secciones independientes o votación), orquestador-trabajadores (descomposición dinámica) y evaluador-optimizador (generar, criticar y refinar con criterio de parada).
+
+        Se elige por la estructura del problema: pasos fijos, tipos de entrada distintos, trabajo independiente, subtareas imprevisibles o calidad iterativa medible.
+    en:
+      q: What workflow patterns exist and when do you use each?
+      a: |-
+        Prompt chaining (sequential tasks with checks), routing (classify the input and send it to a specialized handler), parallelization (independent sections or voting), orchestrator-workers (dynamic decomposition) and evaluator-optimizer (generate, critique and refine with a stopping criterion).
+
+        Choose by problem structure: fixed steps, distinct input types, independent work, unpredictable subtasks or measurable iterative quality.
+  - id: age-05
+    level: mid
+    kind: design
+    lessons: [m11-patrones-workflows/02-orquestador-workers-y-evaluador-optimizador]
+    es:
+      q: Diseñas un evaluador-optimizador. ¿Cómo evitas que itere indefinidamente o empeore?
+      a: |-
+        Con criterios de evaluación claros y comprobables, un límite máximo de iteraciones, un umbral de calidad objetivo, paciencia (parar si no mejora en n rondas) y un presupuesto de coste. Se conserva la mejor versión y no solo la última.
+
+        Hay evidencia de que los modelos no se autocorrigen bien sin una señal externa, por lo que conviene que el evaluador use información nueva (tests, reglas, herramientas) y no solo su opinión.
+    en:
+      q: You design an evaluator-optimizer. How do you stop it iterating forever or getting worse?
+      a: |-
+        With clear, checkable evaluation criteria, a maximum iteration limit, a target quality threshold, patience (stop if it does not improve in n rounds) and a cost budget. Keep the best version, not just the last one.
+
+        There is evidence that models do not self-correct well without an external signal, so the evaluator should use new information (tests, rules, tools) and not just its own opinion.
+  - id: age-06
+    level: senior
+    kind: conceptual
+    lessons: [m11-patrones-workflows/03-plan-and-execute-rewoo-y-llmcompiler]
+    es:
+      q: Compara ReAct con plan-and-execute, ReWOO y LLMCompiler.
+      a: |-
+        ReAct decide un paso cada vez según lo observado: flexible pero con muchas llamadas al modelo. Plan-and-execute planifica primero y ejecuta después, con replanificación si falla. ReWOO separa planificación, ejecución de herramientas y síntesis, reduciendo tokens (sus autores reportan hasta 5 veces más eficiencia). LLMCompiler planifica un grafo de tareas ejecutables en paralelo, reduciendo latencia (sus autores reportan hasta 3,7 veces).
+
+        Las cifras son de sus artículos y dependen del benchmark; el compromiso es menos adaptación a lo inesperado.
+    en:
+      q: Compare ReAct with plan-and-execute, ReWOO and LLMCompiler.
+      a: |-
+        ReAct decides one step at a time from what it observes: flexible but with many model calls. Plan-and-execute plans first and executes later, with replanning on failure. ReWOO separates planning, tool execution and synthesis, reducing tokens (its authors report up to 5x efficiency). LLMCompiler plans a graph of tasks that can run in parallel, cutting latency (its authors report up to 3.7x).
+
+        The figures come from their papers and depend on the benchmark; the trade-off is less adaptation to the unexpected.
+  - id: age-07
+    level: mid
+    kind: conceptual
+    lessons: [m10-fundamentos-agentes/03-planificacion-y-reflexion]
+    es:
+      q: ¿Funciona la autocorrección de los modelos? ¿Qué es Reflexion?
+      a: |-
+        La autocorrección intrínseca, sin información externa, es poco fiable: hay trabajos que muestran que los modelos no mejoran de forma consistente razonamiento al revisar su propia respuesta. Mejora cuando hay una señal externa (tests, resultados de herramientas, retroalimentación).
+
+        Reflexion convierte esa señal en una reflexión verbal que se guarda en memoria y se usa en el siguiente intento, y mostró mejoras en tareas como programación con tests.
+    en:
+      q: Does model self-correction work? What is Reflexion?
+      a: |-
+        Intrinsic self-correction, without external information, is unreliable: studies show models do not consistently improve reasoning by reviewing their own answer. It improves when there is an external signal (tests, tool results, feedback).
+
+        Reflexion turns that signal into a verbal reflection stored in memory and used in the next attempt, and showed gains on tasks like code generation with tests.
+  - id: age-08
+    level: mid
+    kind: design
+    lessons: [m10-fundamentos-agentes/04-memoria-y-context-engineering]
+    es:
+      q: ¿Qué es el context engineering en agentes y qué técnicas usas?
+      a: |-
+        Es decidir qué información entra en el contexto del modelo en cada paso. Técnicas: recuperación just-in-time (cargar detalles bajo demanda con referencias), compactación del historial, notas persistentes fuera del contexto y sub-agentes con contextos aislados que devuelven resúmenes.
+
+        Se hace porque el contexto es un recurso finito y más tokens no siempre mejoran la calidad (el rendimiento puede degradarse con contextos largos).
+    en:
+      q: What is context engineering for agents and what techniques do you use?
+      a: |-
+        It is deciding what information enters the model's context at each step. Techniques: just-in-time retrieval (load details on demand via references), history compaction, persistent notes outside the context and sub-agents with isolated contexts that return summaries.
+
+        It matters because context is a finite resource and more tokens do not always improve quality (performance can degrade with long contexts).
+  - id: age-09
+    level: senior
+    kind: design
+    lessons: [m15-memoria-estado/03-compactacion-y-aislamiento-de-contexto]
+    es:
+      q: ¿Cómo compactas el historial de un agente sin perder lo importante y cómo lo compruebas?
+      a: |-
+        Con un resumen estructurado (objetivo, restricciones del usuario citadas literalmente, decisiones y su motivo, estado, pendientes y referencias para recargar detalles) más notas externas. Se compacta en hitos o al superar un umbral de uso.
+
+        Se comprueba con hechos canario: se insertan datos conocidos en una conversación, se compacta y se cuenta cuántos sobreviven. La métrica relevante es la retención de lo crítico por token, no el porcentaje de compresión.
+    en:
+      q: How do you compact an agent's history without losing what matters and how do you check it?
+      a: |-
+        With a structured summary (goal, user constraints quoted literally, decisions and their reasons, state, pending items and references to reload details) plus external notes. Compact at milestones or when usage passes a threshold.
+
+        Check with canary facts: insert known data in a conversation, compact and count how many survive. The relevant metric is retention of critical information per token, not the compression ratio.
+  - id: age-10
+    level: mid
+    kind: design
+    lessons: [m15-memoria-estado/02-memoria-a-largo-plazo]
+    es:
+      q: Diseña la memoria a largo plazo de un asistente. ¿Qué problemas debes resolver?
+      a: |-
+        Extraer hechos útiles de las conversaciones, consolidarlos (añadir, actualizar, ignorar o eliminar para evitar duplicados y datos obsoletos) y recuperar solo los relevantes en cada momento. Una memoria que solo añade termina con hechos contradictorios.
+
+        Además: privacidad (que el usuario pueda ver, corregir y borrar), aislamiento por usuario, procedencia, retención limitada y protección frente a envenenamiento, porque contenido malicioso podría guardar recuerdos falsos.
+    en:
+      q: Design the long-term memory of an assistant. What problems must you solve?
+      a: |-
+        Extract useful facts from conversations, consolidate them (add, update, ignore or delete to avoid duplicates and stale data) and retrieve only the relevant ones at each moment. A memory that only appends ends up with contradictory facts.
+
+        Also: privacy (users can view, correct and delete), per-user isolation, provenance, limited retention and protection against poisoning, since malicious content could store false memories.
+  - id: age-11
+    level: senior
+    kind: design
+    lessons: [m15-memoria-estado/01-checkpointing-y-ejecucion-duradera]
+    es:
+      q: ¿Cómo haces que un agente pueda pausarse para aprobación humana y reanudarse?
+      a: |-
+        Con ejecución duradera: el estado se guarda en checkpoints identificados por un hilo, el agente se interrumpe pidiendo la decisión y el proceso puede terminar. Al llegar la respuesta, se carga el último checkpoint y se reanuda.
+
+        Cuidado con los efectos secundarios: el nodo interrumpido puede ejecutarse otra vez desde el principio, por lo que las acciones previas a la pausa deben ser idempotentes (claves de idempotencia) o colocarse después de la aprobación.
+    en:
+      q: How do you let an agent pause for human approval and resume?
+      a: |-
+        With durable execution: state is saved in checkpoints identified by a thread, the agent interrupts asking for the decision and the process can exit. When the answer arrives, load the latest checkpoint and resume.
+
+        Beware of side effects: the interrupted node may run again from the start, so actions before the pause must be idempotent (idempotency keys) or placed after the approval.
+  - id: age-12
+    level: mid
+    kind: debug
+    lessons: [m10-fundamentos-agentes/02-bucle-react-y-herramientas, m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad]
+    es:
+      q: Un agente repite la misma llamada a una herramienta que falla. ¿Qué haces?
+      a: |-
+        A corto plazo, guardas: detectar la misma acción repetida, límites de pasos, tokens y coste, y timeout, devolviendo un estado útil al parar. A medio plazo, arreglar la causa: que el error de la herramienta explique cómo corregir la llamada o indique que no es recuperable, y que el agente pueda escalar o abstenerse.
+
+        Se añade el caso a la evaluación y se vigila el motivo de parada en producción.
+    en:
+      q: An agent keeps repeating the same failing tool call. What do you do?
+      a: |-
+        Short term, guards: detect the same repeated action, limits on steps, tokens and cost, and a timeout, returning a useful state when stopping. Medium term, fix the cause: make the tool error explain how to correct the call or state it is not recoverable, and let the agent escalate or abstain.
+
+        Add the case to the evaluation and monitor the stop reason in production.
+  - id: age-13
+    level: senior
+    kind: design
+    lessons: [m10-fundamentos-agentes/01-que-es-un-agente]
+    es:
+      q: ¿Cómo decides si una tarea necesita un agente?
+      a: |-
+        Si el número y el orden de pasos dependen de la entrada y no se pueden predefinir, si hay herramientas cuyas respuestas cambian el plan y si el valor de la tarea justifica el coste y la menor previsibilidad. Si los pasos son fijos, un workflow es mejor.
+
+        Se compara con una línea base simple en el conjunto de evaluación: un agente solo se justifica si mejora la calidad lo suficiente respecto a coste, latencia y riesgo.
+    en:
+      q: How do you decide whether a task needs an agent?
+      a: |-
+        If the number and order of steps depend on the input and cannot be predefined, if there are tools whose responses change the plan and if the task's value justifies the cost and lower predictability. If steps are fixed, a workflow is better.
+
+        Compare against a simple baseline on the evaluation set: an agent is justified only if it improves quality enough relative to cost, latency and risk.
+  - id: age-14
+    level: mid
+    kind: conceptual
+    lessons: [m10-fundamentos-agentes/04-memoria-y-context-engineering]
+    es:
+      q: ¿Por qué crece de forma cuadrática el coste de un agente largo?
+      a: |-
+        Porque en cada paso se reenvía al modelo todo el historial acumulado: el paso n envía el contexto base más lo de los n-1 pasos anteriores. La suma de todos los pasos crece con el cuadrado del número de pasos.
+
+        Se mitiga con caché de prompt para el prefijo estable, compactación, resultados de herramientas concisos y límites de pasos.
+    en:
+      q: Why does the cost of a long agent grow quadratically?
+      a: |-
+        Because at each step the whole accumulated history is resent to the model: step n sends the base context plus that of the n-1 previous steps. The sum over all steps grows with the square of the number of steps.
+
+        Mitigate with prompt caching for the stable prefix, compaction, concise tool results and step limits.
