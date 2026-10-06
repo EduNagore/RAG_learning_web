@@ -1,0 +1,94 @@
+---
+title: Asistente de código sobre un monorepo
+description: Asistente que responde preguntas y propone cambios en un monorepo grande, con recuperación sobre código, ejecución en un sandbox y evaluación con tests.
+order: 3
+level: senior
+estimatedMinutes: 45
+lessons:
+  - m18-system-design/01-metodo-de-system-design-rag-y-agentes
+  - m10-fundamentos-agentes/02-bucle-react-y-herramientas
+  - m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana
+  - m16-evaluacion-agentes/03-benchmarks-trazas-y-harness
+lastReviewed: 2026-10-06
+---
+
+**Enunciado.** Una empresa tiene un monorepo con unos 5 millones de líneas, cientos de servicios y varios lenguajes. Quiere un asistente que responda «¿dónde se calcula X?», explique código y, en una segunda fase, proponga y pruebe cambios.
+
+## Requisitos
+
+- **Funcionales:** responder preguntas con referencias a archivos y líneas, localizar usos y dependencias, generar parches y ejecutar tests y linters para validarlos, y abrir una propuesta de cambio para revisión humana.
+- **No funcionales:** el código es propiedad intelectual (no puede salir sin control), permisos por repositorio, latencia interactiva para preguntas y minutos para tareas de cambio, coste acotado por tarea y reproducibilidad.
+- **Éxito (a medir):** para preguntas, corrección de las referencias; para cambios, porcentaje de tareas con tests pasando y revisión aceptada, y tiempo ahorrado.
+
+## Preguntas de aclaración
+
+1. ¿Solo lectura (preguntas) o también cambios? Los cambios exigen sandbox, tests y revisión.
+2. ¿Qué cobertura de tests y qué calidad tiene la integración continua? Sin tests fiables no hay señal para un agente.
+3. ¿Qué lenguajes y qué herramientas de análisis ya existen (índice de símbolos, búsqueda de código)?
+4. ¿Hay restricciones sobre enviar código a proveedores externos?
+5. ¿Cómo se dividen los permisos entre equipos y repositorios?
+6. ¿Qué tamaño tienen las tareas típicas (un archivo, varios servicios)?
+
+Supuestos: fase 1 de preguntas con referencias, fase 2 de cambios pequeños con tests; permisos por repositorio; código procesado por un proveedor con acuerdos de confidencialidad.
+
+## Arquitectura
+
+<Diagram
+  caption="Recuperación sobre código y bucle de agente con ejecución aislada para validar cambios."
+  code={`flowchart LR
+  U[Desarrollador] --> A[Agente de código]
+  A --> S[Búsqueda: símbolos, texto y semántica]
+  S --> X[(Índices del repo: símbolos, texto, embeddings por función)]
+  A --> R[Lectura de archivos por rango]
+  A --> W[Sandbox: aplicar parche, ejecutar tests y linters]
+  W --> A
+  A --> P[Propuesta de cambio para revisión humana]
+  A -.-> T[Trazas, tokens y coste]
+  subgraph Ingesta
+    G[Repositorio git] --> C[Análisis sintáctico por lenguaje]
+    C --> X
+  end`}
+/>
+
+**Recuperación sobre código.** El código no se trocea por longitud: se trocea por **unidades sintácticas** (funciones, clases, módulos) usando análisis del árbol sintáctico, y se enriquece cada unidad con su ruta, firma y comentarios. Se combinan tres índices: **símbolos** (definiciones y referencias, exactos y baratos), **texto** (búsqueda léxica con expresiones) y **semántico** (embeddings por función para preguntas conceptuales). El agente elige la herramienta: para «¿dónde se define `calcular_envio`?» basta el índice de símbolos.
+
+**Agente.** Bucle con herramientas pequeñas y claras: buscar símbolos, buscar texto, leer archivo por rango, ver el historial de un archivo, aplicar un parche en el sandbox, ejecutar tests y linters. Los resultados de herramientas son concisos y los errores explican cómo corregir. Contexto gestionado con lectura bajo demanda y notas, no cargando archivos enteros.
+
+**Sandbox.** El código generado se ejecuta en un entorno desechable, sin secretos, con **red restringida** a un caché de dependencias y con límites de CPU, memoria y tiempo. El agente nunca ejecuta en la máquina del desarrollador.
+
+**Salida.** Para preguntas, respuesta con rutas y líneas verificadas (el sistema comprueba que existen). Para cambios, un parche con resultado de tests y una explicación, que se abre como propuesta para **revisión humana**; nunca se fusiona automáticamente.
+
+## Decisiones y trade-offs
+
+| Decisión | Alternativa | Criterio | Qué la cambiaría |
+| --- | --- | --- | --- |
+| Troceado sintáctico y tres índices | Embeddings sobre trozos de longitud fija | El código tiene estructura y las preguntas suelen ser exactas (símbolos) | Con repos pequeños, un solo índice de texto basta |
+| Agente con herramientas | RAG de un paso | Las tareas requieren explorar de forma iterativa y ejecutar | Para preguntas simples, un flujo más barato |
+| Sandbox sin secretos y con red restringida | Ejecución local | El código generado no es de confianza y una inyección en un archivo podría actuar | Nada |
+| Revisión humana obligatoria | Fusión automática con tests | Los tests no cubren todo y el error cuesta | Cambios triviales con cobertura muy alta, con política explícita |
+| Lectura por rango y notas | Cargar archivos completos | El coste del contexto crece de forma cuadrática en agentes largos | Modelos con contexto barato y tareas cortas |
+| Límites de pasos y presupuesto | Sin límites | Un bucle puede gastar mucho | Se ajustan con la distribución real de pasos |
+
+## Evaluación
+
+- **Preguntas:** conjunto de 100–200 preguntas reales de desarrolladores con referencias de oro; se mide si las rutas y líneas devueltas existen y son las correctas.
+- **Cambios:** conjunto de tareas reproducibles (issues pasadas con tests que fallan antes y pasan después, al estilo SWE-bench pero sobre tu repositorio), varios intentos por tarea y métricas pass@1, pass@k y pass^k, además de coste y pasos.
+- **Trayectoria:** restricciones (no tocar archivos fuera de alcance, no desactivar tests), y lectura de transcripciones de los fallos.
+- **Producción:** tasa de aceptación de propuestas, tiempo de revisión y motivos de rechazo.
+
+## Riesgos
+
+- **Fuga de código:** confidencialidad contractual, permisos por repositorio y registro de accesos.
+- **Inyección indirecta:** comentarios, issues o dependencias con instrucciones; el sandbox sin secretos ni red amplia y la revisión humana lo contienen.
+- **Cambios que pasan los tests y rompen algo:** revisión humana, análisis de impacto y límites de alcance.
+- **Trampas en los tests:** el agente modifica o desactiva tests para pasar; se prohíbe por restricción de trayectoria y se detecta en revisión.
+- **Coste descontrolado:** guardas de pasos, tokens y tiempo, con motivos de parada monitorizados.
+- **Sobreconfianza:** se muestra la evidencia (archivos y líneas) y el resultado de los tests.
+
+## Coste
+
+Con **precios ilustrativos**, una pregunta típica cuesta céntimos (unos miles de tokens). Una tarea de cambio puede usar decenas de pasos y, por la repetición del historial, cientos de miles de tokens de entrada: del orden de 0,5 a 2 USD por intento con modelos de gama media a alta (a medir con tu distribución real). A eso se suma el cómputo del sandbox. Palancas: caché de prompt para el prefijo estable, lectura por rango, compactación, un modelo pequeño para la exploración y uno mayor para el parche, y límites de presupuesto por tarea.
+
+## Qué diría una persona senior
+
+Separaría claramente las dos fases: las preguntas con referencias verificables aportan valor rápido y con poco riesgo; los cambios dependen de la calidad de los tests del repositorio, que es el verdadero factor limitante. Construiría primero el conjunto de evaluación con issues pasadas del propio repo, porque los benchmarks públicos no representan su código, y mediría la fiabilidad (pass^k), no solo la capacidad. Y fijaría desde el primer día las restricciones de seguridad: sandbox sin secretos, revisión humana siempre y alcance limitado.
