@@ -1,0 +1,95 @@
+lesson: m11-patrones-workflows/02-orquestador-workers-y-evaluador-optimizador
+questions:
+  - id: m11-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué distingue al patrón orquestador-workers de la paralelización por secciones?'
+    options:
+      - 'Que usa más modelos de lenguaje distintos.'
+      - 'Que las subtareas no están predefinidas: las decide el modelo orquestador en función de la entrada.'
+      - 'Que no necesita un sintetizador.'
+      - 'Que no se puede limitar el número de subtareas.'
+    answer: [1]
+    explanation: 'En la paralelización por secciones el programador fija las subtareas. En orquestador-workers el modelo descompone dinámicamente según la entrada.'
+    ref: '#orquestador-workers'
+
+  - id: m11-02-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué beneficio aporta que los workers trabajen con contexto aislado y devuelvan resúmenes?'
+    options:
+      - 'Que el coste total siempre baja.'
+      - 'Que el contexto del orquestador no se llena con el ruido de la exploración de cada worker.'
+      - 'Que ya no hace falta un sintetizador.'
+      - 'Que los workers nunca fallan.'
+    answer: [1]
+    explanation: 'El aislamiento mantiene limpio el contexto donde se razona al final. En la simulación el coste total fue algo mayor, pero el contexto de síntesis 16 veces menor.'
+    ref: '#orquestador-workers'
+
+  - id: m11-02-q3
+    type: single
+    difficulty: 2
+    prompt: '¿En qué consiste Self-Refine?'
+    options:
+      - 'En entrenar un modelo con aprendizaje por refuerzo.'
+      - 'En que un modelo genera una salida, da retroalimentación sobre ella y la refina de forma iterativa, sin entrenamiento adicional.'
+      - 'En comprimir el prompt.'
+      - 'En votar entre varias muestras.'
+    answer: [1]
+    explanation: 'Self-Refine usa un único modelo en todos los roles (generar, criticar, refinar) sin datos extra ni refuerzo. Sus autores reportan una mejora media de unos 20 puntos absolutos en siete tareas.'
+    ref: '#evaluador-optimizador'
+
+  - id: m11-02-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Cómo se concilian Self-Refine (mejoras reportadas) y Huang et al. (la autocorrección de razonamiento sin feedback externo es débil)?'
+    options:
+      - 'Uno de los dos trabajos está equivocado.'
+      - 'Self-Refine funciona mejor en tareas donde la crítica es informativa (estilo, completitud, criterios explícitos) y es poco fiable cuando corregir exige saber si un razonamiento es correcto; cuanto más objetivo el evaluador, más fiable el bucle.'
+      - 'Que solo uno de ellos usó GPT-4.'
+      - 'No hay relación entre ambos.'
+    answer: [1]
+    explanation: 'No se contradicen: miden cosas distintas. La fiabilidad del bucle depende de que la evaluación se apoye en criterios objetivos o externos.'
+    ref: '#evaluador-optimizador'
+
+  - id: m11-02-q5
+    type: single
+    difficulty: 3
+    prompt: 'En la simulación con rendimientos decrecientes, un presupuesto de 1 500 tokens paró en la vuelta 4 con 0,83, frente a 0,84 tras 8 vueltas. ¿Qué conclusión es adecuada?'
+    options:
+      - 'Hay que ejecutar siempre todas las vueltas.'
+      - 'Se ahorró la mitad del coste a cambio de 0,01 de puntuación: la decisión depende del valor de esa diferencia.'
+      - 'El presupuesto siempre empeora el resultado.'
+      - 'La simulación demuestra que 0,83 es mejor que 0,84.'
+    answer: [1]
+    explanation: 'Con rendimientos decrecientes, las últimas vueltas cuestan casi lo mismo y aportan casi nada. Pararlas es una decisión de coste-beneficio.'
+    ref: '#un-experimento-criterios-de-parada-y-aislamiento-de-contexto'
+
+  - id: m11-02-q6
+    type: single
+    difficulty: 2
+    prompt: 'Si el refinamiento empeora (0,70, 0,60, 0,50), ¿qué debe devolver el bucle?'
+    options:
+      - 'El último borrador, porque es el más reciente.'
+      - 'El mejor borrador visto (0,70).'
+      - 'Un borrador vacío.'
+      - 'La media de los borrados.'
+    answer: [1]
+    explanation: 'Un refinamiento puede degradar la salida. Por eso se conserva y se devuelve el mejor borrador, no el último.'
+    ref: '#criterios-de-parada'
+
+  - id: m11-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'En un orquestador-workers conviene que un worker fallido no tumbe a los demás, y que el orquestador decida qué hacer con el resultado parcial.'
+    answer: [0]
+    explanation: 'Es verdadero. El aislamiento de fallos permite continuar, registrar el error y decidir si reintentar, omitir o avisar.'
+    ref: '#orquestador-workers'
+
+  - id: m11-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un evaluador que solo da opiniones sin criterios externos detecta de forma fiable los errores de razonamiento del generador.'
+    answer: [1]
+    explanation: 'Es falso. Cuanto más objetivo y externo sea el evaluador (tests, reglas, personas), más fiable es el bucle; sin ellos puede no detectar errores o empeorar la respuesta.'
+    ref: '#errores-comunes-en-producción'

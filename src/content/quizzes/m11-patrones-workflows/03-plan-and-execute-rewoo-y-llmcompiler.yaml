@@ -1,0 +1,101 @@
+lesson: m11-patrones-workflows/03-plan-and-execute-rewoo-y-llmcompiler
+questions:
+  - id: m11-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿En qué consiste el patrón plan-and-execute?'
+    options:
+      - 'En llamar al modelo en cada paso para decidir la siguiente acción.'
+      - 'En planificar una vez con el modelo, ejecutar el plan con poca intervención del modelo y resolver al final.'
+      - 'En ejecutar la misma tarea varias veces y votar.'
+      - 'En entrenar un modelo con cada resultado.'
+    answer: [1]
+    explanation: 'Se separan planificar, ejecutar y resolver. Es más barato y auditable que ReAct, pero frágil si los resultados invalidan el plan.'
+    ref: '#plan-and-execute'
+
+  - id: m11-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué propone ReWOO?'
+    options:
+      - 'Desacoplar el razonamiento de las observaciones externas para reducir el consumo de tokens.'
+      - 'Usar más herramientas en cada paso.'
+      - 'Eliminar el modelo de lenguaje.'
+      - 'Votar entre varios planes.'
+    answer: [0]
+    explanation: 'ReWOO (Reasoning WithOut Observation) es un paradigma modular que separa el razonamiento de las observaciones intermedias, evitando repetir el historial en cada vuelta.'
+    ref: '#rewoo-razonar-sin-observaciones-intermedias'
+
+  - id: m11-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué hace LLMCompiler para reducir la latencia frente a ReAct?'
+    options:
+      - 'Construye un plan como grafo de dependencias y ejecuta en paralelo las tareas independientes.'
+      - 'Usa un modelo más grande.'
+      - 'Elimina las herramientas.'
+      - 'Reduce la temperatura a cero.'
+    answer: [0]
+    explanation: 'Un planificador genera el grafo, una unidad de recuperación de tareas las reparte y un ejecutor las corre de forma concurrente cuando no dependen unas de otras.'
+    ref: '#llmcompiler-el-plan-como-grafo-ejecutado-en-paralelo'
+
+  - id: m11-03-q4
+    type: code-output
+    difficulty: 3
+    prompt: 'Un plan tiene tareas A (2 s) y B (3 s) independientes, y C (1 s) que depende de ambas. ¿Cuál es el tiempo mínimo con paralelismo ilimitado?'
+    code: |-
+      duraciones = {"A": 2, "B": 3, "C": 1}
+      fin_A = duraciones["A"]
+      fin_B = duraciones["B"]
+      fin_C = max(fin_A, fin_B) + duraciones["C"]
+      print(fin_C)
+    options:
+      - '6'
+      - '3'
+      - '4'
+      - '5'
+    answer: [2]
+    explanation: 'A y B se ejecutan a la vez y terminan a los 3 s (la más lenta); C empieza entonces y termina a los 4 s. La ruta crítica es B → C. En serie serían 6 s.'
+    ref: '#un-experimento-ruta-crítica-y-tokens-frente-a-react'
+
+  - id: m11-03-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el ejemplo, ¿por qué añadir más trabajadores no baja de 5 s?'
+    options:
+      - 'Porque las herramientas no pueden ejecutarse a la vez.'
+      - 'Porque la ruta crítica (la cadena de dependencias más larga) fija el tiempo mínimo; solo acortarla lo reduce.'
+      - 'Porque el modelo es lento.'
+      - 'Porque el plan tiene ciclos.'
+    answer: [1]
+    explanation: 'La cadena t2 → t4 → t5 suma 3 + 1 + 1 = 5 s y no se puede paralelizar porque cada tarea depende de la anterior.'
+    ref: '#un-experimento-ruta-crítica-y-tokens-frente-a-react'
+
+  - id: m11-03-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué conviene validar de un plan generado por un modelo antes de ejecutarlo? Marca todas las correctas.'
+    options:
+      - 'Que las herramientas mencionadas existen.'
+      - 'Que las dependencias no forman ciclos.'
+      - 'Que las variables referenciadas están definidas por pasos anteriores.'
+      - 'Que el plan tenga siempre el máximo posible de pasos.'
+    answer: [0, 1, 2]
+    explanation: 'Un plan inválido (herramienta inexistente, ciclo, variable sin definir) debe detectarse antes de ejecutar. Más pasos no es mejor: conviene acotar su tamaño.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m11-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'La mejora de 5 veces en eficiencia de tokens reportada por ReWOO es una constante aplicable a cualquier sistema.'
+    answer: [1]
+    explanation: 'Es falso. Depende del número de pasos, del tamaño de los resultados y de los prompts de su configuración; hay que medirlo en cada caso.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m11-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un plan único es adecuado cuando los resultados de cada paso cambian lo que hay que hacer después; en ese caso es mejor ReAct o un plan con replanificación.'
+    answer: [1]
+    explanation: 'Es falso en su primera parte: un plan rígido no se entera de que un resultado invalida los pasos siguientes. En esos casos conviene ReAct o replanificar.'
+    ref: '#cuándo-planificar-de-una-vez-y-cuándo-replanificar'

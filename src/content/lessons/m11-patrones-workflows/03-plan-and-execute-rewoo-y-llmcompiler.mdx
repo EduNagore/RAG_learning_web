@@ -1,0 +1,196 @@
+---
+title: Plan-and-execute, ReWOO y LLMCompiler
+description: Cómo separar la planificación de la ejecución para gastar menos tokens y menos tiempo que un bucle ReAct, con planes como grafos de dependencias que se ejecutan en paralelo, y cuándo conviene volver a replanificar.
+module: m11-patrones-workflows
+order: 3
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Describir el patrón plan-and-execute y sus ventajas e inconvenientes frente a ReAct.
+  - Explicar la idea de ReWOO (razonar sin observaciones intermedias) y la de LLMCompiler (plan como grafo ejecutado en paralelo).
+  - Calcular el tiempo con paralelismo (ruta crítica) y el ahorro de tokens de entrada de estos patrones frente a ReAct.
+  - Decidir cuándo planificar de una vez y cuándo replanificar durante la ejecución.
+prerequisites:
+  - m11-patrones-workflows/02-orquestador-workers-y-evaluador-optimizador
+volatility: low
+lastReviewed: 2026-10-06
+sources:
+  - title: "ReWOO: Decoupling Reasoning from Observations for Efficient Augmented Language Models"
+    url: https://arxiv.org/abs/2305.18323
+    type: paper
+    authors: Xu, Peng, Lei, Mukherjee, Liu, Xu
+    year: 2023
+  - title: An LLM Compiler for Parallel Function Calling
+    url: https://arxiv.org/abs/2312.04511
+    type: paper
+    authors: Kim, Moon, Tabrizi, Lee, Mahoney, Keutzer, Gholami
+    year: 2023
+  - title: "ReAct: Synergizing Reasoning and Acting in Language Models"
+    url: https://arxiv.org/abs/2210.03629
+    type: paper
+    authors: Yao, Zhao, Yu, Du, Shafran, Narasimhan, Cao
+    year: 2022
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Erik S., Barry Zhang (Anthropic)
+    year: 2024
+relatedLabs:
+  - agents-26-orquestador-workers
+---
+
+## Intuición: ¿por qué pensar en cada vuelta si el plan ya se conoce?
+
+Un bucle ReAct llama al modelo **en cada paso**: el modelo piensa, pide una herramienta, ve el resultado y vuelve a pensar. Es flexible, pero tiene dos costes: cada vuelta **reenvía todo el historial** (el coste de entrada crece más rápido que linealmente) y las llamadas a herramientas se hacen **de una en una**, aunque muchas sean independientes y podrían ejecutarse a la vez.
+
+Si la tarea admite un plan razonablemente fiable desde el principio, hay una alternativa: **planificar una vez, ejecutar el plan con poca o ninguna intervención del modelo y resolver al final**. Esa es la familia *plan-and-execute*, y las dos variantes que veremos, ReWOO y LLMCompiler, atacan cada uno de los dos costes.
+
+## Cómo funciona
+
+### Plan-and-execute
+
+El patrón básico tiene tres fases:
+
+1. **Planificar:** una llamada al modelo produce una lista de pasos (con la herramienta y los argumentos de cada uno).
+2. **Ejecutar:** el programa recorre el plan, llamando a las herramientas y guardando los resultados. Un modelo pequeño o código determinista pueden encargarse de esta fase.
+3. **Resolver (o sintetizar):** una llamada final al modelo recibe la pregunta, el plan y los resultados y redacta la respuesta.
+
+Ventajas: **previsible** (el plan se puede mostrar, revisar y aprobar), **barato** (pocas llamadas al modelo grande) y **más fácil de evaluar** (se puntúa el plan y la ejecución por separado). Inconveniente: **frágil si el plan se basa en suposiciones erróneas**; si el resultado del paso 2 invalida el paso 4, un plan rígido no se entera. De ahí la variante con **replanificación**: tras cada paso o cuando algo falla, un modelo decide si el plan sigue siendo válido, y si no, lo rehace.
+
+### ReWOO: razonar sin observaciones intermedias
+
+ReWOO (*Reasoning WithOut Observation*, Xu et al., 2023) propone un paradigma modular que **separa el proceso de razonamiento de las observaciones externas**, con lo que se reduce de forma notable el consumo de tokens. En un bucle intercalado, cada paso vuelve a enviar el prompt y los pares razonamiento-observación anteriores; ReWOO elimina esa repetición: el modelo escribe de golpe un plan que **referencia los resultados futuros mediante variables** (el paso 3 puede decir «usa el resultado del paso 1»), las herramientas se ejecutan sin pasar por el modelo y solo al final se llama a un resolutor con las evidencias. En la práctica se implementa con tres piezas: un planificador, un ejecutor de herramientas y un resolutor.
+
+Los autores reportan en HotpotQA, un benchmark de preguntas de varios saltos, **5 veces más eficiencia en tokens y un 4 % más de precisión**, mayor robustez cuando fallan las herramientas, y que la capacidad de razonamiento se puede transferir de un modelo de 175 000 millones de parámetros (GPT-3.5) a uno de 7 000 millones (LLaMA) mediante ajuste con instrucciones. Son resultados de su configuración de 2023.
+
+### LLMCompiler: el plan como grafo ejecutado en paralelo
+
+LLMCompiler (Kim et al., 2023) ataca la segunda limitación: la ejecución en serie. Su sistema tiene tres componentes: un **planificador de llamadas a funciones** que construye un plan como grafo de dependencias, una **unidad de recuperación de tareas** que las reparte y un **ejecutor** que las corre de forma concurrente. Al conocer qué tareas dependen de cuáles, **las independientes se lanzan a la vez**. Los autores reportan, frente a ReAct, aceleraciones de hasta 3,7 veces en latencia, reducciones de coste de hasta 6,7 veces y una mejora de precisión de alrededor del 9 %, porque se eliminan cuellos de botella secuenciales, llamadas a la API y errores de razonamiento.
+
+<Diagram
+  caption="El plan como grafo: las tareas independientes se ejecutan a la vez y las dependientes esperan a sus entradas."
+  code={`flowchart LR
+  P[Planificador] --> T1[t1: buscar plazo]
+  P --> T2[t2: buscar coste]
+  P --> T3[t3: buscar política]
+  T1 --> T4[t4: comparar]
+  T2 --> T4
+  T3 --> T5[t5: redactar]
+  T4 --> T5
+  T5 --> R[Respuesta]`}
+/>
+
+### Un experimento: ruta crítica y tokens frente a ReAct
+
+El código calcula, para un plan de cinco tareas con dependencias y duraciones **ficticias**, el tiempo secuencial y el tiempo con paralelismo (la **ruta crítica**: la cadena de dependencias más larga), y compara los tokens de entrada de un bucle ReAct con los de un esquema tipo ReWOO bajo supuestos explícitos: 1 000 tokens de base, 500 por resultado de herramienta y un plan de 300 tokens.
+
+```python
+PLAN = {
+    # tarea: (duración en segundos, dependencias)
+    "t1_buscar_plazo": (2.0, []),
+    "t2_buscar_coste": (3.0, []),
+    "t3_buscar_politica": (2.0, []),
+    "t4_comparar": (1.0, ["t1_buscar_plazo", "t2_buscar_coste"]),
+    "t5_redactar": (1.0, ["t3_buscar_politica", "t4_comparar"]),
+}
+
+
+def calendario(plan):
+    """Instante de fin más temprano de cada tarea si las independientes se ejecutan en paralelo."""
+    fin = {}
+    pendientes = dict(plan)
+    while pendientes:
+        listas = [t for t, (_, deps) in pendientes.items() if all(d in fin for d in deps)]
+        assert listas, "ciclo de dependencias"
+        for t in listas:
+            duracion, deps = pendientes.pop(t)
+            fin[t] = max((fin[d] for d in deps), default=0.0) + duracion
+    return fin
+
+
+fin = calendario(PLAN)
+print("secuencial (un paso tras otro, como ReAct):", sum(d for d, _ in PLAN.values()), "s")
+print("DAG con paralelismo (ruta crítica):         ", max(fin.values()), "s")
+for tarea, t in sorted(fin.items(), key=lambda kv: kv[1]):
+    print(f"  {tarea:<20} termina en {t:.1f} s")
+
+# Tokens de entrada: ReAct reenvía el historial en cada vuelta; ReWOO planifica una vez y resuelve una vez.
+base, resultado, plan_texto, pasos = 1000, 500, 300, 5
+react = sum(base + resultado * i for i in range(pasos))
+rewoo = base + (base + plan_texto + resultado * pasos)
+print(f"\ntokens de entrada con {pasos} herramientas: ReAct {react:,} | ReWOO {rewoo:,} ({react / rewoo:.2f}x)")
+```
+
+Salida (determinista):
+
+```text
+secuencial (un paso tras otro, como ReAct): 9.0 s
+DAG con paralelismo (ruta crítica):          5.0 s
+  t1_buscar_plazo      termina en 2.0 s
+  t3_buscar_politica   termina en 2.0 s
+  t2_buscar_coste      termina en 3.0 s
+  t4_comparar          termina en 4.0 s
+  t5_redactar          termina en 5.0 s
+
+tokens de entrada con 5 herramientas: ReAct 10,000 | ReWOO 4,800 (2.08x)
+```
+
+- **La ruta crítica manda:** 9 s en serie se convierten en 5 s, la cadena `t2 → t4 → t5` (3 + 1 + 1). Añadir más trabajadores no baja de ahí: **solo acortar la ruta crítica la reduce**.
+- **Con cinco herramientas, ReAct envía 10 000 tokens de entrada y el esquema tipo ReWOO 4 800 (2,08 veces menos)**, con estos supuestos. El ahorro crece con el número de pasos porque el coste de ReAct es cuadrático. El 5× de los autores corresponde a su configuración y a sus prompts, no es una constante.
+- **El precio de planificar de una vez**: si el resultado de `t1` obligara a cambiar `t3`, este plan no se entera. Es el motivo de que muchos sistemas reales combinen un plan inicial con **replanificación** cuando un resultado es inesperado.
+
+### Cuándo planificar de una vez y cuándo replanificar
+
+| Situación | Enfoque |
+| --- | --- |
+| Pasos predecibles y herramientas fiables | Plan único (ReWOO / plan-and-execute) |
+| Muchas consultas independientes | Plan como grafo con paralelismo (LLMCompiler) |
+| Los resultados cambian lo que hay que hacer | ReAct o plan con replanificación |
+| Acciones irreversibles | Plan visible y aprobado por una persona antes de ejecutar |
+| Herramientas poco fiables | Replanificar ante fallos; no seguir un plan roto |
+
+Un patrón muy usado es **planificar, ejecutar y verificar con puertas**: tras cada paso se comprueba una condición barata (¿devolvió algo?, ¿cumple el esquema?) y solo si falla se llama al modelo para **replanificar** desde ese punto.
+
+### Cómo se escribe un plan que se pueda ejecutar
+
+Para que el ejecutor no tenga que «interpretar», el plan debe ser **estructurado**: una lista de pasos con un identificador, la herramienta, los argumentos y las dependencias, por ejemplo `{"id": "t4", "tool": "comparar", "args": {"a": "#t1", "b": "#t2"}}`, donde `#t1` es una referencia al resultado de otro paso. Con esa estructura, el programa puede **validar** el plan (existencia de herramientas y tipos de argumentos, con el mismo esquema que usas para el *tool calling*), **ordenarlo** topológicamente, detectar ciclos y decidir qué se ejecuta en paralelo. También puede **mostrarlo** a una persona para aprobarlo y guardarlo como parte de la traza. Un plan en lenguaje libre, en cambio, obliga a otra llamada al modelo para entenderlo, que es justo lo que se quería evitar.
+
+## Trade-offs
+
+| Enfoque | Ventaja | Inconveniente |
+| --- | --- | --- |
+| ReAct | Se adapta a cada resultado | Coste cuadrático en tokens; ejecución en serie |
+| Plan-and-execute | Barato, auditable | Frágil si el plan parte de supuestos erróneos |
+| ReWOO | Menos tokens al no repetir el historial | El plan no ve las observaciones intermedias |
+| LLMCompiler | Menos latencia con paralelismo | Requiere un plan con dependencias bien declaradas |
+| Plan con replanificación | Equilibra coste y adaptación | Más lógica de control; cuándo replanificar es una decisión |
+
+## Errores comunes en producción
+
+- **Planes que referencian resultados que no existen.** Valida el plan (herramientas existentes, dependencias sin ciclos, variables definidas) antes de ejecutarlo.
+- **Paralelizar tareas con dependencias ocultas.** Dos escrituras sobre el mismo recurso no son independientes aunque el plan no lo diga.
+- **No registrar el plan ni los resultados intermedios.** Sin ellos, depurar un fallo es adivinar.
+- **Seguir un plan roto.** Si un paso falla o devuelve algo inesperado, hay que parar o replanificar, no continuar con el siguiente.
+- **Plan único para tareas inciertas.** Con resultados que cambian el curso, un plan rígido produce respuestas que no encajan.
+- **Ignorar los límites de concurrencia.** Muchas herramientas a la vez pueden agotar cuotas o saturar servicios.
+- **Esperar el 5× de un artículo.** Los ahorros dependen del número de pasos, del tamaño de los resultados y de los prompts; mide los tuyos.
+- **No acotar el tamaño del plan.** Un planificador sin tope puede proponer docenas de pasos.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo reduces el coste de un agente que usa muchas herramientas?"_ Pista: planificar una vez y ejecutar sin pasar por el modelo en cada paso (ReWOO / plan-and-execute), ejecutar en paralelo lo independiente (LLMCompiler), compactar resultados.
+- _"¿Qué es la ruta crítica de un plan?"_ Pista: la cadena de dependencias más larga; fija el tiempo mínimo aunque haya paralelismo ilimitado.
+- _"¿Cuándo prefieres ReAct a un plan fijo?"_ Pista: cuando los resultados de cada paso cambian lo que hay que hacer después; o tareas muy inciertas.
+- _"¿Cómo combinas plan y adaptación?"_ Pista: plan inicial con puertas de verificación y replanificación solo cuando un paso falla o devuelve algo inesperado.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Plan-and-execute:** planificar una vez, ejecutar y resolver; barato y auditable, pero frágil si los resultados cambian el plan.
+- **ReWOO** separa el razonamiento de las observaciones y evita reenviar el historial: sus autores reportan 5 veces más eficiencia en tokens y +4 % de precisión en HotpotQA.
+- **LLMCompiler** representa el plan como **grafo** y ejecuta en paralelo lo independiente: hasta 3,7× menos latencia y 6,7× menos coste frente a ReAct según sus autores.
+- En el ejemplo, el tiempo cayó de 9 s a 5 s (ruta crítica) y los tokens de entrada de 10 000 a 4 800.
+- Valida los planes, registra todo y **replanifica** cuando un paso falla o sorprende.
+
+</KeyTakeaways>

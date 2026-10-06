@@ -1,0 +1,58 @@
+---
+title: Evaluador-optimizador con criterio de parada
+description: Implementa el bucle en el que un modelo genera un borrador y otro lo evalúa para refinarlo, con cuatro criterios de parada (objetivo, máximo de iteraciones, falta de mejora y presupuesto) y devolviendo siempre el mejor borrador.
+part: agentes
+module: m11-patrones-workflows
+difficulty: 3
+estimatedMinutes: 40
+concepts:
+  - evaluator-optimizer
+  - criterio de parada
+  - presupuesto de tokens
+  - mejor borrador
+packages: []
+hints:
+  - 'El estado del bucle es: `best`, `best_score` (empieza en `float("-inf")`), `feedback` (empieza en `None`), `stale` (iteraciones seguidas sin mejorar) y `tokens`.'
+  - 'Un borrador sustituye al mejor solo si su puntuación es **estrictamente mayor**; si no, suma uno a `stale`. Si mejora, `stale` vuelve a 0.'
+  - 'Comprueba las paradas en este orden: objetivo, falta de mejora (`stale >= patience`), presupuesto (`tokens >= budget_tokens`). Si ninguna salta en ninguna iteración, el motivo es `max_iters`.'
+  - 'Los tokens de cada iteración son `approx_tokens(borrador) + approx_tokens(feedback)`; `approx_tokens` cuenta 1 token por cada 4 caracteres (redondeando hacia arriba).'
+relatedLessons:
+  - m11-patrones-workflows/02-orquestador-workers-y-evaluador-optimizador
+---
+
+## Objetivo
+
+En el patrón **evaluador-optimizador**, un modelo (o una función) **genera** una respuesta y otro la **evalúa** dando una puntuación y una crítica concreta; la crítica vuelve al generador, y el ciclo se repite. Funciona cuando hay **criterios de evaluación claros** y la iteración aporta valor medible. Pero un bucle de refinamiento sin criterios de parada es un sumidero de dinero: más iteraciones no siempre mejoran, y a veces empeoran. Vas a implementar el bucle con **cuatro** formas de parar.
+
+## Qué tienes que hacer
+
+Implementa `refine(generate, evaluate, task, max_iters=3, target=0.9, patience=None, budget_tokens=None)`:
+
+- `generate(task, feedback)` devuelve un borrador (`feedback` es `None` en la primera iteración y la crítica de la anterior después).
+- `evaluate(borrador)` devuelve `(puntuación, feedback)`.
+
+En cada iteración: genera, evalúa, registra `{"iteration": n, "score": puntuación}` en el historial, suma los tokens aproximados (`approx_tokens(borrador) + approx_tokens(feedback)`) y conserva el **mejor borrador** (el primero que alcance la mejor puntuación; un empate no lo sustituye). Después comprueba, **por este orden**, si debe parar:
+
+1. `score >= target` → `"target"`.
+2. `patience` no es `None` y lleva `patience` iteraciones seguidas sin mejorar la mejor puntuación → `"no_improvement"`.
+3. `budget_tokens` no es `None` y los tokens acumulados son `>= budget_tokens` → `"budget"`.
+
+Si se completan `max_iters` iteraciones sin parar antes, el motivo es `"max_iters"`.
+
+Devuelve `{"best", "score", "iterations", "history", "stopped", "tokens"}`, donde `best` y `score` son el mejor borrador y su puntuación (**no** necesariamente los del último intento).
+
+## Un ejemplo para comprobar a mano
+
+```python
+borradores = iter(["borrador A", "borrador B"])
+puntuaciones = iter([0.4, 0.95])
+salida = refine(lambda t, f: next(borradores),
+                lambda d: (next(puntuaciones), "más detalle"), "Describe el reembolso")
+salida["stopped"], salida["iterations"], salida["best"]   # ('target', 2, 'borrador B')
+```
+
+<Callout type="nota" title="Devuelve siempre el mejor, no el último">
+
+Un refinamiento puede **empeorar** (el generador sobrecorrige tras una crítica). Por eso el bucle guarda el mejor borrador visto y lo devuelve aunque el último intento sea peor. Y recuerda la lección de reflexión: el evaluador debe apoyarse en criterios fiables; un evaluador que solo opina como el generador no detecta sus propios errores.
+
+</Callout>

@@ -1,0 +1,52 @@
+---
+title: Workflow de routing
+description: Implementa el patrón routing, que clasifica una consulta con una sola llamada al modelo y la envía al manejador especializado, con una ruta por defecto cuando el modelo no se decide.
+part: agentes
+module: m11-patrones-workflows
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - routing
+  - clasificación con LLM
+  - ruta por defecto
+  - manejadores especializados
+packages: []
+hints:
+  - 'El prompt puede listar las rutas con una línea por ruta (`f"- {nombre}: {descripcion}"`) y terminar con la consulta. Los tests solo comprueban que aparezcan los nombres, las descripciones y la consulta.'
+  - 'Para buscar una palabra completa usa `re.search(rf"\b{re.escape(nombre)}\b", texto, flags=re.IGNORECASE)`. Recorre las rutas en el orden del diccionario y devuelve la primera que coincida.'
+  - 'La respuesta del modelo puede ser `None`: usa `(respuesta.text or "")`.'
+  - 'En `route_and_run`, si la ruta clasificada no está en `handlers`, sustitúyela por `default` antes de ejecutar y devuélvela así.'
+relatedLessons:
+  - m11-patrones-workflows/01-encadenado-routing-y-paralelizacion
+---
+
+## Objetivo
+
+El **routing** clasifica la entrada y la dirige a un proceso especializado. Es un workflow, no un agente: el código decide el flujo y el modelo solo hace de **clasificador**. Funciona bien cuando hay categorías distintas que se manejan mejor por separado (consultas de devoluciones, de envíos, de facturas) y la clasificación se puede hacer con precisión.
+
+## Qué tienes que hacer
+
+### `build_router_prompt(query, routes)`
+
+`routes` es un diccionario `nombre → descripción`. Devuelve el texto que se enviará al modelo: debe incluir cada ruta con su descripción, la consulta y la instrucción de responder solo con el nombre de la ruta.
+
+### `classify(query, routes, llm, default="otros")`
+
+Hace **una única** llamada a `llm.generate` con ese prompt y devuelve la **primera ruta** (según el orden de `routes`) que aparezca **como palabra completa** en la respuesta, sin distinguir mayúsculas. Si no aparece ninguna, devuelve `default`.
+
+### `route_and_run(query, routes, handlers, llm, default="otros")`
+
+Clasifica y ejecuta `handlers[ruta](query)`. Devuelve `{"route": ruta, "result": resultado}`. Si la ruta elegida no tiene manejador, se usa `default`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+rutas = {"devoluciones": "plazos y reembolsos", "envios": "costes y seguimiento"}
+classify("¿Cuánto tarda el reembolso?", rutas, MockLLM(script=["Devoluciones."]))   # 'devoluciones'
+```
+
+<Callout type="nota" title="Siempre una ruta por defecto">
+
+Un clasificador se equivoca o duda. Sin una ruta de reserva («otros», una persona, un manejador genérico) el sistema se rompe justo con las consultas más raras. Y conviene **registrar** qué ruta se eligió: es la primera pista cuando una respuesta sale mal.
+
+</Callout>

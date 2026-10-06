@@ -1,0 +1,45 @@
+---
+title: Paralelización con votación
+description: Implementa la votación por mayoría sobre varias muestras de un modelo (self-consistency), con normalización de respuestas, medida de acuerdo y abstención cuando el consenso es bajo.
+part: agentes
+module: m11-patrones-workflows
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - paralelización (voting)
+  - self-consistency
+  - medida de acuerdo
+  - abstención por bajo consenso
+packages: []
+hints:
+  - 'Lleva dos diccionarios: `conteos[normalizada] += 1` y `primera[normalizada] = original` (solo la primera vez, con `setdefault`).'
+  - 'Para el empate, entre las claves con el máximo de votos elige la que aparezca antes: recorre `conteos` en orden de inserción y quédate con la primera con el máximo.'
+  - 'El acuerdo es `conteos[normalize(ganador)] / len(answers)`. Cuida el caso de lista vacía.'
+  - 'En `sample_and_vote` filtra las extracciones `None` antes de votar, y calcula el acuerdo sobre las que quedan.'
+relatedLessons:
+  - m11-patrones-workflows/01-encadenado-routing-y-paralelizacion
+---
+
+## Objetivo
+
+La **paralelización** tiene dos variantes. En el *sectioning* se reparte una tarea en partes independientes. En el *voting* se ejecuta **la misma tarea varias veces** para obtener respuestas diversas y quedarse con el consenso, que es lo que hace la técnica de *self-consistency*: muestrear varios caminos de razonamiento y elegir la respuesta más consistente. Vas a implementar la votación y una medida de **acuerdo** que sirva para abstenerse cuando el modelo no se pone de acuerdo consigo mismo.
+
+## Qué tienes que hacer
+
+- `majority_vote(answers, normalize)`: devuelve `(ganador, conteos)`. Se cuentan las respuestas **normalizadas** (por defecto, `strip().lower()`); `conteos` es `normalizada → votos`. Gana la más votada y, ante un empate, la que apareció antes. El ganador se devuelve con el **texto original** de su primera aparición. Sin respuestas, `(None, {})`.
+- `agreement(answers, normalize)`: fracción de respuestas que coinciden con la ganadora (`0.0` si no hay respuestas).
+- `extract_last_number(text)`: último número del texto (enteros o decimales con coma o punto), con la coma convertida en punto; `None` si no hay ninguno.
+- `sample_and_vote(generate, n, extract, min_agreement)`: llama a `generate(i)` para `i = 0..n-1`, aplica `extract` a cada texto, **descarta** las extracciones `None` y vota. Devuelve `{"answer", "agreement", "votes"}`. Si el acuerdo es menor que `min_agreement`, `answer` es `None`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+majority_vote(["42", " 42", "41", "42 "])    # ('42', {'42': 3, '41': 1})
+extract_last_number("Son 3,5 euros más 2 de envío: total 5,5")   # '5.5'
+```
+
+<Callout type="nota" title="El consenso no es la verdad">
+
+Votar ayuda cuando los errores del modelo son **aleatorios**: es raro que cinco muestras fallen igual. Pero si el modelo tiene un sesgo sistemático, las cinco coincidirán en el error y el acuerdo será alto y la respuesta, falsa. Por eso el acuerdo sirve para **detectar dudas**, no para certificar aciertos. Cada muestra además cuesta una llamada: 5 votos son 5 veces el coste.
+
+</Callout>

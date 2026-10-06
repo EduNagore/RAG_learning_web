@@ -1043,6 +1043,133 @@ MUTANTS = [
         "if errors:\n            return",
         "if False:\n            return",
     ),
+    # --- agents-24-routing ---
+    (
+        "agents-24-routing",
+        "no es palabra completa",
+        'rf"\\b{re.escape(name)}\\b"',
+        'rf"{re.escape(name)}"',
+    ),
+    ("agents-24-routing", "distingue mayúsculas", "flags=re.IGNORECASE", "flags=0"),
+    (
+        "agents-24-routing",
+        "sin ruta por defecto",
+        "    return default\n\n\ndef route_and_run",
+        "    return None\n\n\ndef route_and_run",
+    ),
+    ("agents-24-routing", "texto None rompe", '.text or ""', ".text"),
+    (
+        "agents-24-routing",
+        "ruta sin manejador no cae en default",
+        "    if route not in handlers:\n        route = default\n",
+        "",
+    ),
+    ("agents-24-routing", "el prompt no lleva la consulta", "\\n\\nConsulta: {query}", ""),
+    # --- agents-25-votacion ---
+    ("agents-25-votacion", "no normaliza", "key = normalize(answer)", "key = answer"),
+    (
+        "agents-25-votacion",
+        "empate por el último",
+        "-list(counts).index(k)",
+        "list(counts).index(k)",
+    ),
+    (
+        "agents-25-votacion",
+        "devuelve el texto normalizado",
+        "first_seen.setdefault(key, answer)",
+        "first_seen.setdefault(key, key)",
+    ),
+    (
+        "agents-25-votacion",
+        "acuerdo sin guarda",
+        "if winner is None:\n        return 0.0",
+        "if False:\n        return 0.0",
+    ),
+    ("agents-25-votacion", "la coma no se convierte", '.replace(",", ".")', ""),
+    ("agents-25-votacion", "primer número en vez del último", "numbers[-1]", "numbers[0]"),
+    ("agents-25-votacion", "no descarta los None", "if e is not None]", "]"),
+    (
+        "agents-25-votacion",
+        "umbral de acuerdo exclusivo",
+        "share < min_agreement",
+        "share <= min_agreement",
+    ),
+    ("agents-25-votacion", "ignora el umbral", "or share < min_agreement", ""),
+    # --- agents-26-orquestador-workers ---
+    ("agents-26-orquestador-workers", "no quita viñetas", "|[-*•])", ")"),
+    (
+        "agents-26-orquestador-workers",
+        "conserva duplicados",
+        "if clean and clean.lower() not in seen:",
+        "if clean:",
+    ),
+    (
+        "agents-26-orquestador-workers",
+        "no limita las subtareas",
+        "return subtasks[:max_subtasks]",
+        "return subtasks",
+    ),
+    (
+        "agents-26-orquestador-workers",
+        "mensaje de error sin tipo",
+        'f"error: {type(e).__name__}: {e}"',
+        'f"error: {e}"',
+    ),
+    (
+        "agents-26-orquestador-workers",
+        "el prompt no lleva el máximo",
+        "como máximo {max_subtasks} subtareas independientes",
+        "subtareas independientes",
+    ),
+    (
+        "agents-26-orquestador-workers",
+        "el sintetizador recibe resultados y no pares",
+        "list(zip(subtasks, results, strict=True))",
+        "results",
+    ),
+    # --- agents-27-evaluador-optimizador ---
+    (
+        "agents-27-evaluador-optimizador",
+        "empate sustituye al mejor",
+        "if score > best_score:",
+        "if score >= best_score:",
+    ),
+    (
+        "agents-27-evaluador-optimizador",
+        "objetivo exclusivo",
+        "if score >= target:",
+        "if score > target:",
+    ),
+    (
+        "agents-27-evaluador-optimizador",
+        "la mejora no reinicia la paciencia",
+        "best, best_score, stale = draft, score, 0",
+        "best, best_score = draft, score",
+    ),
+    (
+        "agents-27-evaluador-optimizador",
+        "paciencia exclusiva",
+        "stale >= patience",
+        "stale > patience",
+    ),
+    (
+        "agents-27-evaluador-optimizador",
+        "presupuesto exclusivo",
+        "tokens >= budget_tokens",
+        "tokens > budget_tokens",
+    ),
+    (
+        "agents-27-evaluador-optimizador",
+        "no cuenta el feedback en los tokens",
+        "approx_tokens(draft) + approx_tokens(feedback)",
+        "approx_tokens(draft)",
+    ),
+    (
+        "agents-27-evaluador-optimizador",
+        "el feedback no llega al generador",
+        "draft = generate(task, feedback)",
+        "draft = generate(task, None)",
+    ),
 ]
 
 survivors = []

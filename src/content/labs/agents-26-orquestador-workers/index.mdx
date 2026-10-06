@@ -1,0 +1,55 @@
+---
+title: Orquestador-workers
+description: Implementa el patrón orquestador-workers, donde un modelo descompone la tarea en subtareas que no se conocen de antemano, se reparten entre workers aislados y se sintetizan, con tolerancia al fallo de un worker.
+part: agentes
+module: m11-patrones-workflows
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - orchestrator-workers
+  - descomposición dinámica
+  - aislamiento de fallos
+  - síntesis
+packages: []
+hints:
+  - 'La limpieza de líneas es la misma que en la lab de multi-query: `re.sub(r"^\s*(?:\d+[.)]|[-*•])\s*", "", linea).strip()` y un conjunto de minúsculas ya vistas.'
+  - 'El texto del orquestador es `orquestador.generate([Message("user", prompt)]).text`, que puede ser `None` o solo espacios.'
+  - 'Envuelve cada `worker(subtarea)` en un `try/except Exception` individual para que un fallo no interrumpa el bucle.'
+  - 'Pasa al sintetizador `list(zip(subtareas, resultados))`, en el mismo orden en que se ejecutaron.'
+relatedLessons:
+  - m11-patrones-workflows/02-orquestador-workers-y-evaluador-optimizador
+---
+
+## Objetivo
+
+En el patrón **orquestador-workers**, un modelo central **descompone dinámicamente** la tarea (no sabes de antemano cuántas subtareas ni cuáles), las reparte entre *workers* y **sintetiza** los resultados. La diferencia con la paralelización simple es que las subtareas **las decide el modelo** según la entrada, no el programador. Es muy útil para tareas como cambios en varios archivos o investigación sobre varias fuentes.
+
+## Qué tienes que hacer
+
+### `parse_subtasks(text, max_subtasks)`
+
+Convierte el texto del orquestador en una lista de subtareas: una por línea, sin numeración (`1.`, `2)`) ni viñetas (`-`, `*`, `•`), sin líneas vacías, sin duplicados (sin distinguir mayúsculas, conservando la primera) y con un máximo de `max_subtasks`. El texto puede ser `None`.
+
+### `run_orchestrator(task, orchestrator, worker, synthesizer, max_subtasks=5)`
+
+1. **Una** llamada a `orchestrator.generate` pidiendo descomponer `task` en como mucho `max_subtasks` subtareas (el prompt debe contener la tarea y el número).
+2. `worker(subtarea)` para cada subtarea, en orden. Si un worker lanza una excepción, su resultado es `"error: <Tipo>: <mensaje>"` y se continúa con las demás.
+3. `synthesizer(task, [(subtarea, resultado), ...])` produce la respuesta final.
+
+Devuelve `{"subtasks": [...], "results": [...], "final": ...}`. Sin subtareas no se llama a ningún worker y se sintetiza con una lista vacía.
+
+## Un ejemplo para comprobar a mano
+
+```python
+orq = MockLLM(script=["1. plazo de devolución\n2. coste del envío"])
+run_orchestrator("Resume la política", orq,
+                 worker=lambda s: f"datos sobre {s}",
+                 synthesizer=lambda t, pares: " | ".join(r for _, r in pares))["final"]
+# 'datos sobre plazo de devolución | datos sobre coste del envío'
+```
+
+<Callout type="nota" title="El coste está en las subtareas">
+
+Cada worker es una llamada (o un agente entero) y el orquestador puede proponer muchas. Por eso el **límite de subtareas** no es un detalle: es lo que acota el coste y evita que un orquestador entusiasta lance cincuenta workers. Y conviene que los workers **no compartan contexto** con el orquestador más que lo que necesitan: devolver resultados condensados es lo que mantiene limpio el contexto del orquestador.
+
+</Callout>
