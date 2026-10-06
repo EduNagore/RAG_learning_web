@@ -14,7 +14,7 @@
 | F3 Laboratorios | ✅ hecha, en `main` y desplegada (verificada en producción) | 3 labs, Pyodide, CodeMirror, e2e en navegador real |
 | **Pausa de revisión tras F3** | ✅ superada | El usuario aprobó (2026-10-05, "haz todo lo que queda"): hacer F4–F7 completas |
 | F4 Contenido Parte I (RAG, M01–M09) | ✅ hecha, en `main` y desplegada | 37 lecciones, 22 labs, 287 preguntas |
-| F5 Contenido Parte II (Agentes, M10–M17) | ✅ hecha (rama `fase-5-agentes`; fusión a `main` y despliegue: ver «F5: HECHA») | 63 lecciones en total, 35 labs, 495 preguntas |
+| F5 Contenido Parte II (Agentes, M10–M17) | ✅ hecha (en `main` y desplegada) | 63 lecciones en total, 35 labs, 495 preguntas |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ siguiente | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
@@ -28,9 +28,9 @@ Contadores (fin de F5: 63 lecciones, 495 preguntas, 35 labs, 92 tests unitarios,
 - Resultados medidos (no repetir experimentos): ver `docs/DECISIONS.md` (F4) y las propias lecciones.
 
 ### Siguiente paso
-Seguir con F5 (ver «F5: avance»).
+Hecho: ver «F5: HECHA».
 
-## F5: HECHA (rama `fase-5-agentes`)
+## F5: HECHA (rama `fase-5-agentes` fusionada en `main`, merge ea1ed1c; CI y despliegue en verde, URLs verificadas en producción)
 
 - M10–M17 completos: 26 lecciones nuevas (63 en total con M00–M09), quizzes de 8 preguntas por lección (495 preguntas en total), labs `agents-22` a `agents-35` (más `agents-23` de F3; 35 labs en total), widgets `AgentLoopStepper` (M10 L2) y `TopologyExplorer` (M12 L2).
 - Puerta pasada (2026-10-06): prettier, eslint, astro check (0 errores), vitest (92), `validate` (63 lecciones, 495 preguntas, 35 labs), build (130 páginas), ruff, pytest (176), mutación (310/310), snippets de lecciones (55 bloques), 32 e2e.
