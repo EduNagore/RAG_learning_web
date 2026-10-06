@@ -1,0 +1,227 @@
+title: Multiagente, protocolos y frameworks
+order: 5
+questions:
+  - id: mas-01
+    level: mid
+    kind: design
+    lessons: [m12-multi-agente/01-cuando-si-y-cuando-no]
+    es:
+      q: ¿Cuándo tiene sentido un sistema multiagente y cuándo no?
+      a: |-
+        Tiene sentido con tareas amplias y paralelizables, de lectura y exploración (por ejemplo, investigación sobre muchas fuentes), donde el contexto de un solo agente se saturaría. En el sistema de investigación de Anthropic, un orquestador con sub-agentes superó a un agente único en su evaluación interna, a cambio de unas 15 veces más tokens que un chat.
+
+        No tiene sentido con tareas muy acopladas o de escritura, donde las decisiones implícitas de cada agente entran en conflicto (el argumento de Cognition): ahí suele ser mejor un único agente con buena gestión del contexto.
+    en:
+      q: When does a multi-agent system make sense and when not?
+      a: |-
+        It makes sense for broad, parallelizable, read-and-explore tasks (for example research across many sources) where a single agent's context would saturate. In Anthropic's research system, an orchestrator with sub-agents beat a single agent on their internal evaluation, at roughly 15x the tokens of a chat.
+
+        It does not make sense for tightly coupled or write-heavy tasks, where each agent's implicit decisions conflict (Cognition's argument): there a single agent with good context management is usually better.
+  - id: mas-02
+    level: senior
+    kind: conceptual
+    lessons: [m12-multi-agente/01-cuando-si-y-cuando-no]
+    es:
+      q: ¿Qué debe incluir el encargo que un orquestador da a un sub-agente?
+      a: |-
+        Un objetivo claro, el formato de salida esperado, las herramientas y fuentes a usar y los límites de la tarea (qué no hacer y cuánto esfuerzo dedicar). Sin eso, los sub-agentes duplican trabajo, dejan huecos o interpretan mal la tarea.
+
+        También conviene que devuelvan un resumen estructurado (hallazgos, fuentes, confianza y lo que no pudieron comprobar), porque su devolución es un cuello de botella de información.
+    en:
+      q: What should the task a lead agent gives a sub-agent include?
+      a: |-
+        A clear objective, the expected output format, the tools and sources to use and the task boundaries (what not to do and how much effort to spend). Without that, sub-agents duplicate work, leave gaps or misread the task.
+
+        They should also return a structured summary (findings, sources, confidence and what they could not verify), because their return is an information bottleneck.
+  - id: mas-03
+    level: mid
+    kind: conceptual
+    lessons: [m12-multi-agente/02-topologias-y-estado-compartido]
+    es:
+      q: Compara las topologías supervisor, red, pizarra y pipeline.
+      a: |-
+        Supervisor: un coordinador reparte y recoge; simple de razonar pero con un punto único de fallo y de cuello de botella. Red (todos con todos): flexible, pero los canales crecen de forma cuadrática. Pizarra: los agentes leen y escriben un estado compartido, lo que desacopla pero concentra el estado. Pipeline: cada agente pasa su resultado al siguiente; predecible pero secuencial.
+
+        Se elige por el tipo de dependencias y se prefiere la topología más simple que cubra el problema.
+    en:
+      q: Compare supervisor, network, blackboard and pipeline topologies.
+      a: |-
+        Supervisor: a coordinator distributes and collects; easy to reason about but a single point of failure and bottleneck. Network (all-to-all): flexible, but channels grow quadratically. Blackboard: agents read and write a shared state, which decouples but concentrates state. Pipeline: each agent passes its output to the next; predictable but sequential.
+
+        Choose by the type of dependencies and prefer the simplest topology that covers the problem.
+  - id: mas-04
+    level: senior
+    kind: design
+    lessons: [m12-multi-agente/02-topologias-y-estado-compartido]
+    es:
+      q: ¿Qué estado compartes entre agentes y cómo evitas que el contexto se dispare?
+      a: |-
+        Se comparte lo necesario para que cada agente entienda su tarea: el objetivo, las decisiones tomadas, los datos clave y referencias a los detalles, no el historial completo de todos. Según el agente, se pasa todo, un resumen o solo su tarea.
+
+        Los traspasos (handoffs) deben llevar un mensaje estructurado con el estado relevante; si no, el siguiente agente actúa con información incompleta. Compartir de más aumenta tokens y puede filtrar información a quien no debería verla.
+    en:
+      q: What state do you share between agents and how do you keep context from exploding?
+      a: |-
+        Share what each agent needs to understand its task: the goal, decisions made, key data and references to details, not everyone's full history. Depending on the agent, pass everything, a summary or only its task.
+
+        Handoffs should carry a structured message with the relevant state; otherwise the next agent acts with incomplete information. Oversharing increases tokens and may leak information to those who should not see it.
+  - id: mas-05
+    level: senior
+    kind: conceptual
+    lessons: [m12-multi-agente/04-economia-de-tokens-y-modos-de-fallo]
+    es:
+      q: ¿Qué es MAST y qué conclusión principal aporta?
+      a: |-
+        MAST es una taxonomía de fallos de sistemas multiagente de LLM: 14 modos de fallo en 3 categorías (problemas de diseño del sistema, desalineación entre agentes y verificación de la tarea), construida con trazas anotadas por personas expertas y aplicada a más de 1 600 trazas de 7 frameworks.
+
+        Concluye que muchas mejoras de los sistemas multiagente en benchmarks son mínimas y que gran parte de los fallos son de organización y diseño más que de capacidad del modelo, por lo que requieren soluciones arquitectónicas.
+    en:
+      q: What is MAST and what is its main conclusion?
+      a: |-
+        MAST is a failure taxonomy for LLM multi-agent systems: 14 failure modes in 3 categories (system design issues, inter-agent misalignment and task verification), built from expert-annotated traces and applied to over 1,600 traces from 7 frameworks.
+
+        It concludes that many multi-agent improvements on benchmarks are minimal and that many failures are about organization and design more than model capability, so they need architectural solutions.
+  - id: mas-06
+    level: mid
+    kind: design
+    lessons: [m12-multi-agente/03-debate-roles-y-procedimientos]
+    es:
+      q: ¿Sirve el debate entre agentes para mejorar respuestas?
+      a: |-
+        El debate multiagente (varios modelos proponen y critican respuestas durante varias rondas) mostró mejoras en razonamiento y factualidad en algunos trabajos, a costa de varias veces más llamadas. El beneficio depende de la tarea y de que los participantes aporten perspectivas distintas.
+
+        Se compara con alternativas más baratas, como autoconsistencia (votar entre muestras) o un verificador con una señal externa, y se mide en el conjunto de evaluación antes de adoptarlo.
+    en:
+      q: Does debate between agents improve answers?
+      a: |-
+        Multi-agent debate (several models propose and critique answers over several rounds) showed gains in reasoning and factuality in some work, at the cost of several times more calls. The benefit depends on the task and on participants bringing different perspectives.
+
+        Compare it with cheaper alternatives, such as self-consistency (voting across samples) or a verifier with an external signal, and measure on your evaluation set before adopting it.
+  - id: mas-07
+    level: junior
+    kind: conceptual
+    lessons: [m13-protocolos/01-tool-calling-y-mcp]
+    es:
+      q: ¿Qué es MCP y qué problema resuelve?
+      a: |-
+        El Model Context Protocol es un estándar abierto para conectar aplicaciones de IA (hosts) con herramientas y datos mediante servidores, usando JSON-RPC 2.0. Resuelve la explosión de integraciones a medida: un servidor MCP puede usarse desde cualquier cliente compatible.
+
+        Un servidor expone herramientas, recursos y plantillas de prompts. La seguridad (autorización, confianza en servidores de terceros y descripciones de herramientas) sigue siendo responsabilidad de quien lo despliega.
+    en:
+      q: What is MCP and what problem does it solve?
+      a: |-
+        The Model Context Protocol is an open standard for connecting AI applications (hosts) to tools and data through servers, using JSON-RPC 2.0. It addresses the explosion of custom integrations: one MCP server can be used from any compatible client.
+
+        A server exposes tools, resources and prompt templates. Security (authorization, trust in third-party servers and tool descriptions) remains the deployer's responsibility.
+  - id: mas-08
+    level: mid
+    kind: conceptual
+    lessons: [m13-protocolos/01-tool-calling-y-mcp]
+    es:
+      q: ¿Qué diferencia hay entre un error de protocolo y un error de herramienta en MCP?
+      a: |-
+        Un error de protocolo (petición mal formada, método desconocido, parámetros inválidos) se devuelve como error JSON-RPC con su código. Un error de ejecución de una herramienta se devuelve como resultado normal marcado con isError, de modo que el modelo pueda leerlo y corregir la llamada.
+
+        Distinguirlos permite que el agente se recupere de fallos de herramienta sin confundirlos con problemas de transporte o de formato.
+    en:
+      q: What is the difference between a protocol error and a tool error in MCP?
+      a: |-
+        A protocol error (malformed request, unknown method, invalid params) is returned as a JSON-RPC error with its code. A tool execution error is returned as a normal result flagged isError, so the model can read it and fix the call.
+
+        Telling them apart lets the agent recover from tool failures without confusing them with transport or format problems.
+  - id: mas-09
+    level: mid
+    kind: conceptual
+    lessons: [m13-protocolos/02-a2a-y-agent-skills]
+    es:
+      q: ¿Qué es A2A y en qué se diferencia de MCP?
+      a: |-
+        A2A (Agent2Agent) es un protocolo para que agentes de distintos proveedores se descubran y colaboren: cada agente publica una Agent Card con sus capacidades y se intercambian tareas con estados, mensajes y artefactos. MCP conecta un agente con herramientas y datos; A2A conecta agentes entre sí.
+
+        Son complementarios: un agente puede usar MCP para sus herramientas y A2A para delegar en otros agentes.
+    en:
+      q: What is A2A and how does it differ from MCP?
+      a: |-
+        A2A (Agent2Agent) is a protocol for agents from different vendors to discover and collaborate: each agent publishes an Agent Card with its capabilities, and tasks with states, messages and artifacts are exchanged. MCP connects an agent to tools and data; A2A connects agents to each other.
+
+        They are complementary: an agent can use MCP for its tools and A2A to delegate to other agents.
+  - id: mas-10
+    level: mid
+    kind: conceptual
+    lessons: [m13-protocolos/02-a2a-y-agent-skills]
+    es:
+      q: ¿Qué son las Agent Skills y cómo ahorran contexto?
+      a: |-
+        Una skill es una carpeta con un archivo SKILL.md (más recursos opcionales) que enseña al agente un procedimiento. Se carga por divulgación progresiva: al inicio solo se cargan los metadatos de nombre y descripción (del orden de cien tokens por skill) y el contenido completo únicamente cuando la skill se activa.
+
+        Así se pueden tener muchas capacidades disponibles sin llenar el contexto, a diferencia de pegar todas las instrucciones en el prompt de sistema.
+    en:
+      q: What are Agent Skills and how do they save context?
+      a: |-
+        A skill is a folder with a SKILL.md file (plus optional resources) that teaches the agent a procedure. It loads by progressive disclosure: at startup only the name and description metadata are loaded (on the order of a hundred tokens per skill) and the full content only when the skill is triggered.
+
+        This lets many capabilities be available without filling the context, unlike pasting all instructions into the system prompt.
+  - id: mas-11
+    level: senior
+    kind: design
+    lessons: [m13-protocolos/03-como-encajan-mcp-a2a-y-skills]
+    es:
+      q: ¿Cómo encajan MCP, A2A y skills en una arquitectura de agentes?
+      a: |-
+        MCP da acceso a herramientas y datos (la capa de capacidades), A2A permite la colaboración entre agentes autónomos (la capa de coordinación entre agentes) y las skills empaquetan conocimiento procedimental que se carga bajo demanda. No compiten: resuelven problemas distintos.
+
+        En diseño se decide qué va en cada capa, y se aplican los mismos principios de seguridad: autenticación, mínimo privilegio y desconfianza hacia descripciones y salidas de terceros.
+    en:
+      q: How do MCP, A2A and skills fit into an agent architecture?
+      a: |-
+        MCP gives access to tools and data (the capabilities layer), A2A enables collaboration between autonomous agents (the agent-to-agent coordination layer) and skills package procedural knowledge loaded on demand. They do not compete: they solve different problems.
+
+        In design you decide what goes in each layer and apply the same security principles: authentication, least privilege and distrust of third-party descriptions and outputs.
+  - id: mas-12
+    level: mid
+    kind: design
+    lessons: [m14-frameworks/02-criterios-de-eleccion]
+    es:
+      q: ¿Cómo eliges un framework de agentes?
+      a: |-
+        Por el control que necesitas (flujo explícito frente a bucle gestionado), persistencia y reanudación, observabilidad, integración con tu proveedor y protocolos, madurez y mantenimiento, y equipo. Se prueba con un caso real pequeño y se evalúa cuánto abstrae y cuánto oculta.
+
+        Las capacidades cambian con rapidez, así que se verifica la documentación vigente y se evita acoplar la lógica de negocio al framework para poder sustituirlo.
+    en:
+      q: How do you choose an agent framework?
+      a: |-
+        By the control you need (explicit flow versus managed loop), persistence and resumption, observability, integration with your provider and protocols, maturity and maintenance, and your team. Try it on a small real case and judge how much it abstracts and how much it hides.
+
+        Capabilities change quickly, so verify current documentation and avoid coupling business logic to the framework so you can replace it.
+  - id: mas-13
+    level: senior
+    kind: design
+    lessons: [m14-frameworks/03-cuando-no-usar-framework]
+    es:
+      q: ¿Cuándo no usarías un framework de agentes?
+      a: |-
+        Cuando el caso es sencillo (un bucle de herramientas con pocas herramientas), cuando necesitas control fino y entender cada paso, o cuando la capa de abstracción dificulta depurar. Anthropic recomienda empezar usando directamente las APIs del modelo, porque muchos patrones se implementan con poco código, y añadir un framework si aporta algo claro.
+
+        El riesgo de un framework es ocultar prompts y respuestas, dificultar la depuración y dejar la lógica atada a una API que cambia.
+    en:
+      q: When would you not use an agent framework?
+      a: |-
+        When the case is simple (a tool loop with few tools), when you need fine control and to understand every step, or when the abstraction layer makes debugging harder. Anthropic recommends starting by using the model APIs directly, since many patterns take little code, and adding a framework if it brings something clear.
+
+        The risk of a framework is hiding prompts and responses, hindering debugging and tying logic to an API that changes.
+  - id: mas-14
+    level: senior
+    kind: design
+    lessons: [m12-multi-agente/04-economia-de-tokens-y-modos-de-fallo]
+    es:
+      q: ¿Cómo controlas coste y fallos en un sistema multiagente en producción?
+      a: |-
+        Presupuestos de tokens y de pasos por tarea y por agente, detección de bucles, límites de profundidad de delegación, trazas completas para localizar el primer agente que se desvía, formatos de mensaje estructurados entre agentes y verificación independiente de los resultados críticos.
+
+        Se vigilan métricas de salud (motivos de parada, coste por tarea, tasa de error por agente) y se compara con una línea base de un solo agente para comprobar que la complejidad se justifica.
+    en:
+      q: How do you control cost and failures in a multi-agent system in production?
+      a: |-
+        Token and step budgets per task and per agent, loop detection, delegation depth limits, full traces to find the first agent that diverges, structured message formats between agents and independent verification of critical results.
+
+        Watch health metrics (stop reasons, cost per task, error rate per agent) and compare with a single-agent baseline to confirm the complexity is justified.
