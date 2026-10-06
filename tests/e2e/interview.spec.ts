@@ -70,3 +70,14 @@ test('Glosario: la búsqueda ignora acentos y mezcla español e inglés', async 
   await page.getByLabel(/Buscar un término/).fill('zzzz');
   await expect(page.getByText('Ningún término coincide')).toBeVisible();
 });
+
+test('Fuentes: lista las fuentes de las lecciones agrupadas por parte', async ({ page }) => {
+  await page.goto('fuentes/');
+  await expect(page.getByRole('heading', { name: /Parte II/ })).toBeVisible();
+  const links = page.locator('[data-testid="source-list"] > li > a');
+  expect(await links.count()).toBeGreaterThan(100);
+  await expect(page.getByRole('link', { name: 'Building effective agents' })).toHaveAttribute(
+    'href',
+    'https://www.anthropic.com/engineering/building-effective-agents',
+  );
+});
