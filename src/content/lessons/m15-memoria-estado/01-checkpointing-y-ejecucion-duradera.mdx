@@ -1,0 +1,227 @@
+---
+title: Checkpointing, ejecución duradera y humano en el bucle
+description: Cómo guardar el progreso de un agente para sobrevivir a fallos y esperar a personas durante horas o días, qué garantizan los checkpoints, por qué los efectos secundarios deben ser idempotentes y cómo se diseñan las pausas de aprobación.
+module: m15-memoria-estado
+order: 1
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Explicar qué es un checkpoint, un hilo y un store, y qué capacidades habilitan (reanudar, pausar, inspeccionar, tolerar fallos).
+  - Describir el mecanismo de interrupción y reanudación, incluida la regla de que el nodo interrumpido vuelve a ejecutarse desde el principio.
+  - Diseñar nodos con efectos secundarios seguros (después de la pausa o idempotentes) y comprobarlo con un ejemplo.
+  - Elegir qué decisiones requieren aprobación humana y cómo presentarlas.
+prerequisites:
+  - m14-frameworks/03-cuando-no-usar-framework
+  - m10-fundamentos-agentes/04-memoria-y-context-engineering
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: LangGraph, persistencia (hilos, checkpoints y stores)
+    url: https://docs.langchain.com/oss/python/langgraph/persistence
+    type: docs
+    authors: LangChain
+    year: 2026
+  - title: LangGraph, interrupciones
+    url: https://docs.langchain.com/oss/python/langgraph/interrupts
+    type: docs
+    authors: LangChain
+    year: 2026
+  - title: Microsoft Agent Framework overview
+    url: https://learn.microsoft.com/en-us/agent-framework/overview/
+    type: docs
+    authors: Microsoft
+    year: 2026
+  - title: How we built our multi-agent research system
+    url: https://www.anthropic.com/engineering/multi-agent-research-system
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: Model Context Protocol, Tools
+    url: https://modelcontextprotocol.io/specification/latest/server/tools
+    type: docs
+    authors: Model Context Protocol
+    year: 2026
+relatedLabs:
+  - agents-30-grafo-con-checkpoints
+---
+
+## Intuición: un agente que dura más que un proceso
+
+Un agente de chat vive unos segundos dentro de una petición HTTP. Un agente que prepara un informe, espera la aprobación de un responsable y envía el resultado puede tardar **horas o días**, y durante ese tiempo su servidor se reinicia, se despliega una versión nueva o la red falla. Si el agente solo existe en la memoria de un proceso, **cada caída lo mata**, y el trabajo hecho (y pagado en tokens) se pierde.
+
+Anthropic lo cuenta en su sistema de investigación multiagente: los agentes son **con estado** (*stateful*) y los errores se acumulan, así que no se pueden reiniciar desde cero cuando algo falla, y construyeron la capacidad de **reanudar desde donde el agente estaba** cuando ocurre un error, además de desplegar de forma que no interrumpa las ejecuciones en curso. La solución general se llama **ejecución duradera**: guardar el progreso en un almacén externo tras cada paso para poder retomarlo.
+
+## Cómo funciona
+
+### Hilos, checkpoints y stores
+
+La documentación de persistencia de LangGraph da un vocabulario útil, aplicable a cualquier motor:
+
+- **Hilo (*thread*):** el contexto de ejecución de una conversación o tarea, identificado por un `thread_id`.
+- **Checkpoint:** una **instantánea del estado del grafo** guardada en cada paso. El componente que los guarda (*checkpointer*) proporciona **memoria a corto plazo con ámbito de hilo** y habilita la continuidad de la conversación, el humano en el bucle, la **depuración con viaje en el tiempo** (volver a un paso anterior) y la **tolerancia a fallos**.
+- **Store:** almacenamiento de datos definidos por la aplicación **fuera del estado del grafo**, para persistir información **entre hilos** (preferencias de usuario, conocimiento compartido). Los checkpoints siguen un hilo; el store sirve a toda la aplicación.
+
+Con ello se obtienen cuatro capacidades:
+
+1. **Reanudar tras un fallo:** al reiniciar, se carga el último checkpoint del hilo y se continúa desde el siguiente nodo, **sin repetir lo ya hecho**.
+2. **Pausar y esperar:** el agente puede detenerse indefinidamente esperando a una persona.
+3. **Inspeccionar y depurar:** el historial de checkpoints permite ver el estado en cada paso y repetir desde uno anterior.
+4. **Ejecutar en procesos distintos:** quien reanuda no tiene por qué ser el mismo proceso, ni siquiera la misma máquina que empezó.
+
+Otros motores ofrecen lo mismo con otros nombres. Microsoft Agent Framework, por ejemplo, destaca un sistema robusto de **gestión de estado para escenarios de larga duración y con humano en el bucle** y estado por sesión.
+
+### Interrupciones: pausar y reanudar
+
+En LangGraph, la interrupción se hace con una llamada `interrupt()` dentro de un nodo. Según su documentación, **cuando se dispara una interrupción, LangGraph guarda el estado del grafo con su capa de persistencia y espera indefinidamente hasta que reanudes la ejecución**. Requisitos: un *checkpointer*, un `thread_id` que identifique qué checkpoint reanudar y una carga útil serializable en JSON. Se reanuda con una orden que lleva el valor y el mismo identificador de hilo, y ese valor es el que **devuelve la propia llamada** `interrupt()`.
+
+La regla que más sorprende: **el nodo reanudado empieza otra vez desde el principio del nodo donde se llamó a la interrupción**, de modo que **todo el código anterior a la interrupción se ejecuta de nuevo**. De ahí las restricciones que impone: no envolver la interrupción en un `try/except` desnudo, no saltarla de forma condicional ni meterla en bucles con lógica no determinista, y mantener **idempotentes** los efectos secundarios previos o colocarlos **después**.
+
+<Diagram
+  caption="Una pausa guarda el checkpoint y libera el proceso; la reanudación puede ocurrir mucho después y en otro proceso."
+  code={`sequenceDiagram
+  participant P1 as Proceso A
+  participant S as Almacén de checkpoints
+  participant H as Persona
+  participant P2 as Proceso B
+  P1->>S: checkpoint tras cada nodo
+  P1->>S: checkpoint interrumpido (espera aprobación)
+  P1-->>H: pregunta (carga útil JSON)
+  Note over P1: el proceso termina; la espera es gratis
+  H->>P2: decisión (mismo thread_id)
+  P2->>S: carga el último checkpoint
+  P2->>P2: re-ejecuta el nodo interrumpido con la decisión
+  P2->>S: checkpoint tras cada nodo restante`}
+/>
+
+### Efectos secundarios: la trampa de la repetición
+
+Como el nodo interrumpido se ejecuta dos veces (una hasta la pausa y otra al reanudar), cualquier efecto externo anterior a la pausa **se repite**. El experimento siguiente simula un nodo que avisa por correo a una responsable y pide su aprobación, escrito de tres formas: enviando **antes** de la pausa, enviando **después**, y enviando antes pero con **clave de idempotencia** (la misma clave nunca se envía dos veces).
+
+```python
+class Pausa(Exception):
+    """El nodo pide la decisión de una persona y se detiene."""
+
+
+def ejecutar(nodo, estado, decision=None):
+    """Ejecuta un nodo; si se pausa, al reanudar el nodo EMPIEZA OTRA VEZ desde su primera línea."""
+    try:
+        return nodo(estado, decision)
+    except Pausa:
+        return None  # el checkpoint guarda el estado; el nodo se re-ejecutará al reanudar
+
+
+correos = []  # el «mundo exterior»: cada elemento es un correo realmente enviado
+
+
+def enviar(destino, clave=None, enviados=None):
+    if clave is not None and clave in enviados:
+        return  # idempotente: la misma clave no se envía dos veces
+    if clave is not None:
+        enviados.add(clave)
+    correos.append(destino)
+
+
+def nodo_ingenuo(estado, decision):
+    enviar("jefa@nimbus.example")  # efecto ANTES de la pausa
+    if decision is None:
+        raise Pausa
+    return {"aprobado": decision}
+
+
+def nodo_correcto(estado, decision):
+    if decision is None:
+        raise Pausa
+    enviar("jefa@nimbus.example")  # efecto DESPUÉS de la pausa
+    return {"aprobado": decision}
+
+
+enviados = set()
+
+
+def nodo_idempotente(estado, decision):
+    enviar("jefa@nimbus.example", clave=f"aviso-{estado['pedido']}", enviados=enviados)  # efecto antes, pero con clave
+    if decision is None:
+        raise Pausa
+    return {"aprobado": decision}
+
+
+for nombre, nodo in (("ingenuo", nodo_ingenuo), ("correcto", nodo_correcto), ("idempotente", nodo_idempotente)):
+    correos.clear()
+    enviados.clear()
+    estado = {"pedido": 42}
+    ejecutar(nodo, estado)  # primera ejecución: se pausa
+    ejecutar(nodo, estado, decision=True)  # la persona decide: el nodo se re-ejecuta entero
+    print(f"{nombre:<12} correos enviados: {len(correos)}")
+```
+
+Salida (determinista):
+
+```text
+ingenuo      correos enviados: 2
+correcto     correos enviados: 1
+idempotente  correos enviados: 1
+```
+
+- El nodo **ingenuo** envía **dos correos**: la primera ejecución llega hasta la pausa y la segunda repite todo. Cambia «un correo» por «un cobro» o «un borrado» y el error es serio.
+- Hay dos soluciones: **mover el efecto después de la pausa** (el nodo correcto) o hacerlo **idempotente** con una clave estable derivada del trabajo (por ejemplo, el identificador del pedido): una segunda ejecución reconoce que ya se hizo. La idempotencia es además la defensa frente a otro caso: el proceso cae **después** de enviar y **antes** de guardar el checkpoint, y el nodo se repite al recuperar.
+- La regla práctica es **«hacer nodos pequeños y con un único efecto, y diseñar cada efecto para que repetirlo sea inofensivo»**. Ninguna ejecución duradera garantiza «exactamente una vez»; el motor garantiza como mucho «al menos una vez», y la idempotencia convierte eso en «exactamente una vez en la práctica».
+
+### Humano en el bucle: qué aprobar y cómo
+
+No todo requiere aprobación (frenaría al agente hasta hacerlo inútil), pero algunas decisiones sí. Criterios para decidir qué pasa por una persona:
+
+| Aprobar | Dejar en autónomo |
+| --- | --- |
+| Acciones **irreversibles** o costosas (enviar, borrar, pagar, publicar) | Lecturas y consultas |
+| Acciones con efecto sobre **terceros** (clientes, proveedores) | Cálculos y borradores internos |
+| Decisiones con **baja confianza** o resultados contradictorios | Pasos con verificación automática fiable |
+| Operaciones con **datos sensibles** o permisos elevados | Operaciones con permisos mínimos |
+
+La especificación de MCP recomienda para las herramientas que **debería haber siempre una persona en el bucle con capacidad de denegar** las invocaciones, mostrar al usuario las entradas **antes** de llamar al servidor y presentar mensajes de confirmación para las operaciones sensibles. Para que la aprobación sirva de algo:
+
+- **Muestra qué se va a hacer, con los datos concretos** («enviar este correo a estas personas»), no «¿continuar?».
+- **Ofrece más opciones que aprobar o rechazar:** editar la propuesta, pedir más información, aprobar con cambios.
+- **Define caducidad y escalado:** qué ocurre si nadie responde en 24 horas.
+- **Registra quién aprobó qué y cuándo**: es la trazabilidad de la decisión.
+- **Evita la fatiga de aprobación:** si pides confirmar todo, la gente aprueba sin leer. Reserva las pausas para lo que importa.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Checkpoint tras cada nodo | Reanudación muy fina | Coste de escritura y tamaño del estado |
+| Checkpoint solo en puntos clave | Menos escritura | Más trabajo repetido al recuperar |
+| Estado pequeño y estructurado | Barato de guardar y de versionar | Hay que decidir qué guardar |
+| Estado con todo el historial | Máxima información | Coste, privacidad y migraciones difíciles |
+| Aprobación humana | Seguridad en acciones críticas | Latencia y fatiga de aprobación |
+| Efectos idempotentes | Seguro ante repeticiones | Hay que diseñar claves y comprobaciones |
+
+## Errores comunes en producción
+
+- **Efectos secundarios antes de una pausa.** Se repiten al reanudar: correos duplicados, cobros dobles.
+- **Nodos grandes que hacen muchas cosas.** Un fallo en el último paso repite todo lo anterior; divide en nodos pequeños.
+- **Estado no serializable o con secretos.** Los checkpoints persisten datos: no guardes claves ni datos personales sin cifrar, y usa tipos serializables.
+- **No versionar el estado.** Al desplegar un cambio en la forma del estado, los hilos antiguos no se pueden reanudar.
+- **Pausas sin caducidad.** Hilos esperando indefinidamente una aprobación que nadie va a dar.
+- **Aprobar sin información.** Un «¿continuar?» no permite decidir; muestra los datos de la acción.
+- **Confiar en «exactamente una vez».** Diseña para «al menos una vez» con idempotencia.
+- **No probar la recuperación.** Mata el proceso a mitad de una tarea en pruebas y comprueba que continúa sin duplicar efectos.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es la ejecución duradera y para qué sirve en agentes?"_ Pista: guardar el estado tras cada paso (checkpoints) para reanudar tras fallos y esperar a personas durante horas o días sin mantener un proceso vivo.
+- _"¿Qué pasa con los efectos secundarios cuando un nodo se pausa y se reanuda?"_ Pista: el nodo interrumpido se re-ejecuta desde el principio; los efectos previos se repiten, así que deben ir después de la pausa o ser idempotentes.
+- _"¿Qué diferencia hay entre un checkpoint y un store?"_ Pista: el checkpoint guarda el estado de un hilo (memoria a corto plazo); el store guarda datos de la aplicación entre hilos (memoria a largo plazo).
+- _"¿Qué acciones deberían pasar por aprobación humana?"_ Pista: irreversibles, con efecto sobre terceros, de baja confianza o con datos sensibles; evitando la fatiga de aprobación.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un agente largo necesita **ejecución duradera**: **checkpoints** tras cada paso en un almacén externo, identificados por **hilo**; el **store** guarda memoria entre hilos.
+- Los checkpoints permiten **reanudar tras un fallo**, **pausar** esperando a una persona, **inspeccionar** el historial y reanudar en **otro proceso**.
+- Tras una interrupción, **el nodo se re-ejecuta desde su primera línea**: los efectos previos se repiten (en el ejemplo, 2 correos); colócalos **después** de la pausa o hazlos **idempotentes** (1 correo).
+- Diseña para «**al menos una vez**» con idempotencia, nodos pequeños y estado serializable y versionado.
+- Aprueba solo lo importante, mostrando los datos concretos, con caducidad, escalado y registro.
+
+</KeyTakeaways>

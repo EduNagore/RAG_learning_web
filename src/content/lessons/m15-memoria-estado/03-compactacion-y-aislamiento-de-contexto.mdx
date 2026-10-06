@@ -1,0 +1,201 @@
+---
+title: Compactación de contexto y aislamiento con sub-agentes
+description: Cómo resumir el historial de un agente sin perder lo crítico (compactación estructurada, notas, modelos de compresión), cómo comprobarlo con hechos canario y cuándo aislar el contexto en sub-agentes que devuelven resúmenes condensados.
+module: m15-memoria-estado
+order: 3
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Comparar políticas de compactación (truncar, marcar lo importante, resumir) por su coste y por lo que conservan.
+  - Diseñar una prueba de compactación con hechos canario y medir cuántos sobreviven.
+  - Describir qué debe contener un resumen de compactación estructurado y quién decide qué es importante.
+  - Aplicar el aislamiento de contexto con sub-agentes, con encargos y devoluciones bien delimitados.
+prerequisites:
+  - m15-memoria-estado/02-memoria-a-largo-plazo
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+  - title: Don't Build Multi-Agents
+    url: https://cognition.com/blog/dont-build-multi-agents
+    type: blog
+    authors: Walden Yan (Cognition)
+    year: 2025
+  - title: How we built our multi-agent research system
+    url: https://www.anthropic.com/engineering/multi-agent-research-system
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: Lost in the Middle, How Language Models Use Long Contexts
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, Liang
+    year: 2023
+relatedLabs:
+  - agents-30-grafo-con-checkpoints
+---
+
+## Intuición: resumir es decidir qué importa
+
+En la lección de context engineering viste que el contexto de un agente es un recurso finito y que, cuando se llena, hay que **compactarlo**: resumir lo hecho y reiniciar con el resumen. La técnica parece trivial («pídele al modelo un resumen») y es una de las fuentes de fallos más sutiles de los agentes largos: **un resumen que omite una restricción del usuario hace que el agente la incumpla veinte pasos después**, sin ningún error visible. El agente no sabe lo que no sabe.
+
+Esta lección trata de compactar **con garantías**: qué políticas existen, cómo **probarlas** con hechos conocidos, qué debe contener un buen resumen y cuándo es mejor **no acumular** el contexto, delegando en sub-agentes que trabajan en ventanas limpias.
+
+## Cómo funciona
+
+### Políticas de compactación
+
+Cuatro familias, de menos a más sofisticada:
+
+1. **Truncar:** conservar solo los últimos *k* mensajes. Barato y determinista; pierde todo lo anterior, incluido lo crítico.
+2. **Marcar y conservar:** el agente **marca como importantes** ciertos mensajes o datos al producirlos (una restricción, una decisión) y la compactación los conserva íntegros además de los últimos. Barato, pero depende de que el agente **marque bien y siempre**.
+3. **Resumir con un modelo:** una llamada produce un resumen del historial (abstractivo). Comprime mucho y puede conservar el sentido, pero puede **omitir o distorsionar** detalles.
+4. **Resumen estructurado más notas externas:** un resumen con **secciones fijas** (objetivo, restricciones del usuario, decisiones tomadas y por qué, estado actual, pendientes, identificadores para volver a cargar detalles) más notas persistentes escritas durante el trabajo. Es la forma que recomiendan las guías de ingeniería de contexto: la compactación debe **preservar decisiones arquitectónicas y problemas sin resolver** y descartar lo redundante, como las salidas de herramientas antiguas.
+
+Cognition añade para tareas muy largas una variante: un **modelo de compresión dedicado** que condense el historial de acciones y conversación en **detalles, eventos y decisiones clave**. La idea común es que **la compactación no es una función genérica sino una pieza con requisitos**: debe conservar lo que el agente necesitará.
+
+### Probar la compactación con hechos canario
+
+Una compactación se prueba como cualquier componente: con casos de prueba. La técnica de los **canarios** consiste en **insertar en una conversación hechos conocidos** (restricciones concretas) en distintos puntos, compactar con la política que quieres evaluar y comprobar **cuántos sobreviven**. El código siguiente crea una conversación de 30 mensajes con tres canarios (cada uno en la **segunda frase** de un mensaje, entre ruido) y evalúa tres políticas. El agente simulado **marca** dos de los tres canarios como importantes (se «olvida» de marcar el segundo).
+
+```python
+from ragkit.llm import approx_tokens
+
+RUIDO = "Se revisó el estado del pedido y el transportista confirmó la recogida sin incidencias. "
+# Hechos «canario»: restricciones del usuario que el agente debe seguir recordando al final.
+CANARIOS = {
+    3: "El cliente exige factura en euros.",
+    9: "No se puede enviar a Canarias.",
+    15: "El presupuesto máximo es de 500 euros.",
+}
+
+
+def conversacion(n=30):
+    mensajes = []
+    for i in range(n):
+        texto = RUIDO * 3
+        if i in CANARIOS:
+            # El dato va en la SEGUNDA frase y, cuando el agente lo reconoce como importante, se marca.
+            texto = RUIDO + ("[IMPORTANTE] " if i != 9 else "") + CANARIOS[i] + " " + RUIDO
+        mensajes.append(texto)
+    return mensajes
+
+
+def truncar(mensajes, k=10):
+    return mensajes[-k:]
+
+
+def marcadas_y_ultimas(mensajes, k=10):
+    marcadas = [m for m in mensajes[:-k] if "[IMPORTANTE]" in m]
+    return marcadas + mensajes[-k:]
+
+
+def primera_frase(mensajes):
+    return [m.split(". ")[0] + "." for m in mensajes]
+
+
+def evaluar(politica):
+    original = conversacion()
+    comprimida = politica(original)
+    texto = " ".join(comprimida)
+    conservados = sum(hecho in texto for hecho in CANARIOS.values())
+    tokens = sum(approx_tokens(m) for m in comprimida)
+    return conservados, tokens
+
+
+total = sum(approx_tokens(m) for m in conversacion())
+print(f"conversación original: {total} tokens, {len(CANARIOS)} hechos canario")
+for nombre, politica in (
+    ("truncar a los 10 últimos", truncar),
+    ("marcadas + 10 últimos", marcadas_y_ultimas),
+    ("primera frase de cada mensaje", primera_frase),
+):
+    conservados, tokens = evaluar(politica)
+    print(f"{nombre:<30} tokens: {tokens:>4} ({tokens / total:4.0%})  canarios conservados: {conservados} de {len(CANARIOS)}")
+```
+
+Salida (determinista):
+
+```text
+conversación original: 1947 tokens, 3 hechos canario
+truncar a los 10 últimos       tokens:  660 ( 34%)  canarios conservados: 0 de 3
+marcadas + 10 últimos          tokens:  773 ( 40%)  canarios conservados: 2 de 3
+primera frase de cada mensaje  tokens:  660 ( 34%)  canarios conservados: 0 de 3
+```
+
+- **Truncar y resumir «por la primera frase» conservan 0 de 3** canarios: comprimen al 34 %, pero **pierden justo lo que importaba** (que estaba en la segunda frase de mensajes lejanos). Un resumen extractivo ingenuo hace lo mismo que un truncado.
+- **Marcar + últimos conserva 2 de 3** con un 40 % de los tokens: mejor, pero el canario que el agente **no marcó** (el de Canarias) se perdió. La política es tan fiable como el hábito de marcar, así que el marcado debe ser **sistemático** (por instrucción, por esquema de la nota) y **comprobarse**.
+- **El coste de comprimir es información:** comprimir al 34 % o al 40 % no es un buen resultado por sí mismo; lo es si los canarios sobreviven. La métrica que importa es **retención de lo crítico por token**, no el porcentaje de compresión.
+- Con un **resumidor basado en un modelo real**, los resultados cambian y dependen del prompt: por eso se mide **con tus propios canarios** y se repite tras cada cambio de modelo o de prompt de resumen.
+
+### Un buen resumen de compactación
+
+Qué debe contener, como lista de comprobación:
+
+| Sección | Contenido | Por qué |
+| --- | --- | --- |
+| **Objetivo** | Qué se está intentando conseguir y criterio de terminado | Evita derivas |
+| **Restricciones del usuario** | Lo que el usuario exige o prohíbe, **literal** | Son lo primero que se pierde y lo más caro de incumplir |
+| **Decisiones tomadas y motivo** | Qué se eligió y por qué | Evita rehacer o contradecirse |
+| **Estado actual** | Qué está hecho y qué está en curso | Continuidad |
+| **Pendientes y problemas abiertos** | Lo que falta y lo que falló | Evita olvidar |
+| **Referencias** | Identificadores, rutas y consultas para recargar detalles | Permite recuperar bajo demanda en lugar de conservar todo |
+
+Dos reglas prácticas: **cita literalmente las restricciones** (una paráfrasis las suaviza) y **conserva los identificadores**: es más barato recargar un detalle por su referencia que guardarlo.
+
+### Aislar el contexto con sub-agentes
+
+La alternativa a compactar es **no acumular**: delegar una exploración en un **sub-agente** que trabaja en su propia ventana y devuelve un **resumen condensado**. Como describe la guía de Anthropic, los sub-agentes especializados gestionan tareas acotadas con **ventanas de contexto limpias** y devuelven al agente coordinador un resumen, a menudo de unos pocos miles de tokens aunque hayan usado decenas de miles en explorar. El agente principal conserva un contexto **pequeño y centrado en la síntesis**.
+
+Cuándo encaja y cuándo no:
+
+- **Encaja** en exploraciones **independientes y de lectura** (buscar en varias fuentes, revisar archivos, investigar alternativas), donde el detalle intermedio no importa más que el resultado.
+- **No encaja** cuando las decisiones del sub-agente **dependen del contexto del principal** o cuando varios sub-agentes escriben sobre el mismo recurso (el problema de las decisiones en conflicto que describe Cognition).
+- **El encargo importa:** sin objetivo, formato de salida y límites explícitos, los sub-agentes duplican trabajo o dejan huecos (Anthropic lo documenta con ejemplos de su sistema de investigación).
+- **La devolución es un cuello de botella de información:** el sub-agente decide qué contar. Pide un formato estructurado (hallazgos, fuentes, nivel de confianza, qué no pudo comprobar).
+
+Y un recordatorio que une todo el módulo: cada devolución se convierte en un **dato no fiable** (puede contener errores o inyecciones) que el agente principal debe tratar como tal.
+
+## Trade-offs
+
+| Política | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Truncar | Simple y determinista | Pierde lo crítico antiguo |
+| Marcar y conservar | Barata; conserva lo marcado | Depende de marcar siempre y bien |
+| Resumen con modelo | Comprime mucho | Puede omitir o distorsionar; coste de una llamada |
+| Resumen estructurado + notas | Retiene lo crítico de forma fiable | Diseño y mantenimiento del esquema |
+| Sub-agentes con contexto aislado | Limpia el contexto del principal | Más tokens totales; la devolución puede perder información |
+
+## Errores comunes en producción
+
+- **Compactar sin probar.** Sin canarios no sabes qué pierde tu política hasta que falla en producción.
+- **Resumir en lenguaje libre sin esquema.** Cada resumen decide distinto qué cuenta; las restricciones se diluyen.
+- **Parafrasear las restricciones del usuario.** Una paráfrasis las suaviza o las cambia.
+- **Compactaciones en cadena.** Resumir resúmenes acumula pérdidas: conserva fuera (notas) lo crítico en lugar de depender de resúmenes anidados.
+- **No conservar referencias.** Si no puedes recargar el detalle, un resumen demasiado comprimido es irrecuperable.
+- **Sub-agentes que escriben a la vez sobre lo mismo.** Decisiones en conflicto que nadie coordina.
+- **Encargos vagos.** El sub-agente investiga lo que no importa o duplica a otro.
+- **Fiarse de la devolución del sub-agente.** Es contenido no verificado; verifica lo crítico.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo evitas perder información importante al compactar el contexto?"_ Pista: resumen estructurado con restricciones literales, notas externas, referencias para recargar, y pruebas con hechos canario.
+- _"¿Qué es un hecho canario?"_ Pista: un dato conocido insertado en una conversación para comprobar si sobrevive a una compactación; mide la retención de lo crítico.
+- _"¿Cuándo usarías sub-agentes para aislar contexto?"_ Pista: exploraciones independientes y de lectura que devuelven un resumen; no cuando comparten decisiones o escriben sobre el mismo recurso.
+- _"¿Qué riesgo tiene la devolución de un sub-agente?"_ Pista: pierde información (decide qué contar) y es contenido no fiable; hay que pedir formato estructurado y verificar lo crítico.
+
+</Callout>
+
+<KeyTakeaways>
+
+- La compactación es una pieza con requisitos: debe conservar **restricciones, decisiones, estado, pendientes y referencias**; la compresión se mide por **retención de lo crítico por token**.
+- Con **hechos canario** se prueba: en el ejemplo, truncar y «primera frase» conservaron **0 de 3**; marcar + últimos, **2 de 3** (falló el marcado).
+- Un buen resumen es **estructurado**, cita las restricciones **literalmente** y conserva **identificadores** para recargar detalles.
+- Los **sub-agentes** aíslan el contexto de la exploración y devuelven resúmenes: encajan en lecturas independientes, no en escrituras concurrentes.
+- Toda devolución o recuerdo derivado es dato **no fiable**: verifica lo crítico.
+
+</KeyTakeaways>

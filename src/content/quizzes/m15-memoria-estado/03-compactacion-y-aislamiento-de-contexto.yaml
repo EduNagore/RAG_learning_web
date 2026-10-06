@@ -1,0 +1,95 @@
+lesson: m15-memoria-estado/03-compactacion-y-aislamiento-de-contexto
+questions:
+  - id: m15-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Cuál es el principal riesgo de una compactación mal hecha?'
+    options:
+      - 'Que el agente se ejecute más rápido.'
+      - 'Que el resumen omita una restricción o una decisión y el agente la incumpla más tarde sin ningún error visible.'
+      - 'Que el contexto crezca.'
+      - 'Que se pierdan las herramientas.'
+    answer: [1]
+    explanation: 'El agente no sabe lo que no sabe: una omisión en el resumen se traduce en un fallo silencioso muchos pasos después.'
+    ref: '#intuición-resumir-es-decidir-qué-importa'
+
+  - id: m15-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué es un hecho canario en una prueba de compactación?'
+    options:
+      - 'Un fallo del modelo.'
+      - 'Un dato conocido insertado en una conversación para comprobar si sobrevive a la compactación.'
+      - 'Un tipo de herramienta.'
+      - 'Un resumen automático.'
+    answer: [1]
+    explanation: 'Se compacta con la política a evaluar y se cuenta cuántos canarios sobreviven: es la forma de medir la retención de lo crítico.'
+    ref: '#probar-la-compactación-con-hechos-canario'
+
+  - id: m15-03-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, truncar a los 10 últimos y quedarse con la primera frase de cada mensaje comprimieron al 34 % y conservaron 0 de 3 canarios. ¿Qué lección ilustra?'
+    options:
+      - 'Que comprimir más siempre es mejor.'
+      - 'Que el porcentaje de compresión no mide la calidad: la métrica que importa es la retención de lo crítico por token.'
+      - 'Que los canarios no sirven.'
+      - 'Que los mensajes ruidosos no existen.'
+    answer: [1]
+    explanation: 'Comprimir al 34 % es inútil si se pierde lo que importaba. Un resumen extractivo ingenuo equivale a un truncado.'
+    ref: '#probar-la-compactación-con-hechos-canario'
+
+  - id: m15-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'La política «marcadas + 10 últimos» conservó 2 de 3 canarios. ¿Por qué falló el tercero?'
+    options:
+      - 'Porque el agente no marcó ese mensaje como importante, y la política depende de que marque siempre y bien.'
+      - 'Porque el mensaje era demasiado largo.'
+      - 'Porque los últimos mensajes lo sobrescribieron.'
+      - 'Porque los canarios no se pueden marcar.'
+    answer: [0]
+    explanation: 'La política es tan fiable como el hábito de marcar: debe hacerse de forma sistemática (por instrucción y esquema) y comprobarse.'
+    ref: '#probar-la-compactación-con-hechos-canario'
+
+  - id: m15-03-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué debe contener un buen resumen de compactación? Marca todo lo correcto.'
+    options:
+      - 'El objetivo y el criterio de terminado.'
+      - 'Las restricciones del usuario citadas literalmente.'
+      - 'Las decisiones tomadas y su motivo, el estado actual y los pendientes.'
+      - 'Identificadores y referencias para recargar detalles bajo demanda.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Un resumen estructurado evita que cada compactación decida distinto qué cuenta, y las referencias permiten recuperar el detalle sin conservarlo todo.'
+    ref: '#un-buen-resumen-de-compactación'
+
+  - id: m15-03-q6
+    type: single
+    difficulty: 3
+    prompt: '¿En qué situación NO conviene delegar en sub-agentes con contexto aislado?'
+    options:
+      - 'Exploraciones de lectura independientes entre sí.'
+      - 'Cuando varios sub-agentes escriben sobre el mismo recurso o sus decisiones dependen del contexto del principal.'
+      - 'Búsquedas en varias fuentes.'
+      - 'Revisión de varios archivos independientes.'
+    answer: [1]
+    explanation: 'Con decisiones acopladas o escrituras concurrentes aparecen decisiones en conflicto (el problema que describe Cognition). Los sub-agentes encajan en lecturas independientes.'
+    ref: '#aislar-el-contexto-con-sub-agentes'
+
+  - id: m15-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Resumir un resumen sucesivamente (compactaciones en cadena) no acumula pérdidas.'
+    answer: [1]
+    explanation: 'Es falso. Cada compactación puede perder detalles y los errores se acumulan; conviene guardar lo crítico en notas externas en lugar de depender de resúmenes anidados.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m15-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Lo que devuelve un sub-agente es contenido no verificado y el agente principal debe verificar lo crítico.'
+    answer: [0]
+    explanation: 'Es verdadero. El sub-agente decide qué contar, puede equivocarse o haber recibido contenido malicioso; se pide formato estructurado y se verifica lo importante.'
+    ref: '#aislar-el-contexto-con-sub-agentes'

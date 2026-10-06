@@ -1402,6 +1402,73 @@ MUTANTS = [
         'task["message"] = outcome["text"]',
         "pass",
     ),
+    # --- agents-30-grafo-con-checkpoints ---
+    (
+        "agents-30-grafo-con-checkpoints",
+        "el checkpoint guarda una referencia",
+        '"state": copy.deepcopy(state)',
+        '"state": state',
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "get_state devuelve el estado guardado",
+        'return copy.deepcopy(history[-1]["state"]) if history else None',
+        'return history[-1]["state"] if history else None',
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "se reanuda sin resume",
+        "if resume is None:",
+        "if False:",
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "resume no llega al nodo",
+        'state["resume"] = resume',
+        "pass",
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "resume queda en el estado",
+        '            state.pop("resume", None)\n            state.update(update)',
+        "            state.update(update)",
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "hilo nuevo sin estado de entrada",
+        "if input_state is None:",
+        "if False:",
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "max_steps ignorado",
+        "if executed >= max_steps:",
+        "if False:",
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "los routers se ignoran",
+        "return edge(state) if callable(edge) else edge",
+        "return edge",
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "el final no se marca como terminado",
+        '"done" if node == END else "running"',
+        '"running"',
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "la entrada es el último nodo",
+        "if self.entry is None:",
+        "if True:",
+    ),
+    (
+        "agents-30-grafo-con-checkpoints",
+        "la pausa avanza el paso",
+        'self._save(thread_id, step, node, state, "interrupted")',
+        'self._save(thread_id, step + 1, node, state, "interrupted")',
+    ),
 ]
 
 survivors = []

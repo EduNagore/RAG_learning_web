@@ -1,0 +1,95 @@
+lesson: m15-memoria-estado/02-memoria-a-largo-plazo
+questions:
+  - id: m15-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿En qué se diferencia la memoria a largo plazo del estado de un hilo?'
+    options:
+      - 'No se diferencian.'
+      - 'El estado sigue una tarea o conversación concreta; la memoria a largo plazo guarda hechos y experiencias reutilizables entre hilos y sesiones.'
+      - 'La memoria a largo plazo solo vive en la ventana de contexto.'
+      - 'El estado dura años y la memoria segundos.'
+    answer: [1]
+    explanation: 'El estado (checkpoints) tiene ámbito de hilo. La memoria a largo plazo vive en un store y persiste entre sesiones.'
+    ref: '#intuición-el-asistente-que-se-acuerda-de-ti'
+
+  - id: m15-02-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué técnica propone MemGPT?'
+    options:
+      - 'Reentrenar el modelo en cada sesión.'
+      - 'Gestión de contexto virtual inspirada en la memoria jerárquica de un sistema operativo, moviendo información entre niveles.'
+      - 'Eliminar la ventana de contexto.'
+      - 'Votar entre recuerdos.'
+    answer: [1]
+    explanation: 'Mueve información entre niveles de memoria, como la paginación, para dar al modelo más contexto efectivo del que cabe en su ventana, e incluye interrupciones para el flujo de control.'
+    ref: '#memgpt-contexto-virtual-por-niveles'
+
+  - id: m15-02-q3
+    type: multiple
+    difficulty: 2
+    prompt: '¿Cuáles son los tres verbos del patrón de memoria de Mem0? Marca todos los correctos.'
+    options:
+      - 'Extraer.'
+      - 'Consolidar.'
+      - 'Recuperar.'
+      - 'Comprimir los pesos.'
+    answer: [0, 1, 2]
+    explanation: 'Extraer hechos de la conversación, consolidarlos (añadir, actualizar, ignorar, eliminar) y recuperar solo los relevantes en cada momento.'
+    ref: '#mem0-extraer-consolidar-y-recuperar'
+
+  - id: m15-02-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, la memoria que solo añade trajo un dato obsoleto en las dos consultas. ¿Por qué?'
+    options:
+      - 'Porque la búsqueda estaba rota.'
+      - 'Porque conserva tanto el hecho viejo («vive en Madrid») como el nuevo («se ha mudado a Valencia») y no resuelve el conflicto.'
+      - 'Porque guarda demasiados pocos hechos.'
+      - 'Porque el modelo es pequeño.'
+    answer: [1]
+    explanation: 'Sin consolidación, ambos hechos compiten en la recuperación y el modelo debe adivinar cuál es el vigente. La memoria consolidada sustituye el hecho antiguo.'
+    ref: '#un-experimento-por-qué-consolidar'
+
+  - id: m15-02-q5
+    type: single
+    difficulty: 3
+    prompt: 'Un recuerdo sobre la ciudad cambia («se ha mudado a Valencia»), otro añade un gusto («también le gusta el té»). ¿Cómo debería tratarlos la consolidación?'
+    options:
+      - 'Igual: sustituyendo siempre.'
+      - 'Igual: añadiendo siempre.'
+      - 'Distinto: el cambio de ciudad sustituye al hecho anterior; el nuevo gusto se añade, y una corrección explícita anula el hecho previo.'
+      - 'Ignorando ambos.'
+    answer: [2]
+    explanation: 'No todo conflicto se resuelve sustituyendo. La consolidación decide entre añadir, actualizar, ignorar y eliminar según el tipo de hecho, y es el paso más delicado.'
+    ref: '#un-experimento-por-qué-consolidar'
+
+  - id: m15-02-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué requisitos de privacidad y seguridad debe cumplir la memoria persistente de un agente? Marca todos los correctos.'
+    options:
+      - 'El usuario puede ver, corregir y borrar lo que se recuerda, incluidas las copias y los resúmenes derivados.'
+      - 'Aislamiento por usuario o inquilino.'
+      - 'Procedencia de cada recuerdo y retención limitada.'
+      - 'Guardar todo indefinidamente, por si hace falta.'
+    answer: [0, 1, 2]
+    explanation: 'Una memoria persistente es un almacén de datos personales. Guardarlo todo para siempre aumenta el riesgo sin aportar valor.'
+    ref: '#privacidad-control-y-seguridad'
+
+  - id: m15-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un ahorro del 90 % de tokens al usar memoria en lugar del historial completo basta para concluir que la memoria funciona bien.'
+    answer: [1]
+    explanation: 'Es falso. Hay que medir también la calidad de lo recuperado (actualización, olvido, abstención), no solo el coste.'
+    ref: '#cómo-evaluarla'
+
+  - id: m15-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un documento malicioso puede provocar que el agente guarde recuerdos falsos que influyan en sesiones futuras.'
+    answer: [0]
+    explanation: 'Es verdadero. Es un envenenamiento de memoria persistente: hay que tratar lo extraído de contenido externo como no fiable y no usarlo para acciones sensibles sin verificación.'
+    ref: '#privacidad-control-y-seguridad'

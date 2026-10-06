@@ -1,0 +1,62 @@
+---
+title: Mini grafo de estados con checkpoints y reanudación
+description: Construye un motor de grafos de estados al estilo de LangGraph, con un checkpoint tras cada paso, pausas para pedir datos a una persona (human-in-the-loop), reanudación de hilos y recuperación tras un fallo sin repetir lo ya hecho.
+part: agentes
+module: m15-memoria-estado
+difficulty: 3
+estimatedMinutes: 55
+concepts:
+  - grafo de estados
+  - checkpoints
+  - human-in-the-loop
+  - ejecución duradera
+packages: []
+hints:
+  - 'Guarda un checkpoint como diccionario `{"step", "node", "state", "status"}` y usa `copy.deepcopy(state)` para que el estado guardado no cambie cuando el estado vivo se modifique.'
+  - 'El campo `node` de un checkpoint es el SIGUIENTE nodo a ejecutar (o `END`). Al reanudar, empieza por `history[-1]["node"]` y con su `step`.'
+  - 'Para la pausa: captura `NeedsInput` alrededor de la ejecución del nodo, quita `state["resume"]` si existe, guarda un checkpoint `interrupted` (mismo nodo, mismo paso) y devuelve la pregunta.'
+  - 'Las excepciones distintas de `NeedsInput` no se capturan: se propagan, pero los checkpoints ya guardados siguen en `self.checkpoints`, así que otra llamada a `run` reanuda desde el último nodo completado.'
+relatedLessons:
+  - m15-memoria-estado/01-checkpointing-y-ejecucion-duradera
+---
+
+## Objetivo
+
+Un agente que dura **minutos u horas**, espera **aprobaciones humanas** o puede **caerse** a mitad necesita una forma de guardar su progreso y retomarlo sin repetir lo que ya hizo (y sin repetir sus efectos). La solución habitual son los **checkpoints**: tras cada paso se guarda una copia del estado del grafo, identificada por un **hilo** (`thread_id`). Con ellos se obtienen tres capacidades: **reanudar** tras un fallo, **pausar** para esperar a una persona y **reproducir o inspeccionar** el historial. Implementas ese motor en miniatura.
+
+## Qué tienes que hacer
+
+Completa la clase `StateGraph`. Un **nodo** es una función `f(state) -> dict` con las claves que actualizan el estado (o `None`). Las **aristas** son fijas (`add_edge`) o condicionales (`add_conditional_edge`, con un *router* `f(state) -> nombre de nodo`). El primer nodo añadido es el de entrada; sin arista saliente, el siguiente es `END`.
+
+- `add_node`, `add_edge`, `add_conditional_edge`: registran la estructura.
+- `get_state(thread_id)`: **copia** del estado del último checkpoint, o `None`.
+- `history(thread_id)`: lista de `(paso, siguiente nodo)` de los checkpoints.
+- `run(thread_id, input_state=None, resume=None, max_steps=20)`:
+  - **Hilo nuevo:** requiere `input_state` (si no, `ValueError`); guarda el checkpoint inicial `(0, entrada)` y empieza.
+  - **Hilo existente:** continúa desde el último checkpoint, cuyo `node` es el siguiente a ejecutar. Si estaba `done`, devuelve el resultado **sin ejecutar nada**; si estaba `interrupted`, exige `resume` (si no, `ValueError`) y **re-ejecuta ese mismo nodo** con `state["resume"] = resume`.
+  - Tras cada nodo: quita `resume`, fusiona la salida en el estado, avanza el paso y guarda un checkpoint (`done` si el siguiente es `END`, si no `running`).
+  - Si un nodo lanza `NeedsInput(pregunta)`: guarda un checkpoint `interrupted` y devuelve `{"status": "interrupted", "question", "state"}`.
+  - Cualquier otra excepción **se propaga**, pero los checkpoints ya guardados permanecen: otra llamada reanuda desde el último nodo completado.
+  - Como mucho `max_steps` nodos por llamada; si queda trabajo, `{"status": "max_steps", ...}` y el hilo sigue reanudable.
+
+## Un ejemplo para comprobar a mano
+
+```python
+def aprobar(state):
+    if "resume" not in state:
+        raise NeedsInput("¿Apruebas el borrador?")
+    return {"aprobado": state["resume"]}
+
+g = StateGraph()
+g.add_node("redactar", lambda s: {"borrador": f"Informe sobre {s['tema']}"})
+g.add_node("aprobar", aprobar)
+g.add_edge("redactar", "aprobar")
+g.run("h1", {"tema": "devoluciones"})["status"]   # 'interrupted'
+g.run("h1", resume=True)["state"]                 # {'tema': ..., 'borrador': ..., 'aprobado': True}
+```
+
+<Callout type="nota" title="El nodo interrumpido se vuelve a ejecutar">
+
+Al reanudar, el nodo que se pausó **empieza otra vez desde su primera línea** (en LangGraph, la documentación lo advierte de forma expresa). Por eso, todo efecto con consecuencias (enviar un correo, cobrar) debe ir **después** de la pausa o ser **idempotente**, y por eso los nodos que se ejecutan antes de la pausa no se repiten: ya están en un checkpoint. Es la misma razón por la que conviene que los nodos sean pequeños y hagan una sola cosa.
+
+</Callout>
