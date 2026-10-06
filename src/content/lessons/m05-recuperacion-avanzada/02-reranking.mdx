@@ -1,0 +1,217 @@
+---
+title: Reranking con cross-encoders, ColBERT y LLM
+description: Por qué la recuperación en dos etapas (candidatos baratos y reordenación precisa) mejora la calidad, cómo funcionan los cross-encoders, la interacción tardía de ColBERT y los rerankers basados en LLM, y qué coste añaden.
+module: m05-recuperacion-avanzada
+order: 2
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Explicar por qué un bi-encoder es rápido pero impreciso y un cross-encoder es preciso pero caro.
+  - Describir la interacción tardía de ColBERT (MaxSim) y su compromiso entre precisión y coste.
+  - Distinguir los rerankers pointwise, pairwise y listwise basados en LLM.
+  - Dimensionar el número de candidatos y detectar el techo que impone la primera etapa.
+prerequisites:
+  - m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: Passage Re-ranking with BERT
+    url: https://arxiv.org/abs/1901.04085
+    type: paper
+    authors: Nogueira, Cho
+    year: 2019
+  - title: "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT"
+    url: https://arxiv.org/abs/2004.12832
+    type: paper
+    authors: Khattab, Zaharia
+    year: 2020
+  - title: "ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction"
+    url: https://arxiv.org/abs/2112.01488
+    type: paper
+    authors: Santhanam, Khattab, Saad-Falcon, Potts, Zaharia
+    year: 2021
+  - title: Is ChatGPT Good at Search? Investigating Large Language Models as Re-Ranking Agents
+    url: https://arxiv.org/abs/2304.09542
+    type: paper
+    authors: Sun et al.
+    year: 2023
+relatedLabs:
+  - rag-09-reranking
+---
+
+## Intuición: leer rápido a muchos, leer despacio a pocos
+
+Cuando buscas un libro en una biblioteca, primero usas el catálogo (rápido, impreciso, cubre todo) y después hojeas los pocos candidatos que te devuelve (lento, preciso, solo unos cuantos). La recuperación en RAG funciona igual y se llama **recuperación en dos etapas**:
+
+1. **Primera etapa (recuperación).** Un índice vectorial, BM25 o una fusión de ambos devuelve los $N$ mejores candidatos (típicamente entre 20 y 100) de un corpus enorme. Tiene que ser barata, así que cada documento se representa **por separado y de antemano**.
+2. **Segunda etapa (reranking).** Un modelo más caro reordena esos $N$ candidatos mirando **la consulta y el documento a la vez**, y nos quedamos con los $k$ primeros (por ejemplo 3-5) para el contexto del modelo generativo.
+
+¿Por qué no usar directamente el modelo preciso sobre todo el corpus? Porque su coste crece con el número de documentos *por cada consulta*. La primera etapa reduce millones de documentos a decenas; la segunda se puede permitir gastar más por documento.
+
+## Cómo funciona
+
+### Bi-encoder frente a cross-encoder
+
+Un **bi-encoder** (el modelo de embeddings que ya conoces) codifica la consulta y el documento **por separado** y compara los vectores. Los vectores de los documentos se calculan una vez, al indexar, y la consulta solo cuesta una pasada por el modelo. El precio es que toda la información de un documento tiene que caber en un único vector, fijado **antes de saber qué se va a preguntar**.
+
+Un **cross-encoder** recibe la consulta y el documento **concatenados** en una misma entrada y produce directamente una puntuación de relevancia. Como la atención del modelo puede relacionar cada palabra de la consulta con cada palabra del documento, es mucho más expresivo. Nogueira y Cho (2019) lo demostraron al reordenar los resultados de un buscador con BERT sobre MS MARCO, donde lograron una mejora relativa del 27 % en MRR@10 respecto al estado del arte anterior. El coste es evidente: **no se puede precalcular nada**. Cada par (consulta, documento) exige una pasada completa por el modelo, y eso para cada consulta nueva. Con $N = 50$ candidatos son 50 pasadas por consulta.
+
+<Diagram
+  caption="El cross-encoder lee la consulta y cada candidato juntos; solo se puede permitir hacerlo con unas decenas de documentos."
+  code={`flowchart LR
+  Q[Consulta] --> R1[Primera etapa: BM25 / vectores / híbrida]
+  R1 -->|N candidatos, p. ej. 50| RR[Reranker: puntúa cada par consulta + documento]
+  RR -->|reordena| T[Top-k, p. ej. 5]
+  T --> G[Generador]`}
+/>
+
+### Interacción tardía: ColBERT
+
+ColBERT (Khattab y Zaharia, 2020) busca un punto intermedio. En lugar de un vector por documento, guarda **un vector por token**, calculados de antemano. Para una consulta, codifica también sus tokens por separado y calcula la relevancia con una operación que ellos llaman **interacción tardía**: cada token de la consulta busca su token más parecido en el documento (similitud máxima, *MaxSim*) y se suman esos máximos:
+
+$$
+s(q, d) = \sum_{i \in q} \max_{j \in d} \; \mathbf{q}_i \cdot \mathbf{d}_j
+$$
+
+Como los vectores de los documentos están precalculados, no hay que pasar el modelo por cada par; la «interacción» entre consulta y documento se retrasa a una operación barata sobre vectores. Según el artículo, ColBERT es competitivo con los modelos de reranking basados en BERT y, en el mismo trabajo, ejecuta **dos órdenes de magnitud más rápido y con cuatro órdenes de magnitud menos FLOPs por consulta** que ese reranking. El coste se paga en **almacenamiento**: un vector por token multiplica el tamaño del índice. ColBERTv2 (Santhanam et al., 2021) lo aborda con compresión residual y una supervisión más depurada, y reporta reducir el espacio de los índices entre 6 y 10 veces.
+
+Se puede usar de dos formas: como **reranker** sobre los candidatos de otra etapa o como **recuperador** de extremo a extremo con su propio índice.
+
+### Rerankers basados en LLM
+
+Otra familia usa un modelo de lenguaje generativo como reranker, con una instrucción en lugar de un entrenamiento específico. Hay tres formatos:
+
+- **Pointwise:** se pide al modelo una puntuación o un sí/no por cada par consulta-documento. Simple y paralelizable, pero las puntuaciones de un LLM son poco calibradas.
+- **Pairwise:** se compara por parejas qué documento es más relevante. Preciso, pero el número de comparaciones crece de forma cuadrática.
+- **Listwise:** se entrega al modelo la lista completa de candidatos y se le pide un orden. Es lo que hace RankGPT (Sun et al., 2023), que usa una **ventana deslizante** para repartir los candidatos en el contexto del modelo. Los autores encuentran que LLM bien instruidos son competitivos con los rerankers supervisados en varios conjuntos de BEIR, y que **destilar** esa capacidad en un modelo específico de 440 millones de parámetros supera a un modelo supervisado de 3 000 millones en BEIR.
+
+Los rerankers LLM son flexibles (aceptan instrucciones, como «prioriza normativa vigente») pero son los más **caros y lentos**, y su salida de texto puede estar mal formada o saltarse candidatos: hay que validarla.
+
+<Snapshot date="2026-10">
+
+La oferta concreta de modelos de reranking (los de código abierto y los servicios de API de reranking de los proveedores) cambia cada pocos meses, y sus precios y límites de longitud también. Los resultados de los artículos citados son de 2019-2023 sobre MS MARCO y BEIR. Antes de elegir un modelo, compara varios candidatos con **tu** conjunto dorado, midiendo calidad, latencia en percentiles altos y coste por mil consultas, y revisa la documentación vigente del proveedor.
+
+</Snapshot>
+
+### Un experimento: lo que el reranker puede y no puede arreglar
+
+Sobre el corpus Nimbus, BM25 falla algunas preguntas por morfología («reembolsan» frente a «reembolso»). El código siguiente toma los $N$ mejores candidatos de BM25 y los reordena con un **reranker de juguete** que mira consulta y documento juntos (comparando raíces de cinco letras y pares de palabras seguidas). No es un modelo neuronal; sirve para ver el mecanismo y medir el techo de la primera etapa.
+
+```python
+import math
+
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+golden = [q for q in load_golden() if q["answerable"]]
+ids = [d["id"] for d in corpus]
+docs = {d["id"]: tokenize(d["title"] + " " + d["text"]) for d in corpus}
+avgdl = sum(map(len, docs.values())) / len(docs)
+
+
+def bm25(query, k1=1.5, b=0.75):
+    scores = {i: 0.0 for i in ids}
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs.values())
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in docs.items():
+            f = d.count(t)
+            if f:
+                scores[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(d) / avgdl))
+    return sorted(ids, key=lambda i: -scores[i])  # sorted es estable: empata por orden del corpus
+
+
+def puntuar(query, doc_id):
+    """Reranker de juguete: mira consulta y documento JUNTOS (raíces de 5 letras y bigramas)."""
+    q, d = tokenize(query), docs[doc_id]
+    raices = {t[:5] for t in d}
+    cobertura = sum(t[:5] in raices for t in q) / max(len(q), 1)
+    return cobertura + 0.5 * len(set(zip(q, q[1:])) & set(zip(d, d[1:])))
+
+
+def con_reranking(query, n):
+    primera_etapa = bm25(query)
+    return sorted(primera_etapa[:n], key=lambda d: -puntuar(query, d)) + primera_etapa[n:]
+
+
+def evaluar(buscar):
+    h1, h3, rr = [], [], []
+    for q in golden:
+        r, rel = buscar(q["question"]), set(q["relevant_ids"])
+        h1.append(r[0] in rel)
+        h3.append(any(d in rel for d in r[:3]))
+        rr.append(next((1 / p for p, d in enumerate(r[:10], 1) if d in rel), 0))
+    return [round(float(np.mean(x)), 3) for x in (h1, h3, rr)]
+
+
+print("etapa               hit@1 hit@3 MRR@10")
+print("BM25 solo          ", *evaluar(bm25))
+for n in (5, 20):
+    print(f"BM25 + rerank({n:>2})  ", *evaluar(lambda q: con_reranking(q, n)))
+for n in (3, 5, 20):
+    cubre = [any(d in set(q["relevant_ids"]) for d in bm25(q["question"])[:n]) for q in golden]
+    print(f"recall@{n:<2} de la primera etapa:", round(float(np.mean(cubre)), 3))
+```
+
+Salida (determinista):
+
+```text
+etapa               hit@1 hit@3 MRR@10
+BM25 solo           0.821 0.893 0.873
+BM25 + rerank( 5)   0.893 0.964 0.923
+BM25 + rerank(20)   0.893 0.964 0.923
+recall@3  de la primera etapa: 0.893
+recall@5  de la primera etapa: 0.964
+recall@20 de la primera etapa: 0.964
+```
+
+Tres lecciones, y una advertencia:
+
+1. **El reranker mejora la cima de la lista:** `hit@1` pasa de 0,821 a 0,893 y el MRR de 0,873 a 0,923. Eso es lo que se espera de una segunda etapa.
+2. **El techo lo pone la primera etapa.** El recall con 5, 10 o 20 candidatos es el mismo (0,964): hay una pregunta cuya respuesta BM25 no devuelve **ni entre los 20 primeros**. Ningún reranker puede ordenar un documento que no está entre los candidatos. Por eso el reranking no sustituye a una buena recuperación: la complementa.
+3. **Más candidatos no siempre ayuda.** Aquí 5 y 20 dan lo mismo; en corpus grandes, ampliar $N$ suele subir el recall pero también la latencia y la posibilidad de que el reranker cuele un distractor.
+4. **Advertencia metodológica:** este reranker lo diseñé **después de mirar qué preguntas fallaba BM25** (de ahí las raíces de cinco letras). La mejora está inflada por haber ajustado el método a las mismas 28 preguntas con las que se mide. Es una ilustración del mecanismo, no una estimación de rendimiento. Con un modelo real, mide sobre preguntas que no usaste para decidir su configuración.
+
+## Trade-offs
+
+| Enfoque | Calidad | Coste y latencia | Cuándo |
+| --- | --- | --- | --- |
+| Sin reranking | Depende solo de la primera etapa | Mínimo | Prototipos y corpus pequeños |
+| Cross-encoder | Alta | Una pasada por candidato y consulta; crece con $N$ | Opción estándar para mejorar la precisión en el top-k |
+| ColBERT (interacción tardía) | Alta, cercana a un cross-encoder | Barato en consulta, índice mucho mayor | Cuando el almacenamiento es asumible y se quiere latencia baja |
+| Reranker LLM listwise | Alta y flexible (acepta instrucciones) | El más caro y lento; salida a validar | Pocos candidatos, alto valor por consulta |
+| Más candidatos $N$ | Más recall posible | Más latencia y coste | Si el recall de la primera etapa es el cuello de botella |
+
+## Errores comunes en producción
+
+- **Reordenar candidatos que ya no contienen la respuesta.** Si el recall de la primera etapa es bajo, el reranker no puede arreglarlo. Mide primero `recall@N` de la recuperación.
+- **Elegir $N$ sin medir.** Demasiado pequeño pierde la respuesta; demasiado grande dispara la latencia. Busca el punto en que el recall deja de subir.
+- **Ignorar la latencia en percentiles altos.** Un cross-encoder sobre 50 candidatos largos puede ser la mitad del tiempo total de la petición.
+- **Truncar sin darse cuenta.** Los rerankers tienen una longitud máxima de entrada; un fragmento más largo se corta y se puntúa solo una parte.
+- **Fiarse de la puntuación absoluta.** Las puntuaciones de un reranker sirven para **ordenar**; usarlas con un umbral fijo requiere calibrarlas con tus datos.
+- **No validar la salida de un reranker LLM.** Puede devolver identificadores repetidos, inventados o una lista incompleta.
+- **Reranking sobre fragmentos sin contexto.** Si el fragmento no menciona de qué producto o política habla, ni el mejor reranker puede puntuarlo bien: arréglalo en el chunking (contexto de documento) como verás en la lección de Contextual Retrieval.
+- **Evaluar con las mismas preguntas con las que ajustaste.** Es el sesgo de nuestro experimento: reserva un conjunto de preguntas sin tocar.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué usar dos etapas en lugar de un único modelo preciso?"_ Pista: el modelo preciso cuesta por documento y consulta; la primera etapa reduce millones a decenas y la segunda gasta más solo en esas.
+- _"Diferencia entre bi-encoder y cross-encoder."_ Pista: el bi-encoder codifica por separado y permite precalcular y buscar en un índice; el cross-encoder procesa el par junto, más preciso pero sin precálculo.
+- _"¿Qué aporta ColBERT?"_ Pista: un vector por token y MaxSim; interacción tardía que casi iguala a un cross-encoder con un coste de consulta mucho menor, a cambio de un índice mayor.
+- _"¿Cómo eliges cuántos candidatos reordenar?"_ Pista: curva de recall@N de la primera etapa frente a latencia añadida; el punto donde el recall se aplana.
+
+</Callout>
+
+<KeyTakeaways>
+
+- La recuperación en **dos etapas** combina una primera fase barata (candidatos) con una segunda precisa (reranking).
+- El **cross-encoder** lee consulta y documento juntos: más preciso, sin precálculo, coste proporcional a $N$.
+- **ColBERT** guarda un vector por token y puntúa con MaxSim: casi la calidad de un cross-encoder con coste de consulta bajo y un índice mayor.
+- Los **rerankers LLM** (pointwise, pairwise, listwise) son flexibles pero los más caros; valida su salida.
+- El reranker **no puede recuperar** lo que la primera etapa no trajo: mide `recall@N` antes de culpar al reranker.
+
+</KeyTakeaways>

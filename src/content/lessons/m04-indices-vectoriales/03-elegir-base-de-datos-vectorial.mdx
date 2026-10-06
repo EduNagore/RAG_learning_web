@@ -1,0 +1,148 @@
+---
+title: Elegir una base de datos vectorial
+description: Un criterio de decisión para escoger dónde almacenar y buscar vectores, con las categorías de soluciones, qué preguntar a cada una y un resumen verificado de varios productos.
+module: m04-indices-vectoriales
+order: 3
+level: intermedio
+estimatedMinutes: 16
+objectives:
+  - Clasificar las soluciones en extensiones de bases de datos, motores dedicados, servicios gestionados y librerías embebidas.
+  - Aplicar una lista de criterios (escala, filtros, operación, coste, ecosistema) a un caso real.
+  - Reconocer las capacidades diferenciales que sí importan, como filtrado, búsqueda híbrida y cuantización.
+  - Decidir con una prueba de concepto medida en lugar de por comparativas genéricas.
+prerequisites:
+  - m04-indices-vectoriales/02-metricas-y-filtrado
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: pgvector (repositorio y documentación)
+    url: https://github.com/pgvector/pgvector
+    type: docs
+    authors: pgvector
+    year: 2026
+  - title: Qdrant, visión general de la documentación
+    url: https://qdrant.tech/documentation/overview/
+    type: docs
+    authors: Qdrant
+    year: 2026
+  - title: Milvus, visión general de la documentación
+    url: https://milvus.io/docs/overview.md
+    type: docs
+    authors: Milvus
+    year: 2026
+  - title: Weaviate, visión general de la documentación
+    url: https://docs.weaviate.io/weaviate
+    type: docs
+    authors: Weaviate
+    year: 2026
+  - title: Pinecone, vista general de la indexación
+    url: https://docs.pinecone.io/guides/index-data/indexing-overview
+    type: docs
+    authors: Pinecone
+    year: 2026
+  - title: Chroma, introducción
+    url: https://docs.trychroma.com/docs/overview/introduction
+    type: docs
+    authors: Chroma
+    year: 2026
+  - title: LanceDB, documentación
+    url: https://docs.lancedb.com/
+    type: docs
+    authors: LanceDB
+    year: 2026
+---
+
+## Intuición: la mejor base de datos es la que ya sabes operar
+
+La pregunta «¿qué base de datos vectorial uso?» genera comparativas interminables. La mayoría pierden de vista lo esencial: **para la mayoría de proyectos, varias opciones funcionan bien**, y lo que de verdad decide es qué sabe operar tu equipo, cuánto crecerá el corpus, qué filtros necesitas y cuánto estás dispuesto a pagar y a mantener. Una base de datos vectorial excelente que nadie sabe desplegar es peor que una correcta que ya está en producción.
+
+Esta lección no es un ranking (cualquier ranking caducaría en meses) sino un **método** para decidir y un resumen **verificado en la documentación oficial** de lo que ofrecen varias opciones, con la fecha de comprobación.
+
+## Cómo funciona
+
+### Cuatro categorías de soluciones
+
+1. **Extensión de una base de datos que ya tienes.** El ejemplo clásico es **pgvector** para PostgreSQL: describe su propuesta como búsqueda por similitud vectorial de código abierto para Postgres, que permite guardar los vectores **junto a tus datos relacionales**, con garantías ACID y recuperación en un punto del tiempo. Ventaja: una sola base de datos, transacciones, uniones con tus tablas, permisos conocidos. Límite: a escalas muy grandes o con requisitos de búsqueda especializados, un motor dedicado puede rendir más.
+2. **Motores dedicados de código abierto.** **Qdrant**, **Milvus**, **Weaviate** o **Chroma** son bases de datos pensadas desde el principio para vectores, que puedes autoalojar, y que ofrecen filtrado, búsqueda híbrida y varios tipos de índice.
+3. **Servicios gestionados.** **Pinecone** es un servicio de base de datos vectorial gestionado; varios de los anteriores (Qdrant, Weaviate y Chroma, según su documentación) ofrecen además una versión gestionada en la nube. Ventaja: sin operación; límite: coste recurrente, dependencia del proveedor y requisitos de residencia de datos.
+4. **Librerías y motores embebidos.** **LanceDB**, descrito en su documentación como una biblioteca de recuperación embebida de código abierto con SDK en Python, TypeScript y Rust, funciona dentro de tu proceso, sin servidor separado: ideal para prototipos, aplicaciones locales o análisis. **Chroma** ofrece también un modo local.
+
+A estas se suma una quinta vía: **motores de búsqueda de texto** como Elasticsearch u OpenSearch, que añaden búsqueda vectorial a un sistema que muchas organizaciones ya tienen para la búsqueda por palabras clave, útil cuando la búsqueda híbrida y la infraestructura existente pesan más que la especialización.
+
+### Lo que sí diferencia a unas de otras
+
+Muchas capacidades son comunes. Estas son las que merece la pena comprobar, porque cambian el diseño:
+
+| Capacidad | Por qué importa |
+| --- | --- |
+| **Filtrado durante la búsqueda** | Evita el fallo del postfiltrado. Debe ser eficiente con filtros de baja y alta selectividad. |
+| **Búsqueda híbrida** (densa + dispersa/BM25) | Cubre los fallos léxicos; ahorra montar dos sistemas. |
+| **Tipos de índice y cuantización** | Controlan memoria, latencia y coste (HNSW, IVF, en disco, cuantización escalar o binaria). |
+| **Particiones o multiinquilino** | Aislamiento por cliente o por permiso. |
+| **Actualizaciones y borrados** | Reindexación incremental, consistencia y rendimiento con escrituras continuas. |
+| **Operación y alta disponibilidad** | Réplicas, copias de seguridad, escalado horizontal. |
+| **Ecosistema** | Integraciones con tu framework, SDK en tu lenguaje, observabilidad. |
+
+<Snapshot date="2026-10">
+
+Resumen de lo que indican las páginas oficiales consultadas el 5 de octubre de 2026 (cada punto está tomado de la documentación del producto):
+
+- **pgvector:** índices **HNSW e IVFFlat**; distancias L2, producto escalar, coseno, L1, Hamming y Jaccard; indexación de hasta 2 000 dimensiones para el tipo `vector` (4 000 para `halfvec`); el filtrado con `WHERE` se aplica **después** de recorrer el índice aproximado, con opción de **escaneo iterativo** para obtener más resultados.
+- **Qdrant:** opciones de despliegue de código abierto autoalojado, nube gestionada, nube híbrida y nube privada; índice de _payload_ que extiende HNSW para filtrar durante la búsqueda; **vectores dispersos** para coincidencias léxicas y recuperación híbrida.
+- **Milvus:** licencia Apache 2.0 (en proceso de donación a la LF AI & Data Foundation); modos **Lite, Standalone y Distribuido**; índices **IVF, HNSW, DiskANN** y más, con variantes de cuantización y aceleración por GPU; búsqueda híbrida sobre varios campos vectoriales densos y dispersos.
+- **Weaviate:** base de datos vectorial de código abierto; despliegue en Weaviate Cloud, Docker, Kubernetes o embebido; búsqueda semántica e híbrida (semántica y por palabras clave).
+- **Pinecone:** servicio gestionado con índices _serverless_; los índices nuevos son de documento y combinan vectores densos, dispersos y búsqueda de texto completo; **namespaces** para aislar y acelerar; filtrado por metadatos con indexación de todos los campos por defecto; embeddings integrados opcionales.
+- **Chroma:** código abierto con licencia Apache 2.0; **Chroma Cloud** gestionado; búsqueda densa, dispersa e híbrida, búsqueda por palabras clave y expresiones regulares, y filtrado por metadatos.
+- **LanceDB:** biblioteca de recuperación **embebida** de código abierto basada en el formato Lance; búsqueda vectorial, de texto completo e híbrida, reordenación y filtrado.
+
+Esta lista **no es exhaustiva ni un ranking**: no incluye Elasticsearch/OpenSearch (cuya documentación consultada no detallaba índices ni cuantización) y las capacidades cambian con cada versión. Verifica en la documentación vigente antes de decidir.
+
+</Snapshot>
+
+### Un proceso de decisión
+
+1. **Escribe tus requisitos**: tamaño actual y esperado del corpus (¿miles, millones, miles de millones?), filtros y permisos, latencia objetivo, ritmo de actualización, restricciones de residencia de datos y presupuesto.
+2. **Empieza por lo simple.** Si ya usas PostgreSQL y el corpus es de cientos de miles a pocos millones, pgvector evita un componente nuevo. Si no tienes infraestructura, un servicio gestionado o un motor embebido acelera el arranque.
+3. **Prueba de concepto con tus datos:** carga tu corpus real, ejecuta tus **preguntas reales con sus filtros** y mide **recall** frente a la búsqueda exacta, **latencia** (percentiles altos, no solo la media) y **coste**.
+4. **Prueba lo incómodo:** actualizaciones y borrados continuos, filtros muy selectivos y fallo de un nodo.
+5. **Decide y deja una salida.** Abstrae el acceso al índice tras una interfaz de tu aplicación para que cambiar de base de datos sea un proyecto de días y no de meses. Conserva siempre los **documentos y los embeddings originales** fuera de la base de datos vectorial para poder reindexar.
+
+## Trade-offs
+
+| Opción | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Extensión (pgvector) | Un solo sistema, transacciones, uniones con datos relacionales | Menos especialización a gran escala |
+| Motor dedicado autoalojado | Control, filtros y funciones avanzadas | Operarlo, actualizarlo y escalarlo es cosa tuya |
+| Servicio gestionado | Sin operación, escala fácil | Coste recurrente, dependencia, datos fuera de tu red |
+| Biblioteca embebida | Cero infraestructura, ideal para empezar | Menos adecuada para muchos usuarios concurrentes o multiservicio |
+| Motor de búsqueda de texto con vectores | Reutiliza infraestructura y búsqueda híbrida | Puede costar más memoria y ser menos fino en vectores |
+
+## Errores comunes en producción
+
+- **Elegir por una comparativa de rendimiento ajena.** Los resultados dependen de la dimensión, el filtrado y el hardware; haz la tuya.
+- **Medir solo la latencia media.** Los percentiles altos son los que sufre el usuario.
+- **Probar sin filtros.** El rendimiento con filtros restrictivos puede ser radicalmente distinto.
+- **No planificar el crecimiento.** Un sistema que va bien con 100 000 vectores puede no escalar a 100 millones sin cambiar de arquitectura.
+- **Acoplar la aplicación al proveedor.** Sin una capa de abstracción, migrar es muy costoso.
+- **Perder los datos de origen.** Si solo existe la copia en la base de datos vectorial, no puedes reindexar con otro modelo.
+- **Ignorar la operación:** copias de seguridad, monitorización y actualización de versiones.
+- **Elegir por el producto y no por el patrón.** Antes de comparar marcas, decide si necesitas una extensión, un servicio o una biblioteca embebida: esa decisión descarta la mitad de las opciones.
+- **No presupuestar la migración de datos.** Si un día cambias de modelo de embeddings o de proveedor, tendrás que reindexar todo; tener el proceso de ingesta automatizado y los datos de origen a mano lo convierte en un trámite y no en un proyecto.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo eliges una base de datos vectorial?"_ Pista: requisitos de escala, filtros, latencia, actualización y operación; empezar simple (pgvector o un servicio gestionado), prueba de concepto con datos y filtros reales, y dejar una salida.
+- _"¿Cuándo usarías pgvector y cuándo un motor dedicado?"_ Pista: pgvector si ya hay PostgreSQL y la escala es moderada (una sola base de datos, transacciones); dedicado si necesitas escala muy grande, filtrado avanzado o funciones específicas.
+- _"¿Qué comprobarías en una prueba de concepto?"_ Pista: recall frente a exacta, latencia en percentiles altos, comportamiento con filtros selectivos, actualizaciones y borrados, coste.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Para la mayoría de proyectos **varias opciones sirven**: decide por requisitos, operación y equipo, no por rankings.
+- Cuatro categorías: **extensión** (pgvector), **motor dedicado**, **servicio gestionado** y **embebido**; más motores de texto con vectores.
+- Capacidades que sí importan: **filtrado durante la búsqueda**, **búsqueda híbrida**, **índices y cuantización**, **particiones**, **actualizaciones** y **operación**.
+- Haz una **prueba de concepto** con tu corpus, tus filtros y tus preguntas; mide recall, latencia (percentiles) y coste.
+- **Abstrae el acceso** y conserva documentos y embeddings originales para poder cambiar.
+
+</KeyTakeaways>

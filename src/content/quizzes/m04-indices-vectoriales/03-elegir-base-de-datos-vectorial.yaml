@@ -1,0 +1,82 @@
+lesson: m04-indices-vectoriales/03-elegir-base-de-datos-vectorial
+questions:
+  - id: m04-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué debería decidir principalmente la elección de una base de datos vectorial?'
+    options:
+      - 'Tus requisitos de escala, filtros, latencia, actualización y la capacidad de tu equipo para operarla.'
+      - 'El primer puesto de una comparativa genérica.'
+      - 'El nombre más conocido.'
+      - 'El color de la interfaz.'
+    answer: [0]
+    explanation: 'Para la mayoría de proyectos varias opciones funcionan; lo que decide es el encaje con tus requisitos y con lo que puedes operar. Las comparativas ajenas dependen de datos, filtros y hardware distintos a los tuyos.'
+    ref: '#intuición-la-mejor-base-de-datos-es-la-que-ya-sabes-operar'
+
+  - id: m04-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué ventaja principal ofrece una extensión como **pgvector**?'
+    options:
+      - 'Guardar los vectores junto a tus datos relacionales en la misma base de datos, con transacciones y uniones.'
+      - 'Sustituir por completo a PostgreSQL.'
+      - 'Funcionar sin ningún índice.'
+      - 'Eliminar la necesidad de embeddings.'
+    answer: [0]
+    explanation: 'pgvector añade búsqueda vectorial a PostgreSQL, así que reutilizas el mismo sistema, sus garantías y sus permisos. No sustituye a la base de datos ni elimina los embeddings.'
+    ref: '#cuatro-categorías-de-soluciones'
+
+  - id: m04-03-q3
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué conviene comprobar en una prueba de concepto de una base de datos vectorial? Marca todo lo correcto.'
+    options:
+      - 'Recall frente a la búsqueda exacta.'
+      - 'Latencia en percentiles altos, no solo la media.'
+      - 'Comportamiento con filtros muy selectivos.'
+      - 'Actualizaciones y borrados continuos.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Todas son pruebas relevantes: el recall mide la calidad del índice, los percentiles reflejan la experiencia del usuario y los filtros selectivos y las escrituras continuas son donde más difieren los sistemas.'
+    ref: '#un-proceso-de-decisión'
+
+  - id: m04-03-q4
+    type: truefalse
+    difficulty: 2
+    prompt: 'Conviene guardar únicamente los vectores en la base de datos vectorial y descartar los documentos y embeddings originales para ahorrar espacio.'
+    answer: [1]
+    explanation: 'Es falso. Sin los documentos originales no puedes reindexar con otro modelo de embeddings ni cambiar de base de datos. Conserva siempre los datos de origen fuera del índice.'
+    ref: '#un-proceso-de-decisión'
+
+  - id: m04-03-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué es recomendable abstraer el acceso al índice tras una interfaz propia de la aplicación?'
+    options:
+      - 'Para que cambiar de base de datos sea un proyecto de días y no de meses.'
+      - 'Para que el índice sea más lento.'
+      - 'Para ocultar los metadatos.'
+      - 'Porque las bases de datos vectoriales lo exigen.'
+    answer: [0]
+    explanation: 'Sin una capa de abstracción, el código queda acoplado al proveedor y migrar es muy costoso. Es una forma barata de dejarte una salida.'
+    ref: '#un-proceso-de-decisión'
+
+  - id: m04-03-q6
+    type: single
+    difficulty: 2
+    prompt: '¿Cuándo encaja bien una biblioteca **embebida** como LanceDB?'
+    options:
+      - 'Prototipos, aplicaciones locales o análisis sin querer montar un servidor.'
+      - 'Un servicio con miles de usuarios concurrentes que comparten el mismo índice distribuido.'
+      - 'Cuando se necesita una nube gestionada.'
+      - 'Cuando no hay datos.'
+    answer: [0]
+    explanation: 'Una biblioteca embebida funciona dentro de tu proceso, sin infraestructura aparte, ideal para empezar. Para muchos usuarios concurrentes o varios servicios suele preferirse un motor servidor o gestionado.'
+    ref: '#cuatro-categorías-de-soluciones'
+
+  - id: m04-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'El filtrado durante la búsqueda y la búsqueda híbrida son capacidades que conviene comprobar, porque cambian el diseño del sistema.'
+    answer: [0]
+    explanation: 'Es verdadero. El filtrado durante la búsqueda evita el fallo del postfiltrado y la búsqueda híbrida cubre los fallos léxicos sin montar dos sistemas. Muchas otras capacidades son comunes a casi todas las opciones.'
+    ref: '#lo-que-sí-diferencia-a-unas-de-otras'

@@ -1,0 +1,272 @@
+---
+title: Parent-document, ventanas de contexto y RAPTOR
+description: Cómo recuperar con fragmentos pequeños y entregar contexto más grande (small-to-big, ventana de frases) y cómo los árboles de resúmenes de RAPTOR responden preguntas que abarcan todo un documento.
+module: m05-recuperacion-avanzada
+order: 4
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Explicar la tensión entre fragmentos pequeños (buena búsqueda) y grandes (buen contexto) y cómo la resuelve small-to-big.
+  - Implementar recuperación parent-document y ventana de frases, y elegir entre ellas.
+  - Describir cómo RAPTOR construye un árbol de resúmenes y cuándo compensa su coste.
+  - Medir la relación entre cobertura de la respuesta y cantidad de contexto entregado.
+prerequisites:
+  - m05-recuperacion-avanzada/03-transformacion-de-consulta
+  - m02-ingesta-chunking/03-chunking-con-contexto
+volatility: low
+lastReviewed: 2026-10-05
+sources:
+  - title: "RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval"
+    url: https://arxiv.org/abs/2401.18059
+    type: paper
+    authors: Sarthi, Abdullah, Tuli, Khanna, Goldie, Manning
+    year: 2024
+  - title: Introducing Contextual Retrieval
+    url: https://www.anthropic.com/news/contextual-retrieval
+    type: blog
+    authors: Anthropic
+    year: 2024
+  - title: Retrieval-Augmented Generation for Large Language Models, a Survey
+    url: https://arxiv.org/abs/2312.10997
+    type: paper
+    authors: Gao et al.
+    year: 2023
+relatedLabs:
+  - rag-15-parent-document
+  - rag-16-ventana-de-frases
+---
+
+## Intuición: buscar con lupa, leer con la página entera
+
+Un fragmento pequeño (una o dos frases) tiene un embedding **muy específico**: casa bien con una pregunta concreta. Pero entregado solo al modelo generativo puede quedarse **corto**: le falta lo que viene antes («este plazo se aplica solo a…») o lo que viene después («salvo en caso de…»). Un fragmento grande (una página) tiene el efecto contrario: da buen contexto, pero su embedding mezcla muchos temas y diluye la señal, y además consume tokens aunque solo una frase sea relevante.
+
+Hay una tensión entre lo que conviene **para buscar** (pequeño y preciso) y lo que conviene **para responder** (suficiente y completo). La solución habitual es separar las dos cosas: **indexar unidades pequeñas, entregar unidades grandes**. Es lo que en la literatura y en los frameworks aparece como *small-to-big*, *parent-document retrieval* o *sentence-window retrieval*.
+
+## Cómo funciona
+
+### Parent-document (small-to-big)
+
+1. Al indexar, cada documento (el «padre») se divide en fragmentos pequeños (los «hijos»). Solo los hijos se incrustan e indexan, cada uno con una referencia a su padre.
+2. Al consultar, se buscan los mejores hijos.
+3. Antes de pasarlos al generador se **sustituyen por sus padres** (sin repetir un mismo padre dos veces) y se entregan esos bloques mayores.
+
+El padre puede ser el documento entero, una sección o un tramo de tamaño intermedio (por ejemplo, hijos de 100-200 tokens y padres de 1 000). La jerarquía de títulos de la lección de chunking con contexto es un buen criterio para elegir qué es un padre.
+
+### Ventana de frases (sentence window)
+
+Una variante más fina: se indexa **cada frase** y, al recuperar una, se entrega esa frase **más las $w$ frases anteriores y posteriores** del mismo documento. No necesita definir padres: el contexto crece solo lo justo alrededor de lo que casó. Si dos frases recuperadas están cerca, sus ventanas se solapan y se **fusionan** en un solo bloque.
+
+### Contexto añadido al fragmento
+
+La tercera pieza, que ya viste, es dar al fragmento pequeño la información que le falta **antes de indexarlo**: el título del documento, la sección o un resumen del contexto generado por un LLM (**Contextual Retrieval**, de Anthropic). No sustituye a las dos técnicas anteriores: mejora **qué se encuentra**, mientras que parent-document y ventana mejoran **qué se entrega**. Se combinan.
+
+### RAPTOR: un árbol de resúmenes
+
+Todas las técnicas anteriores recuperan **pasajes**. Pero algunas preguntas necesitan una **visión global**: «¿cuál es el argumento general del documento?» o «¿qué tienen en común estas tres secciones?». Ningún fragmento individual contiene esa respuesta. **RAPTOR** (Sarthi et al., 2024) construye de forma recursiva un **árbol** para atacarlo:
+
+1. Se divide el texto en fragmentos pequeños y se calculan sus embeddings.
+2. Se **agrupan** (clustering) los fragmentos similares.
+3. Un LLM **resume** cada grupo, y esos resúmenes se convierten en los nodos de la capa superior.
+4. Se repite el proceso (agrupar, resumir) hasta tener una raíz o no poder agrupar más.
+
+En la consulta se pueden usar todos los niveles a la vez: las hojas contienen detalle y los nodos superiores, abstracción. Los autores reportan que, combinado con GPT-4, RAPTOR mejoró el estado del arte en la prueba de preguntas sobre textos largos QuALITY en un 20 % de precisión absoluta, y que supera a la recuperación tradicional sobre fragmentos en varias tareas.
+
+El coste es real: **resumir con un LLM cada grupo de cada nivel** al indexar, y volver a hacerlo (al menos en parte) cuando el documento cambia. Compensa con documentos largos y estables y preguntas de síntesis; para preguntas factuales sobre un dato concreto de un corpus que cambia a menudo, es excesivo.
+
+<Diagram
+  caption="RAPTOR agrupa y resume por capas; la consulta puede recuperar desde cualquier nivel del árbol."
+  code={`flowchart BT
+  H1[Fragmento 1] --> G1[Resumen A]
+  H2[Fragmento 2] --> G1
+  H3[Fragmento 3] --> G2[Resumen B]
+  H4[Fragmento 4] --> G2
+  G1 --> R[Resumen global]
+  G2 --> R`}
+/>
+
+### Cómo elegir los tamaños
+
+No hay un tamaño universal, pero sí un procedimiento. Empieza por **los hijos**: deben ser lo bastante pequeños para que cada uno trate una sola idea (una o dos frases, o un párrafo corto) y lo bastante autocontenidos para entenderse con el título añadido. Después decide **el padre** según la estructura que ya tiene tu documento: una sección con su encabezado, una página, un artículo de un contrato. Un padre que respeta la estructura natural es más coherente que uno de longitud fija. Por último, fija un **presupuesto de contexto** (por ejemplo, 3 000 tokens para la evidencia) y calcula cuántos padres caben: ese número, y no la intuición, determina cuántos hijos conviene recuperar y si hace falta recortar con una ventana.
+
+### Un experimento: cuánto contexto necesita la respuesta
+
+En el corpus Nimbus cada documento es corto (unas 54 palabras en media), así que el efecto es modesto, pero los números muestran con claridad el compromiso. El código indexa **una frase por fragmento**, compara tres formas de indexar y, después, tres formas de entregar el contexto: las frases recuperadas tal cual, con una ventana de ±1 frase, o el documento padre completo. Como proxy de «¿está la respuesta en el contexto?» usa la **cobertura**: el porcentaje de palabras de la respuesta de referencia que aparecen en el contexto entregado. Es una medida aproximada (no sabe si la respuesta es correcta) pero permite comparar.
+
+```python
+import math
+import re
+
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+golden = [q for q in load_golden() if q["answerable"]]
+
+
+def frases(texto):
+    return [f.strip() for f in re.split(r"(?<=[.!?])\s+", texto) if f.strip()]
+
+
+def construir(con_titulo):
+    """Un fragmento por frase. Con `con_titulo`, se antepone el título del documento."""
+    chunks = []
+    for d in corpus:
+        for f in frases(d["text"]):
+            texto = f"{d['title']}. {f}" if con_titulo else f
+            chunks.append({"doc": d["id"], "texto": texto, "tokens": tokenize(texto)})
+    return chunks
+
+
+def crear_bm25(chunks, k1=1.5, b=0.75):
+    avgdl = sum(len(c["tokens"]) for c in chunks) / len(chunks)
+
+    def puntuar(query):
+        s = np.zeros(len(chunks))
+        for t in set(tokenize(query)):
+            n = sum(t in c["tokens"] for c in chunks)
+            if n == 0:
+                continue
+            idf = math.log(1 + (len(chunks) - n + 0.5) / (n + 0.5))
+            for i, c in enumerate(chunks):
+                f = c["tokens"].count(t)
+                if f:
+                    s[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(c["tokens"]) / avgdl))
+        return s
+
+    return puntuar
+
+
+def docs_en_orden(chunks, scores):
+    """De fragmentos a documentos: cada documento entra con la posición de su mejor fragmento."""
+    vistos = []
+    for i in np.argsort(-scores, kind="stable"):
+        if chunks[i]["doc"] not in vistos:
+            vistos.append(chunks[i]["doc"])
+    return vistos
+
+
+def evaluar(chunks):
+    puntuar = crear_bm25(chunks)
+    h1, h3 = [], []
+    for q in golden:
+        r, rel = docs_en_orden(chunks, puntuar(q["question"])), set(q["relevant_ids"])
+        h1.append(r[0] in rel)
+        h3.append(any(d in rel for d in r[:3]))
+    return round(float(np.mean(h1)), 3), round(float(np.mean(h3)), 3)
+
+
+# documento entero como un solo fragmento
+enteros = [
+    {"doc": d["id"], "texto": d["text"], "tokens": tokenize(d["title"] + " " + d["text"])}
+    for d in corpus
+]
+print("indexación                                  hit@1 hit@3  fragmentos")
+for nombre, chunks in (
+    ("documento entero (con título)", enteros),
+    ("frase suelta, sin contexto", construir(False)),
+    ("frase + título del documento", construir(True)),
+):
+    print(f"{nombre:<42}", *evaluar(chunks), f"{len(chunks):>8}")
+
+chunks = construir(True)  # un fragmento por frase, con título
+for i, c in enumerate(chunks):
+    c["idx"] = i
+puntuar = crear_bm25(chunks)
+por_doc = {}
+for c in chunks:
+    por_doc.setdefault(c["doc"], []).append(c["idx"])
+texto_doc = {d["id"]: d["text"] for d in corpus}
+sin_titulo = {c["idx"]: c["texto"].split(". ", 1)[1] for c in chunks}
+
+
+def contexto(q, modo, k=3):
+    top = [int(i) for i in np.argsort(-puntuar(q), kind="stable")[:k]]
+    if modo == "frases":
+        return [sin_titulo[i] for i in top]
+    if modo == "ventana":
+        sel = set()
+        for i in top:
+            sel |= {j for j in (i - 1, i, i + 1) if j in por_doc[chunks[i]["doc"]]}
+        return [sin_titulo[j] for j in sorted(sel)]
+    docs = []
+    for i in top:
+        if chunks[i]["doc"] not in docs:
+            docs.append(chunks[i]["doc"])
+    return [texto_doc[d] for d in docs]
+
+
+def cobertura(ref, ctx):
+    r = set(tokenize(ref))
+    return len(r & set(tokenize(" ".join(ctx)))) / len(r) if r else 1
+
+
+print("contexto entregado        cobertura de la respuesta  palabras")
+for modo in ("frases", "ventana", "padre"):
+    cob, pal = [], []
+    for q in golden:
+        ctx = contexto(q["question"], modo)
+        cob.append(cobertura(q["reference_answer"], ctx))
+        pal.append(sum(len(t.split()) for t in ctx))
+    print(f"{modo:<26}{np.mean(cob):>10.3f}{np.mean(pal):>25.0f}")
+```
+
+Salida (determinista):
+
+```text
+indexación                                  hit@1 hit@3  fragmentos
+documento entero (con título)              0.821 0.893       42
+frase suelta, sin contexto                 0.679 0.786      137
+frase + título del documento               0.821 0.893      137
+contexto entregado        cobertura de la respuesta  palabras
+frases                         0.658                       51
+ventana                        0.799                       93
+padre                          0.815                      118
+```
+
+Qué se ve:
+
+- **Una frase sin contexto pierde calidad de búsqueda:** `hit@3` baja de 0,893 (documento entero) a 0,786. Muchas frases («Pasado ese plazo no se aceptan devoluciones») no dicen de qué hablan. Anteponer solo el **título** del documento devuelve `hit@3` a 0,893 y `hit@1` a 0,821. Es el contexto «barato» de la lección de chunking.
+- **Entregar solo la frase recuperada cubre el 65,8 %** de las palabras de la respuesta de referencia con 51 palabras. **Con ventana de ±1 frase sube al 79,9 %** con 93 palabras, y **con el padre completo, al 81,5 %** con 118 palabras. La ventana consigue casi toda la cobertura del padre con menos texto.
+- Aquí los documentos son cortos, así que el padre cuesta poco. En un corpus real de manuales o contratos, un padre de varias páginas dispararía el contexto, y la ventana o un padre «de sección» serían la opción razonable. **Mide con tus documentos.**
+- La cobertura de palabras es un **proxy**: no comprueba que la respuesta sea correcta ni que esté bien dicha. Es útil para comparar estrategias de entrega, no como métrica final (la evaluación de generación se trata en el módulo 8).
+
+## Trade-offs
+
+| Estrategia | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Fragmentos medianos sin más | Simple | Compromiso entre precisión de búsqueda y contexto |
+| Parent-document | Búsqueda precisa y contexto amplio | Padres grandes consumen tokens; hay que definir qué es un padre |
+| Ventana de frases | Contexto justo alrededor del acierto | Ventana fija: puede cortar una idea o traer ruido |
+| Contexto añadido al fragmento (título, LLM) | Mejora lo que se **encuentra** | Coste de generación al indexar (si se usa LLM) |
+| RAPTOR | Responde preguntas de síntesis y de visión global | Muchos resúmenes con LLM al indexar; difícil de actualizar de forma incremental |
+
+## Errores comunes en producción
+
+- **Entregar el mismo padre varias veces.** Si tres hijos del mismo documento entran en el top-3, el contexto se repite tres veces. Deduplica por padre.
+- **Padres demasiado grandes.** Contexto lleno de texto irrelevante y coste mayor; además el modelo puede ignorar lo que está en medio.
+- **Ventanas que cruzan documentos.** Al expandir una frase, nunca debe incorporar frases de otro documento ni de otra sección.
+- **Olvidar el solapamiento.** Si dos ventanas se tocan y no se fusionan, se repiten frases.
+- **Citar el padre como si fuera la prueba.** Para el usuario, la cita útil es el **fragmento que casó** (o su ubicación exacta), no un bloque de tres páginas.
+- **Usar RAPTOR por defecto.** Es potente para síntesis, pero para preguntas factuales de un dato puntual un buen chunking con contexto y reranking suele bastar con mucho menos coste.
+- **No reindexar los resúmenes al cambiar el documento.** Un árbol desactualizado devuelve síntesis de una versión antigua con apariencia de autoridad.
+- **Dar por buena una mejora de cobertura.** Más texto entregado casi siempre sube la cobertura; lo que importa es si sube la calidad de la respuesta por cada token adicional.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es small-to-big o parent-document retrieval?"_ Pista: se indexan fragmentos pequeños para buscar con precisión y se entregan los padres (o una ventana) para dar contexto; deduplicando por padre.
+- _"¿Cuándo usarías una ventana de frases en lugar de un padre completo?"_ Pista: cuando el padre es grande y solo necesitas contexto local; la ventana da casi la misma cobertura con menos tokens.
+- _"¿Qué problema resuelve RAPTOR?"_ Pista: preguntas de síntesis que ningún fragmento contiene; árbol de resúmenes por capas; coste de resumir al indexar.
+- _"¿Cómo combinarías esto con Contextual Retrieval?"_ Pista: el contexto mejora qué se encuentra (indexación); parent-document/ventana mejoran qué se entrega (generación).
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Indexar pequeño, entregar grande**: los fragmentos chicos buscan mejor y los grandes responden mejor.
+- **Parent-document** sustituye los hijos recuperados por sus padres (deduplicados); la **ventana de frases** añade $w$ vecinas y fusiona solapes.
+- Las frases sueltas pierden calidad de búsqueda; **anteponer el título** la recupera, como mostró el experimento (0,786 → 0,893).
+- La ventana consiguió casi la cobertura del padre (79,9 % frente a 81,5 %) con menos texto; mide con tus documentos.
+- **RAPTOR** (árbol de resúmenes) sirve para preguntas de síntesis, a cambio de resumir con un LLM al indexar.
+
+</KeyTakeaways>

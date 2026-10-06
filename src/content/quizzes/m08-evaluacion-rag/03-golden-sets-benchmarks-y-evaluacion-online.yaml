@@ -1,0 +1,99 @@
+lesson: m08-evaluacion-rag/03-golden-sets-benchmarks-y-evaluacion-online
+questions:
+  - id: m08-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Para qué sirve un conjunto dorado (golden set)?'
+    options:
+      - 'Para entrenar el modelo de embeddings.'
+      - 'Para aceptar o rechazar cambios del sistema con números y detectar regresiones antes de desplegar.'
+      - 'Para sustituir el índice vectorial.'
+      - 'Para almacenar los documentos originales.'
+    answer: [1]
+    explanation: 'Sin un conjunto de pruebas representativo, las decisiones se toman por intuición. El conjunto dorado permite comparar versiones de forma objetiva.'
+    ref: '#intuición-sin-un-buen-conjunto-de-pruebas-todo-son-opiniones'
+
+  - id: m08-03-q2
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué tipos de pregunta debería incluir un buen conjunto dorado de RAG? Marca todos los correctos.'
+    options:
+      - 'Preguntas de un solo documento.'
+      - 'Preguntas que necesitan varios documentos.'
+      - 'Preguntas sin respuesta en el corpus.'
+      - 'Preguntas con restricciones de acceso.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Un solo tipo da una visión sesgada. Hace falta cubrir un documento, varios, sin respuesta (abstención) y con permisos, además de casos difíciles.'
+    ref: '#qué-debe-tener-un-buen-conjunto-dorado'
+
+  - id: m08-03-q3
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código, que calcula el tamaño de muestra para un margen de ±5 puntos con p = 0,9?'
+    code: |-
+      import math
+      p, margen = 0.9, 0.05
+      print(math.ceil(1.96**2 * p * (1 - p) / margen**2))
+    options:
+      - '28'
+      - '385'
+      - '139'
+      - '100'
+    answer: [2]
+    explanation: '1,96² · 0,9 · 0,1 / 0,05² ≈ 138,3, que se redondea hacia arriba a 139 preguntas. Con p = 0,5 serían 385.'
+    ref: '#auditar-el-conjunto-y-su-tamaño'
+
+  - id: m08-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'En la comparación pareada, RRF acertaba una pregunta que BM25 fallaba, y BM25 ninguna que RRF fallara. ¿Qué conclusión es adecuada?'
+    options:
+      - 'RRF es mejor que BM25, con certeza.'
+      - 'Es una sola pregunta de diferencia: sirve para describir el cambio, no para afirmar que RRF es mejor.'
+      - 'BM25 es mejor porque empatan casi todas.'
+      - 'La comparación pareada no se puede hacer con pocas preguntas.'
+    answer: [1]
+    explanation: 'Con 1 contra 0 no hay evidencia estadística. El diseño pareado es útil porque muestra qué preguntas cambian, pero hace falta un conjunto mayor para concluir.'
+    ref: '#auditar-el-conjunto-y-su-tamaño'
+
+  - id: m08-03-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué las preguntas sintéticas generadas a partir de un fragmento suelen inflar los resultados de la recuperación?'
+    options:
+      - 'Porque son más largas.'
+      - 'Porque comparten vocabulario con el fragmento del que salen, así que son más fáciles de encontrar que las preguntas reales.'
+      - 'Porque no tienen respuesta.'
+      - 'Porque siempre se etiquetan mal.'
+    answer: [1]
+    explanation: 'Una pregunta redactada a partir de un texto reutiliza sus palabras. Por eso se filtran y se mezclan con preguntas reales, que se reservan para decidir.'
+    ref: '#preguntas-sintéticas-útiles-pero-con-cuidado'
+
+  - id: m08-03-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué riesgo es específico de usar benchmarks públicos para decidir qué modelo desplegar?'
+    options:
+      - 'Que no tienen métricas.'
+      - 'La contaminación (el modelo pudo ver los datos de evaluación) y el desajuste de dominio respecto a tus documentos.'
+      - 'Que solo existen en un idioma de programación.'
+      - 'Que no se pueden descargar.'
+    answer: [1]
+    explanation: 'Un buen resultado público puede deberse a datos vistos en el entrenamiento y puede no transferirse a tu dominio. Sirven para preseleccionar, no para decidir.'
+    ref: '#benchmarks-públicos'
+
+  - id: m08-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'En un A/B en producción conviene definir de antemano la métrica principal y el tamaño de muestra, para no encontrar una mejora mirando muchas métricas.'
+    answer: [0]
+    explanation: 'Es verdadero. Mirar 20 métricas y quedarse con la que sale bien es una forma de engañarse; se fija la principal antes de empezar.'
+    ref: '#evaluación-online'
+
+  - id: m08-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Las preguntas reales de los usuarios se pueden guardar tal cual en el conjunto dorado sin ningún tratamiento.'
+    answer: [1]
+    explanation: 'Es falso. Pueden contener datos personales: hay que anonimizarlas y limitar el acceso antes de incorporarlas al conjunto.'
+    ref: '#errores-comunes-en-producción'

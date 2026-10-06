@@ -1,0 +1,219 @@
+---
+title: Búsqueda híbrida y Reciprocal Rank Fusion
+description: Cómo combinar la búsqueda léxica (BM25) con la densa en un único ranking, por qué se fusionan posiciones y no puntuaciones, y qué mejora (y qué no) se puede esperar de la fusión.
+module: m05-recuperacion-avanzada
+order: 1
+level: intermedio
+estimatedMinutes: 18
+objectives:
+  - Explicar por qué la búsqueda léxica y la densa fallan de formas distintas y complementarias.
+  - Calcular Reciprocal Rank Fusion a mano y justificar por qué fusiona posiciones y no puntuaciones.
+  - Interpretar el efecto de la constante k y de los pesos en la fusión.
+  - Medir si la búsqueda híbrida mejora de verdad un caso concreto, sin dar la mejora por supuesta.
+prerequisites:
+  - m04-indices-vectoriales/03-elegir-base-de-datos-vectorial
+volatility: low
+lastReviewed: 2026-10-05
+sources:
+  - title: Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods
+    url: https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf
+    type: paper
+    authors: Cormack, Clarke, Büttcher
+    year: 2009
+  - title: "BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation of Information Retrieval Models"
+    url: https://arxiv.org/abs/2104.08663
+    type: paper
+    authors: Thakur, Reimers, Rücklé, Srivastava, Gurevych
+    year: 2021
+  - title: Retrieval-Augmented Generation for Large Language Models, a Survey
+    url: https://arxiv.org/abs/2312.10997
+    type: paper
+    authors: Gao et al.
+    year: 2023
+relatedLabs:
+  - rag-05-bm25
+  - rag-08-rrf
+---
+
+import RRFCalculator from '../../../components/widgets/RRFCalculator';
+
+## Intuición: dos buscadores que se equivocan en sitios distintos
+
+En el módulo anterior viste dos formas de buscar. La **búsqueda léxica** (BM25) compara palabras exactas: es excelente cuando el usuario usa el mismo vocabulario que el documento (un código de error, un nombre de producto, un identificador) y falla cuando usa sinónimos o formas distintas de la misma palabra. La **búsqueda densa** compara significados mediante embeddings: tolera sinónimos y paráfrasis, y falla con tokens raros, siglas, números y nombres propios que el modelo no ha visto bien.
+
+Lo importante es que **fallan en sitios distintos**. Si dos sistemas se equivocan de forma poco correlacionada, combinarlos puede dar un resultado mejor que cualquiera de los dos por separado. Esa es la idea de la **búsqueda híbrida**: ejecutar ambos buscadores sobre la misma consulta y fusionar sus listas en un único ranking.
+
+Hay un problema práctico inmediato. BM25 devuelve puntuaciones sin techo (por ejemplo, 7,3 o 21,8, dependiendo de la consulta y del corpus) y el coseno devuelve valores entre −1 y 1. **No se pueden sumar** sin más: las escalas no son comparables, y además la distribución de puntuaciones cambia de una consulta a otra. Normalizar (min-max, z-score) es una opción, pero es frágil: un único documento atípico estira la escala de todos los demás.
+
+## Cómo funciona
+
+### Reciprocal Rank Fusion
+
+**Reciprocal Rank Fusion (RRF)**, propuesto por Cormack, Clarke y Büttcher en SIGIR 2009, esquiva el problema ignorando las puntuaciones y usando solo la **posición** que cada sistema da a cada documento. Dado un conjunto de rankings $R$, la puntuación de fusión de un documento $d$ es:
+
+$$
+\text{RRF}(d) = \sum_{r \in R} \frac{1}{k + r(d)}
+$$
+
+donde $r(d)$ es la posición del documento en el ranking $r$ (1 es la primera) y $k$ es una constante de suavizado. Un documento que no aparece en un ranking simplemente no suma en ese término.
+
+Un ejemplo con $k = 60$. Supón que BM25 pone el documento A en primera posición y el B en tercera, y que el buscador denso pone el B en primera y el A en segunda:
+
+- A: $\frac{1}{61} + \frac{1}{62} = 0{,}01639 + 0{,}01613 = 0{,}03252$
+- B: $\frac{1}{63} + \frac{1}{61} = 0{,}01587 + 0{,}01639 = 0{,}03226$
+
+Gana A por muy poco. Fíjate en la propiedad que hace útil a RRF: **un documento que aparece bien posicionado en ambas listas supera a uno que es primero en una sola y no aparece en la otra**, porque el segundo solo suma un término. Es una forma de «voto por consenso» sin necesidad de calibrar las puntuaciones.
+
+<Diagram
+  caption="La consulta se envía a dos buscadores independientes; RRF solo necesita las posiciones de cada lista."
+  code={`flowchart LR
+  Q[Consulta] --> L[BM25: lista léxica]
+  Q --> D[Búsqueda densa: lista semántica]
+  L --> F["RRF: suma de 1 / (k + posición)"]
+  D --> F
+  F --> T[Top-k fusionado]`}
+/>
+
+Prueba tú mismo la fusión con la calculadora: cambia las listas y la constante $k$, y comprueba el ejemplo de arriba.
+
+<RRFCalculator client:visible />
+
+### La constante k
+
+El artículo original indica que $k = 60$ «se fijó durante una investigación piloto y no se alteró durante la validación posterior». Su Tabla 1 mide el efecto de $k$ sobre la MAP al fusionar 30 sistemas sobre los temas 351-400 de TREC: con $k = 0$ la MAP es 0,2072; con $k = 60$, 0,2145; con $k = 80$, 0,2147; con $k = 500$, 0,2098. Los autores concluyen que «$k = 60$ era casi óptimo, pero esa elección no era crítica». Dos lecturas útiles:
+
+- $k$ **amortigua el peso de las primeras posiciones**. Con $k$ pequeño, ser el primero (1/(k+1)) pesa mucho más que ser el décimo; con $k$ grande, las posiciones se vuelven casi equivalentes y gana quien aparece en más listas. La intuición del artículo es que los documentos muy bien posicionados importan más, pero la importancia de los de posiciones bajas «no desaparece como lo haría con una función exponencial».
+- **60 es un valor por defecto, no una ley.** Se midió con listas largas de sistemas de recuperación clásicos sobre colecciones TREC. Con listas cortas (digamos los 20 primeros de cada buscador) o con solo dos sistemas, conviene comprobarlo con tus datos.
+
+El mismo trabajo comparó RRF con Condorcet Fuse, CombMNZ y varios métodos de aprendizaje de ranking supervisado, y encontró que RRF mejoraba de forma consistente al mejor sistema individual y a los demás métodos de fusión; sus experimentos sitúan la mejora media sobre Condorcet, CombMNZ y el mejor sistema en un 4 % a 5 % de MAP. Es una evidencia sólida de 2009 sobre recuperación de documentos web y TREC, **no sobre RAG con embeddings modernos**: sirve para justificar el método, no para predecir el resultado en tu corpus.
+
+### Variantes que se usan en la práctica
+
+- **RRF ponderada.** Multiplicar cada término por un peso $w_r$ para dar más voz a un buscador (por ejemplo, 2 a BM25 y 1 al denso en un dominio con muchos códigos de producto). Añade un hiperparámetro que hay que ajustar con evaluación, no a ojo.
+- **Fusión por puntuación normalizada.** Convertir cada puntuación a $[0, 1]$ y combinar linealmente $\alpha \cdot s_{denso} + (1-\alpha) \cdot s_{BM25}$. Permite afinar el balance, pero depende de la normalización. Varias bases de datos vectoriales ofrecen ambos modos de fusión.
+- **Más de dos listas.** RRF no impone el número de rankings: se puede fusionar BM25, dos modelos de embeddings distintos y una búsqueda por título. Es también la base de la fusión de varias consultas reformuladas, que verás en la lección de transformación de consulta.
+
+### Un experimento honesto sobre el corpus Nimbus
+
+El código siguiente implementa BM25, una búsqueda densa de juguete (el `HashingEmbedder` del curso) y RRF, y los mide sobre las 28 preguntas respondibles del conjunto dorado de Nimbus Logística. Mide `hit@3` (¿está algún documento relevante entre los tres primeros?) y `MRR@10` (la media del inverso de la posición del primer relevante).
+
+```python
+import math
+
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.embeddings import HashingEmbedder
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+golden = [q for q in load_golden() if q["answerable"]]
+ids = [d["id"] for d in corpus]
+docs = [tokenize(d["title"] + " " + d["text"]) for d in corpus]
+avgdl = sum(map(len, docs)) / len(docs)
+
+
+def bm25(query, k1=1.5, b=0.75):
+    scores = np.zeros(len(docs))
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs)
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in enumerate(docs):
+            f = d.count(t)
+            scores[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(d) / avgdl)) if f else 0
+    return scores
+
+
+emb = HashingEmbedder()
+E = emb.embed_many([d["title"] + ". " + d["text"] for d in corpus])
+
+
+def ranked(scores):
+    return [ids[i] for i in np.argsort(-scores, kind="stable")]
+
+
+def rrf(rankings, k=60):
+    puntos = {}
+    for ranking in rankings:
+        for pos, doc_id in enumerate(ranking, start=1):
+            puntos[doc_id] = puntos.get(doc_id, 0) + 1 / (k + pos)
+    return sorted(puntos, key=lambda d: (-puntos[d], ids.index(d)))
+
+
+def evaluar(buscar):
+    hit3, rr = [], []
+    for q in golden:
+        r, rel = buscar(q["question"]), set(q["relevant_ids"])
+        hit3.append(any(d in rel for d in r[:3]))
+        rr.append(next((1 / p for p, d in enumerate(r[:10], 1) if d in rel), 0))
+    return round(float(np.mean(hit3)), 3), round(float(np.mean(rr)), 3)
+
+
+lexico = lambda q: ranked(bm25(q))
+denso = lambda q: ranked(E @ emb.embed(q))
+print("método            hit@3  MRR@10")
+print("BM25             ", *evaluar(lexico))
+print("denso (hashing)  ", *evaluar(denso))
+for k in (1, 10, 60):
+    print(f"RRF k={k:<3}        ", *evaluar(lambda q: rrf([lexico(q), denso(q)], k)))
+```
+
+Salida al ejecutarlo (determinista):
+
+```text
+método            hit@3  MRR@10
+BM25              0.893 0.873
+denso (hashing)   0.75 0.649
+RRF k=1           0.857 0.816
+RRF k=10          0.857 0.815
+RRF k=60          0.929 0.827
+```
+
+Lo que enseñan estas cifras, **leídas con cuidado**:
+
+- La fusión con $k = 60$ sube `hit@3` de 0,893 a 0,929: **una pregunta más** acertada de 28: la de cuánto tardan los reembolsos. El documento correcto queda en quinto lugar para BM25 (que no casa «reembolsan» con «reembolso») y en séptimo para la búsqueda densa, así que **ninguno de los dos lo pone entre los tres primeros**; pero está razonablemente alto en ambas listas, y RRF premia justo ese consenso. Una diferencia de una sola pregunta no es estadísticamente concluyente.
+- **El MRR baja** (0,873 → 0,827): cuando BM25 ya acertaba en primera posición, el buscador denso, bastante peor, arrastra el documento hacia abajo. La fusión mejoró la cobertura pero empeoró la precisión en la cima de la lista.
+- Con $k$ pequeño la fusión **empeora** incluso `hit@3` (0,857). Un valor mal elegido deshace la ganancia.
+- La búsqueda densa de este curso es un juguete (hashing de palabras y bigramas, sin entrenamiento). Con un modelo de embeddings real, que sí capta paráfrasis, el patrón cambia: el denso suele aportar mucho más. **No extrapoles estos números a tu proyecto**; lo que debes llevarte es el método de medirlos.
+
+Esa es la lección práctica: la búsqueda híbrida es un **buen candidato por defecto** cuando el corpus mezcla lenguaje natural con términos exactos, pero es una hipótesis que se valida con un conjunto dorado, no un hecho.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Solo BM25 | Barato, explicable, sin modelos | Falla con sinónimos y morfología |
+| Solo denso | Capta significado y paráfrasis | Falla con códigos, siglas y nombres raros |
+| Híbrida con RRF | Sin calibrar escalas, robusta, fácil | Posible pérdida de precisión en la cima; parámetro k |
+| Híbrida con puntuación normalizada | Permite afinar el balance con un peso | Depende de la normalización, frágil con atípicos |
+| Más listas en la fusión | Más cobertura | Más latencia y más sistemas que mantener |
+
+## Errores comunes en producción
+
+- **Sumar puntuaciones crudas de BM25 y coseno.** Las escalas no son comparables; un buscador acaba dominando sin que lo decidas.
+- **Fusionar listas demasiado cortas.** Si cada buscador devuelve solo 3 resultados, un documento que ambos tienen en la posición 5 ni siquiera entra. Recupera más candidatos de cada lista (por ejemplo 20-50) y recorta después de fusionar.
+- **Dar la mejora por supuesta.** Activar la búsqueda híbrida porque «se recomienda» sin medirla. En el experimento anterior la fusión mejoró una métrica y empeoró otra.
+- **Inconsistencia de tokenización.** Si BM25 usa una tokenización distinta en indexación y consulta (acentos, mayúsculas, plurales), el lado léxico falla en silencio. Es la causa de los fallos de BM25 en nuestro corpus.
+- **Ajustar pesos y k sobre pocas preguntas.** Con 28 preguntas cada acierto vale 3,6 puntos; es fácil sobreajustar el balance a ruido.
+- **Ignorar los filtros.** Cada buscador debe aplicar los mismos filtros de metadatos y permisos antes de fusionar; si uno filtra y el otro no, la fusión puede reintroducir documentos restringidos.
+- **Doble coste sin necesidad.** Dos consultas por petición suben la latencia y el coste. Mide qué parte de las preguntas se beneficia antes de pagar ese precio.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué usar búsqueda híbrida en un sistema RAG?"_ Pista: BM25 y embeddings fallan de forma distinta (léxico exacto frente a significado); la fusión cubre ambos tipos de consulta.
+- _"¿Qué es RRF y por qué se prefiere a sumar puntuaciones?"_ Pista: suma $1/(k+\text{posición})$ por cada lista; solo usa rangos, así que no necesita calibrar escalas distintas.
+- _"¿Qué hace la constante k?"_ Pista: amortigua el peso de las primeras posiciones; 60 es el valor del artículo original (casi óptimo, no crítico), pero conviene comprobarlo con datos propios.
+- _"¿Cómo sabes que la híbrida mejora tu sistema?"_ Pista: conjunto dorado, comparar hit@k y MRR con y sin fusión, y revisar qué preguntas cambian.
+
+</Callout>
+
+<KeyTakeaways>
+
+- La búsqueda **léxica** y la **densa** fallan en sitios distintos; fusionarlas puede mejorar la cobertura.
+- Sus puntuaciones **no son comparables**; RRF fusiona **posiciones**: $\sum 1/(k + \text{posición})$.
+- $k = 60$ es el valor del artículo original, **casi óptimo pero no crítico**; con $k$ muy pequeño la fusión puede empeorar.
+- En nuestro corpus la fusión subió `hit@3` en una pregunta y **bajó el MRR**: mide siempre, no supongas.
+- Recupera listas largas antes de fusionar, aplica los mismos filtros en ambos buscadores y evalúa con un conjunto dorado.
+
+</KeyTakeaways>

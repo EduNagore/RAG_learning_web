@@ -1,0 +1,196 @@
+---
+title: Embeddings densos y dispersos, y cómo elegir modelo
+description: Qué representa cada familia de embeddings, qué dicen los benchmarks (DPR, BEIR, MTEB) y un método para elegir un modelo con criterio en lugar de por el primer puesto de una tabla.
+module: m03-embeddings
+order: 1
+level: intermedio
+estimatedMinutes: 17
+objectives:
+  - Contrastar representaciones densas, dispersas clásicas (BM25) y dispersas aprendidas (SPLADE).
+  - Interpretar lo que miden BEIR y MTEB y por qué ningún modelo gana en todo.
+  - Aplicar una lista de criterios para preseleccionar modelos de embeddings.
+  - Evaluar candidatos con un golden set propio en lugar de fiarse del ranking público.
+prerequisites:
+  - m00-fundamentos-llm/06-embeddings-intuicion
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: Dense Passage Retrieval for Open-Domain Question Answering
+    url: https://arxiv.org/abs/2004.04906
+    type: paper
+    authors: Karpukhin et al.
+    year: 2020
+  - title: "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models"
+    url: https://arxiv.org/abs/2104.08663
+    type: paper
+    authors: Thakur et al.
+    year: 2021
+  - title: "SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking"
+    url: https://arxiv.org/abs/2107.05720
+    type: paper
+    authors: Formal, Piwowarski, Clinchant
+    year: 2021
+  - title: "MTEB: Massive Text Embedding Benchmark"
+    url: https://arxiv.org/abs/2210.07316
+    type: paper
+    authors: Muennighoff et al.
+    year: 2022
+  - title: "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"
+    url: https://arxiv.org/abs/1908.10084
+    type: paper
+    authors: Reimers, Gurevych
+    year: 2019
+relatedLabs:
+  - rag-01-coseno-topk
+  - rag-05-bm25
+---
+
+import SimilarityPlayground from '../../../components/widgets/SimilarityPlayground';
+
+## Intuición: dos formas de decir «parecido»
+
+Ya sabes que un embedding convierte texto en un vector y que la búsqueda semántica compara vectores. Pero existen dos grandes familias de representaciones, con filosofías opuestas:
+
+- **Densas:** cada texto es un vector de cientos o miles de números reales, todos con valor. Cada dimensión no significa nada concreto; el **significado está repartido**. Capturan paráfrasis y sinónimos.
+- **Dispersas:** cada texto es un vector enorme (una dimensión por palabra del vocabulario) con casi todo ceros. Cada dimensión **es una palabra**, así que son interpretables y exactas con términos concretos, pero no entienden que «reembolso» y «devolución del dinero» hablan de lo mismo.
+
+Elegir bien entre ellas (o combinarlas) y, dentro de las densas, escoger un modelo concreto, es una de las decisiones con más impacto en la calidad de un RAG. Y la forma más común de equivocarse es elegir por el primer puesto de una tabla pública sin medir en tus propios datos.
+
+## Cómo funciona
+
+### Densas: bi-encoders entrenados para recuperar
+
+Los embeddings densos para recuperación son, casi siempre, **bi-encoders**: una red que codifica consultas y documentos por separado, entrenada para que una pregunta quede cerca de los pasajes que la responden. Sentence-BERT popularizó la idea de embeddings de frase comparables con el coseno, y **DPR** (_Dense Passage Retrieval_) la aplicó a la recuperación para preguntas abiertas: su recuperador denso superó a un sistema de BM25 «fuerte» por **9 a 19 puntos absolutos** de exactitud en la recuperación de los 20 primeros pasajes, en los conjuntos de datos que evaluaron.
+
+Ese resultado fue histórico, pero hay que leerlo con precisión: se midió **en el dominio** para el que el recuperador se había entrenado (preguntas sobre Wikipedia). Lo que ocurre fuera de ese dominio es otra historia, la que cuenta BEIR.
+
+### Dispersas: BM25 y su versión aprendida
+
+**BM25** (lo implementaste en el laboratorio) es la representación dispersa clásica: cuenta palabras con una fórmula que pondera la rareza y normaliza por longitud. No requiere entrenamiento, es rápido y **muy difícil de batir cuando la consulta comparte palabras con el documento**. Su límite es la brecha léxica: no sabe que «seguir mi pedido» y «seguimiento de pedidos» son lo mismo, como viste en los fallos de morfología del corpus de Nimbus.
+
+**SPLADE** (Formal et al., 2021) es una evolución: un modelo neuronal que produce representaciones **dispersas** pero **aprendidas**, que **expanden** el texto con términos relacionados. Según sus autores, mantiene las ventajas de los modelos de bolsa de palabras (coincidencia exacta de términos y la eficiencia de los índices invertidos) y logra resultados competitivos frente a baselines densos y dispersos, con un control explícito del compromiso entre calidad y eficiencia. Es una opción interesante cuando quieres lo mejor de ambos mundos sin abandonar la infraestructura de búsqueda léxica.
+
+<Diagram
+  caption="Las dos familias comparten el mismo flujo (codificar y comparar) pero representan el texto de forma distinta."
+  code={`flowchart LR
+  T["Texto"] --> D["Denso: vector de N números reales"]
+  T --> S1["Disperso clásico (BM25): una dimensión por palabra"]
+  T --> S2["Disperso aprendido (SPLADE): palabras ponderadas y expandidas"]
+  D --> I1[("Índice vectorial (ANN)")]
+  S1 --> I2[("Índice invertido")]
+  S2 --> I2`}
+/>
+
+### Lo que dice BEIR: ningún enfoque gana siempre
+
+BEIR (Thakur et al., 2021) reunió **18 conjuntos de datos** de tareas y dominios muy distintos para medir recuperación **sin entrenamiento específico** (_zero-shot_). Sus conclusiones son una dosis de realismo:
+
+- **BM25 es una línea base robusta.** No hace falta ir muy lejos para encontrar casos en los que le cuesta ganar un modelo denso fuera de su dominio de entrenamiento.
+- **Los modelos de reordenación y de interacción tardía** logran, de media, los mejores resultados en _zero-shot_, aunque **con un coste computacional alto**.
+- **Los modelos densos y dispersos son más eficientes**, pero a menudo rinden menos que los anteriores.
+
+La lectura práctica: un embedding denso preentrenado no es una bala de plata. Por eso las arquitecturas serias combinan un primer filtro barato (denso, disperso o ambos) con una **reordenación** más cara y precisa sobre pocos candidatos. Lo verás en el módulo 5.
+
+### Pruébalo: similitud léxica frente a similitud semántica
+
+En este laboratorio verás cómo un embedder basado en palabras compartidas ordena frases. Fíjate en que la consulta por defecto («¿En cuánto tiempo me devuelven el dinero?») **no comparte casi ninguna palabra** con «El reembolso tarda 7 días hábiles en llegar», y aun así habla de lo mismo: un modelo denso real las pondría juntas; este de juguete, no. Esa brecha es exactamente la que justifica usar embeddings densos reales.
+
+<SimilarityPlayground client:visible />
+
+### Cómo leer MTEB
+
+MTEB (_Massive Text Embedding Benchmark_, Muennighoff et al.) es el banco de pruebas más citado para embeddings: reúne **8 tipos de tarea con 58 conjuntos de datos en 112 idiomas**. Su hallazgo central, en palabras de los autores, es que **ningún método de embeddings domina en todas las tareas**.
+
+Esto tiene consecuencias para usar su clasificación pública (_leaderboard_):
+
+1. **Mira solo la columna de la tarea que te importa.** Para RAG es la de **recuperación** (_retrieval_), no la media global, que mezcla clasificación, agrupación, similitud y otras tareas.
+2. **Filtra por idioma.** Un modelo que lidera en inglés puede ser mediocre en español.
+3. **Mira los datos junto a la puntuación:** longitud máxima de entrada, dimensión del vector, tamaño del modelo, licencia y coste.
+4. **Desconfía de diferencias pequeñas.** Medio punto de media rara vez se nota en tu aplicación.
+5. **Recuerda que es un banco público.** Los modelos pueden haberse ajustado a esos conjuntos, y tus documentos (jerga interna, tablas, códigos de producto) no se parecen a ellos.
+
+## Criterios para preseleccionar candidatos
+
+Antes de medir, reduce las opciones con una lista de comprobación:
+
+| Criterio | Pregunta que responde |
+| --- | --- |
+| Tarea y calidad en recuperación | ¿Rinde bien en la columna de _retrieval_ de MTEB? |
+| Idioma | ¿Soporta bien español (y los demás idiomas de tu corpus)? |
+| Longitud máxima de entrada | ¿Caben tus fragmentos? Lo que excede se trunca y no entra en el vector. |
+| Dimensión del vector | ¿Cuánto almacenamiento y latencia de búsqueda supone? |
+| Coste y latencia | ¿Por llamada (API) o por GPU (autoalojado)? ¿Cuántos documentos reindexarás? |
+| Alojamiento y privacidad | ¿Puedes enviar tus datos a un tercero o necesitas ejecutarlo en tu infraestructura? |
+| Licencia | ¿Permite uso comercial? |
+| Estabilidad | ¿El proveedor puede retirar o cambiar el modelo? **Cambiar de modelo obliga a reindexar todo.** |
+
+## El criterio final: tu golden set
+
+Tras la preselección, la decisión se toma midiendo. Con 20 a 50 preguntas reales y su documento correcto (el golden set del módulo 8), calcula el **hit@k o recall@k** de cada candidato sobre **tu corpus**. Este es el esqueleto de esa evaluación, aquí con el embedder de juguete del curso:
+
+```python
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.embeddings import HashingEmbedder
+
+corpus = load_corpus()
+golden = [q for q in load_golden() if q["answerable"]]
+ids = [d["id"] for d in corpus]
+
+def hit_at_k(embedder, k):
+    """Fracción de preguntas con algún documento correcto entre los k primeros."""
+    matriz = embedder.embed_many([d["title"] + " " + d["text"] for d in corpus])
+    aciertos = 0
+    for q in golden:
+        top = np.argsort(-(matriz @ embedder.embed(q["question"])), kind="stable")[:k]
+        aciertos += bool(set(q["relevant_ids"]) & {ids[i] for i in top})
+    return round(aciertos / len(golden), 3)
+
+for dim in (64, 256, 1024):
+    print(dim, [hit_at_k(HashingEmbedder(dim=dim), k) for k in (1, 3, 5)])
+```
+
+El bucle compara el mismo «modelo» con tres dimensiones distintas; en un proyecto real compararías modelos distintos con la misma función. Lo importante es el patrón: **una función que recibe un candidato y devuelve una métrica sobre tus preguntas**, que puedes reejecutar cada vez que quieras cambiar algo.
+
+<Callout type="aviso" title="Cuidado con el tamaño de la muestra">
+
+Con 28 preguntas, un solo acierto de más o de menos mueve la métrica 3,6 puntos. Esa muestra sirve para **descartar** modelos claramente malos y para detectar mejoras grandes, no para ordenar dos candidatos que se parecen. Cuantas más preguntas representativas reúnas, más fiable es la comparación.
+
+</Callout>
+
+## Trade-offs
+
+| Familia | Fortalezas | Debilidades | Cuándo encaja |
+| --- | --- | --- | --- |
+| Densa (bi-encoder) | Paráfrasis y sinónimos, multilingüe, preguntas en lenguaje natural | Falla con identificadores y términos raros; fuera de dominio puede rendir menos de lo esperado; caja negra | Base de la mayoría de sistemas RAG |
+| Dispersa clásica (BM25) | Sin entrenamiento, rápida, interpretable, robusta | No entiende sinónimos ni morfología | Códigos, nombres, siglas; como complemento |
+| Dispersa aprendida (SPLADE) | Exactitud léxica con expansión, usa índices invertidos | Requiere el modelo y su ajuste | Cuando quieres mejorar lo léxico sin pasar a vectores |
+| Combinación (híbrida) | Cubre los fallos de cada una | Más piezas y más latencia | Corpus reales con consultas variadas (módulo 5) |
+
+## Errores comunes en producción
+
+- **Elegir por la media global de MTEB.** Mezcla tareas que no son la tuya; mira la de recuperación y tu idioma.
+- **Ignorar el idioma.** Un modelo muy bueno en inglés puede degradarse en español, que además cuesta más tokens.
+- **No comprobar la longitud máxima.** Fragmentos más largos que el límite del modelo se truncan en silencio.
+- **Mezclar modelos en un índice** o cambiar de modelo sin reindexar: los vectores dejan de ser comparables.
+- **Evaluar solo con ejemplos «bonitos».** Incluye preguntas con jerga, códigos, faltas de ortografía y casos difíciles.
+- **Fiarse de una diferencia pequeña** medida con pocas preguntas.
+- **Olvidar el coste de reindexar.** Cambiar de modelo implica reprocesar todo el corpus: tenlo en cuenta al comparar.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué BM25 sigue siendo relevante con embeddings densos?"_ Pista: es una línea base robusta (BEIR), exacta con términos concretos, sin entrenamiento y barata; los densos fallan con identificadores y términos raros.
+- _"¿Cómo eliges un modelo de embeddings?"_ Pista: preselección por tarea, idioma, longitud, dimensión, coste, privacidad y licencia; decisión midiendo recall@k en un golden set propio.
+- _"¿Qué limitaciones tiene MTEB para decidir?"_ Pista: la media mezcla tareas, el idioma y el dominio pueden no coincidir con los tuyos y es un banco público al que los modelos pueden ajustarse.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Los embeddings **densos** capturan significado y paráfrasis; los **dispersos** capturan palabras exactas. **BM25** es una línea base robusta y **SPLADE** una versión dispersa aprendida.
+- DPR mostró grandes mejoras en su dominio, pero **BEIR** enseña que fuera de dominio ningún enfoque gana siempre y que la reordenación suele ser lo mejor a mayor coste.
+- En **MTEB** ningún método domina todas las tareas: mira la columna de **recuperación**, tu **idioma** y los datos prácticos (longitud, dimensión, licencia).
+- Preselecciona con una lista de criterios y **decide midiendo en tu golden set**, teniendo en cuenta el ruido de una muestra pequeña.
+- Cambiar de modelo **obliga a reindexar**: el coste de migrar forma parte de la decisión.
+
+</KeyTakeaways>

@@ -1,0 +1,66 @@
+---
+title: Un índice IVF desde cero
+description: Implementa k-means esférico, un índice de listas invertidas (IVF) y la búsqueda con n_probe, y mide el compromiso entre recall y fracción de vectores revisados.
+part: rag
+module: m04-indices-vectoriales
+difficulty: 3
+estimatedMinutes: 50
+concepts:
+  - IVF
+  - k-means
+  - n_probe
+  - recall frente a búsqueda exacta
+packages:
+  - numpy
+hints:
+  - Para el k-means usa `rng = np.random.default_rng(seed)` y elige los centroides iniciales con `rng.choice(len(X), n_clusters, replace=False)`. Todo lo que dependa del azar debe salir de ese generador.
+  - 'En cada iteración asigna cada vector al centroide con mayor producto escalar (`np.argmax(X @ centroids.T, axis=1)`) y recalcula cada centroide como la media de sus vectores, normalizada. Si un grupo se queda vacío, conserva su centroide anterior.'
+  - 'Las listas del índice son `[np.flatnonzero(asignacion == j) for j in range(n_lists)]`, usando la asignación calculada con los centroides finales: así cada vector está en exactamente una lista.'
+  - 'En la búsqueda, ordena los centroides por similitud con la consulta, quédate con los `n_probe` primeros, une sus listas y calcula la similitud solo con esos candidatos. Ordena con `np.argsort(-puntuaciones, kind="stable")` y devuelve también cuántos candidatos revisaste.'
+relatedLessons:
+  - m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq
+---
+
+## Objetivo
+
+Un índice **IVF** (_inverted file_) divide el espacio en regiones y, al consultar, solo mira las más cercanas. Aquí lo construyes entero con NumPy: agrupas los vectores con k-means, guardas una lista por grupo y buscas visitando solo `n_probe` listas. Después mides lo que ganas y lo que pierdes.
+
+Todos los vectores se consideran **normalizados** (norma 1), de modo que la similitud es el producto escalar.
+
+## Qué tienes que hacer
+
+Implementa cuatro funciones:
+
+### `kmeans(X, n_clusters, n_iters=10, seed=0)`
+
+K-means esférico: devuelve una matriz `(n_clusters, d)` con los **centroides normalizados**.
+
+- Inicialización: `rng = np.random.default_rng(seed)` y `rng.choice(len(X), n_clusters, replace=False)`.
+- En cada iteración: asigna cada vector al centroide de mayor producto escalar y recalcula cada centroide como la **media normalizada** de sus vectores. Un grupo vacío conserva su centroide.
+- Lanza `ValueError` si `n_clusters > len(X)`.
+
+### `build_ivf(X, n_lists, seed=0)`
+
+Devuelve `{"centroids": ..., "lists": [...]}`: los centroides de `kmeans` y, para cada uno, un array con los **índices** de los vectores asignados a él. Cada vector debe estar en **exactamente una** lista.
+
+### `ivf_search(query, X, index, k=10, n_probe=1)`
+
+Devuelve `(ids, n_candidatos)`:
+
+- Elige los `n_probe` centroides más similares a la consulta y une sus listas.
+- Calcula la similitud solo con esos candidatos y devuelve los `k` mejores `ids` (índices en `X`) de mayor a menor. Los empates los gana el índice menor.
+- `n_candidatos` es cuántos vectores revisaste.
+
+### `recall_at_k(approx_ids, exact_ids)`
+
+Fracción de los `exact_ids` que aparecen en `approx_ids`. Si `exact_ids` está vacío, devuelve `1.0`.
+
+## Qué observar
+
+Cuando funcione, ejecuta tu índice sobre datos agrupados y mira cómo cambian el recall y el porcentaje de vectores revisados al subir `n_probe`. Es el mismo experimento de la lección: con datos con grupos marcados, revisando una pequeña fracción se recupera casi todo; con datos reales, menos separables, el recall a igual fracción será menor.
+
+<Callout type="nota" title="Dos recalls distintos">
+
+El `recall_at_k` de este laboratorio compara el índice aproximado con la búsqueda **exacta** (calidad del índice). No es el recall de recuperación de un sistema RAG, que compara con los documentos relevantes de un golden set.
+
+</Callout>

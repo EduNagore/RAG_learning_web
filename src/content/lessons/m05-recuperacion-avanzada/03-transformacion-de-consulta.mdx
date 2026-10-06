@@ -1,0 +1,244 @@
+---
+title: Transformación de consulta (HyDE, multi-query, step-back, routing)
+description: Técnicas que reescriben o amplían la pregunta antes de buscar para cerrar la brecha entre cómo pregunta el usuario y cómo está escrito el documento, y los riesgos de desviarse del tema.
+module: m05-recuperacion-avanzada
+order: 3
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Explicar la brecha entre la pregunta del usuario y el texto del documento y cómo la cierra cada técnica.
+  - Aplicar HyDE, multi-query con fusión, step-back, descomposición y routing, y saber cuándo conviene cada uno.
+  - Medir si una transformación ayuda y detectar cuándo la reformulación se desvía del tema.
+  - Estimar el coste en latencia y llamadas al modelo de cada transformación.
+prerequisites:
+  - m05-recuperacion-avanzada/02-reranking
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: Precise Zero-Shot Dense Retrieval without Relevance Labels (HyDE)
+    url: https://arxiv.org/abs/2212.10496
+    type: paper
+    authors: Gao, Ma, Lin, Callan
+    year: 2022
+  - title: Query Rewriting for Retrieval-Augmented Large Language Models
+    url: https://arxiv.org/abs/2305.14283
+    type: paper
+    authors: Ma, Gong, He, Zhao, Duan
+    year: 2023
+  - title: Take a Step Back, Evoking Reasoning via Abstraction in Large Language Models
+    url: https://arxiv.org/abs/2310.06117
+    type: paper
+    authors: Zheng et al.
+    year: 2023
+  - title: "RAG-Fusion: a New Take on Retrieval-Augmented Generation"
+    url: https://arxiv.org/abs/2402.03367
+    type: paper
+    authors: Rackauckas
+    year: 2024
+relatedLabs:
+  - rag-11-multi-query
+  - rag-12-hyde
+---
+
+## Intuición: el usuario pregunta de una forma y el documento responde de otra
+
+Una pregunta como «¿cómo puedo seguir mi pedido?» y un documento que dice «Cuando tu pedido sale del almacén recibes un correo con el número de seguimiento» hablan de lo mismo con palabras distintas: «seguir» frente a «seguimiento». Una pregunta es corta, informal y a menudo ambigua; un documento es largo, formal y contiene la respuesta, no la pregunta. Esa es la **brecha pregunta-documento**, y los dos buscadores que conoces la sufren: BM25 por el vocabulario, los embeddings por estar entrenados para encajar textos parecidos y no «pregunta con respuesta».
+
+La **transformación de consulta** ataca la brecha antes de buscar: reescribe, amplía, abstrae o descompone la pregunta, normalmente con una llamada a un LLM, para que la consulta que llega al índice se parezca más a lo que contiene.
+
+## Cómo funciona
+
+### Reformulación (rewrite)
+
+La más simple: pedir a un modelo que reescriba la pregunta de forma más clara y autocontenida (resolver pronombres de un diálogo, expandir siglas, quitar relleno). Ma et al. (2023) la formalizan como **Rewrite-Retrieve-Read**: primero se reescribe la consulta, luego se recupera y por último un LLM lector genera la respuesta. Su observación clave es que el reescritor puede ser un modelo pequeño **entrenado con la señal del lector** (aprendizaje por refuerzo), porque la mejor consulta no es la más elegante sino la que acaba produciendo mejores respuestas. En la práctica, la mayoría de los sistemas empiezan con un prompt y no entrenan nada.
+
+Es imprescindible en **RAG conversacional**: «¿y para empresas?» no se puede buscar sin saber de qué se hablaba antes.
+
+### Multi-query y fusión (RAG-Fusion)
+
+Se pide al modelo $n$ reformulaciones de la pregunta, se lanza una búsqueda por cada una (incluida la original) y se fusionan los rankings, normalmente con **RRF**, la técnica de la primera lección del módulo. Rackauckas (2024) describe esta combinación como **RAG-Fusion**. Cada reformulación usa vocabulario distinto, así que unas aciertan donde otras fallan, y el consenso entre listas sube lo que aparece en varias.
+
+El mismo trabajo apunta una limitación esencial: la respuesta puede **perder relevancia cuando las consultas generadas no son suficientemente relevantes** respecto a la original. Una reformulación que se desvía del tema añade a la fusión documentos que no tienen nada que ver.
+
+### HyDE: documentos hipotéticos
+
+**HyDE** (*Hypothetical Document Embeddings*, Gao et al., 2022) invierte la idea: en lugar de buscar con la pregunta, se pide a un LLM que **escriba una respuesta hipotética** y se busca con el embedding de esa respuesta. El texto generado puede contener datos falsos (el modelo no conoce tus documentos), pero tiene la **forma** de una respuesta: vocabulario, estilo y estructura parecidos a los de los documentos reales. Los autores plantean que el codificador contrastivo actúa como un cuello de botella que filtra los detalles inventados y se queda con la estructura relevante, y reportan que supera a Contriever, un recuperador no supervisado, en varias tareas.
+
+Dos cautelas: añade una llamada de generación **antes de cualquier búsqueda** y, si el modelo no tiene ni idea del tema, la respuesta hipotética puede arrastrar la búsqueda hacia un dominio equivocado.
+
+### Step-back: preguntar por el principio
+
+Zheng et al. (2023) proponen **step-back prompting**: antes de contestar, pedir al modelo que formule una pregunta más general o abstracta que cubra el concepto o principio detrás de la original («¿qué leyes rigen el comportamiento de los gases?» para una pregunta sobre un caso concreto de presión y volumen). En RAG se usa para recuperar, además de los documentos de la pregunta concreta, los de la pregunta de nivel superior, útiles cuando la respuesta necesita contexto general o la pregunta es demasiado específica para encontrar texto literal.
+
+### Descomposición y routing
+
+- **Descomposición:** una pregunta compuesta («¿qué plazo de devolución tiene un cliente empresa y cómo se le reembolsa?») se divide en subpreguntas, cada una se busca por separado y se juntan los resultados. Es la base del RAG de varios saltos (*multi-hop*).
+- **Routing:** un clasificador (reglas, un LLM pequeño o un modelo ligero) decide **a qué fuente enviar la consulta**: el índice de políticas, la base de datos de pedidos, el buscador web o ninguna (si la pregunta no necesita recuperación). Reduce ruido y coste, pero un error de enrutado es un fallo silencioso: el mejor documento nunca se consulta.
+
+<Diagram
+  caption="Cada técnica actúa antes del índice; todas añaden al menos una llamada al modelo antes de la primera búsqueda."
+  code={`flowchart LR
+  Q[Pregunta] --> R{Routing}
+  R -->|política| T[Transformación]
+  R -->|pedidos| DB[(Base de datos)]
+  T --> M[Multi-query]
+  T --> H[HyDE]
+  T --> S[Step-back]
+  T --> D[Descomposición]
+  M --> I[(Índice)]
+  H --> I
+  S --> I
+  D --> I
+  I --> F[Fusión RRF / reranking]`}
+/>
+
+### Un experimento: tres preguntas que BM25 no encuentra
+
+En el corpus Nimbus hay tres preguntas que BM25 falla por diferencias de vocabulario. Veamos qué hacen sobre ellas un multi-query y HyDE. **Aviso importante**: el «LLM» del ejemplo es un `MockLLM` cuyas respuestas **escribí yo a mano** conociendo los documentos. Es un escenario favorable que muestra el mecanismo y el riesgo, no el rendimiento de un modelo real. Para el experimento con reformulaciones desviadas, escribí variantes que cambian de tema a propósito.
+
+```python
+import math
+
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.embeddings import HashingEmbedder
+from ragkit.llm import Message, MockLLM
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+ids = [d["id"] for d in corpus]
+docs = {d["id"]: tokenize(d["title"] + " " + d["text"]) for d in corpus}
+avgdl = sum(map(len, docs.values())) / len(docs)
+golden = {q["id"]: q for q in load_golden()}
+
+
+def bm25(query, k1=1.5, b=0.75):
+    scores = {i: 0.0 for i in ids}
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs.values())
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in docs.items():
+            f = d.count(t)
+            if f:
+                scores[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(d) / avgdl))
+    return sorted(ids, key=lambda i: -scores[i])
+
+
+def rrf(rankings, k=60):
+    puntos = {}
+    for ranking in rankings:
+        for pos, doc_id in enumerate(ranking, start=1):
+            puntos[doc_id] = puntos.get(doc_id, 0) + 1 / (k + pos)
+    return sorted(puntos, key=lambda d: (-puntos[d], ids.index(d)))
+
+
+# El «LLM» de este ejemplo es un MockLLM con reformulaciones escritas a mano.
+BUENAS = {
+    "q02": "plazo del reembolso de un pedido devuelto\ncuánto tarda el reembolso tras devolver un artículo",
+    "q09": "seguimiento del pedido con el número de seguimiento\ndónde ver el estado de mi pedido",
+    "q20": "política de contraseñas longitud mínima de las contraseñas\ncuántos caracteres debe tener una contraseña",
+}
+MALAS = {  # reformulaciones que se desvían del tema
+    "q02": "tiempo de entrega de un pedido nuevo\nplazo para ejercer el derecho de desistimiento",
+    "q09": "cómo contactar con atención al cliente\nhorario de la oficina",
+    "q20": "cómo solicitar vacaciones\nnormas de uso de la VPN",
+}
+
+
+def reformular(llm, pregunta, n=2):
+    prompt = f"Escribe {n} reformulaciones de la pregunta, una por línea: {pregunta}"
+    return llm.generate([Message("user", prompt)]).text.splitlines()[:n]
+
+
+def posicion(ranking, rel):
+    return next(p for p, d in enumerate(ranking, 1) if d in rel)
+
+
+print("pregunta  BM25 original  multi-query buenas  multi-query desviadas")
+for qid in BUENAS:
+    q = golden[qid]
+    rel = set(q["relevant_ids"])
+    resultados = []
+    for variantes in (BUENAS, MALAS):
+        llm = MockLLM(rules=[(q["question"][1:10], variantes[qid])])
+        preguntas = [q["question"], *reformular(llm, q["question"])]
+        resultados.append(posicion(rrf([bm25(p) for p in preguntas]), rel))
+    print(qid, f"{posicion(bm25(q['question']), rel):>13}", f"{resultados[0]:>19}", f"{resultados[1]:>22}")
+
+emb = HashingEmbedder()
+E = emb.embed_many([d["title"] + ". " + d["text"] for d in corpus])
+HIPOTESIS = {
+    "q09": "Para seguir tu pedido recibes un correo con el número de seguimiento y puedes ver su estado en Mi Nimbus.",
+    "q20": "Las contraseñas deben tener al menos 14 caracteres según la política de contraseñas.",
+}
+print("pregunta  denso con la pregunta  denso con HyDE")
+for qid, hipotesis in HIPOTESIS.items():
+    q = golden[qid]
+    rel = set(q["relevant_ids"])
+    por_pregunta = [ids[i] for i in np.argsort(-(E @ emb.embed(q["question"])), kind="stable")]
+    por_hyde = [ids[i] for i in np.argsort(-(E @ emb.embed(hipotesis)), kind="stable")]
+    print(qid, f"{posicion(por_pregunta, rel):>21}", f"{posicion(por_hyde, rel):>14}")
+```
+
+Salida (determinista; los números son la **posición** del documento correcto, 1 es la mejor):
+
+```text
+pregunta  BM25 original  multi-query buenas  multi-query desviadas
+q02             5                   2                      9
+q09             4                   1                      1
+q20            37                   8                     22
+pregunta  denso con la pregunta  denso con HyDE
+q09                    30              1
+q20                    26              1
+```
+
+Cómo leerlo:
+
+- Con **buenas reformulaciones**, los tres documentos suben (de 5, 4 y 37 a 2, 1 y 8). La fusión se queda con el consenso de varias redacciones.
+- Con reformulaciones **desviadas**, q02 **empeora** (de 5 a 9) y q20 sigue lejos del top (22). El caso q09 sube a 1 **por casualidad**: la reformulación sobre «atención al cliente» comparte palabras con el documento de seguimiento, que menciona la atención al cliente. Que una consulta desviada ayude de vez en cuando no es una estrategia.
+- **HyDE** coloca el documento correcto en primera posición en ambas preguntas, pero mi «respuesta hipotética» está escrita con el vocabulario exacto del documento. Un modelo real, sin conocer Nimbus, escribiría una respuesta genérica plausible; ayuda cuando su vocabulario se parece al del corpus, y no cuando no.
+
+El patrón general: estas técnicas son **multiplicadores de la calidad de la reformulación**. Si el modelo reescribe bien, ayudan mucho; si se desvía, estorban, y no lo notarás sin una evaluación.
+
+## Trade-offs
+
+| Técnica | Qué arregla | Coste | Riesgo |
+| --- | --- | --- | --- |
+| Reformulación | Pronombres, siglas, preguntas ambiguas, diálogo | 1 llamada al LLM | Perder un matiz de la pregunta original |
+| Multi-query + RRF | Vocabulario distinto, cobertura | 1 llamada + $n$ búsquedas | Desvío temático; más latencia |
+| HyDE | Brecha pregunta-respuesta en búsqueda densa | 1 generación antes de buscar | Respuesta hipotética del dominio equivocado |
+| Step-back | Preguntas demasiado específicas, falta de contexto general | 1 llamada + 1 búsqueda extra | Traer contexto genérico irrelevante |
+| Descomposición | Preguntas compuestas y de varios saltos | Varias llamadas y búsquedas | Subpreguntas mal planteadas, coste |
+| Routing | Varias fuentes de datos | Un clasificador | Error de enrutado: fallo silencioso |
+
+## Errores comunes en producción
+
+- **Transformar siempre y sin medir.** Cada técnica añade latencia y coste; muchas preguntas ya se resuelven bien sin ellas. Empieza por las preguntas que fallan.
+- **Descartar la consulta original.** Incluye siempre la pregunta tal cual en la fusión: es la mejor defensa contra una reformulación que se desvíe.
+- **No registrar las consultas transformadas.** Sin ver qué generó el modelo es imposible depurar un fallo de recuperación. Guarda original, transformaciones y resultados en la traza.
+- **Reescribir sin el historial en un chat.** O se pierde la referencia («¿y para empresas?») o se inventa; incluye los turnos relevantes en el prompt del reescritor.
+- **Muchas reformulaciones iguales.** Pedir diez variantes suele producir cinco casi idénticas: más coste, poca diversidad. Pocas y distintas.
+- **Confiar en HyDE para datos recientes o privados.** El modelo inventa detalles; solo sirve su forma, nunca su contenido, y no debe llegar al generador como si fuera evidencia.
+- **Router sin salida de emergencia.** Si la confianza del clasificador es baja, busca en varias fuentes en lugar de elegir una.
+- **Ignorar la latencia en serie.** La transformación va antes de la búsqueda y no se puede paralelizar con ella; mide el percentil 95 del total.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es HyDE y cuándo lo usarías?"_ Pista: el modelo escribe una respuesta hipotética y se busca con su embedding; cierra la brecha pregunta-respuesta, pero añade una generación y puede arrastrar hacia un dominio erróneo.
+- _"¿Qué es multi-query/RAG-Fusion y qué riesgo tiene?"_ Pista: varias reformulaciones + RRF; riesgo de desvío temático, por eso se conserva la consulta original.
+- _"¿Cómo harías RAG conversacional?"_ Pista: reescribir la pregunta usando el historial para que sea autocontenida antes de buscar.
+- _"¿Cómo sabes que una transformación de consulta ayuda?"_ Pista: conjunto dorado, comparar con y sin ella, y revisar qué consultas cambian; medir latencia y coste añadidos.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Existe una **brecha pregunta-documento**: la consulta del usuario y el texto del documento usan vocabulario y forma distintos.
+- **Reformulación**, **multi-query + RRF**, **HyDE**, **step-back**, **descomposición** y **routing** actúan antes del índice y cuestan al menos una llamada al modelo.
+- Son **multiplicadores de la calidad de la reformulación**: bien hechas suben el documento correcto; desviadas lo hunden.
+- Conserva siempre la **consulta original** en la fusión y registra todas las transformaciones.
+- Mide con un conjunto dorado y vigila la latencia en percentiles altos.
+
+</KeyTakeaways>

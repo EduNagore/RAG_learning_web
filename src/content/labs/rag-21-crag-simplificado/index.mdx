@@ -1,0 +1,57 @@
+---
+title: CRAG simplificado
+description: Implementa un evaluador de recuperación y un bucle correctivo que decide entre responder, reformular y volver a buscar, o abstenerse, la idea central del RAG correctivo.
+part: rag
+module: m07-rag-avanzado
+difficulty: 3
+estimatedMinutes: 40
+concepts:
+  - RAG correctivo
+  - evaluador de recuperación
+  - reformulación y reintento
+  - abstención
+packages: []
+hints:
+  - 'Cobertura: `q = {t[:5] for t in tokenize(pregunta)}` y `d = {t[:5] for doc in documentos for t in tokenize(doc["text"])}`; el resultado es `len(q & d) / len(q)` (0.0 si `q` está vacío).'
+  - 'El veredicto es `correcto` si la cobertura es `>= high`, `incorrecto` si es `< low` y `ambiguo` en el resto.'
+  - 'El bucle guarda la traza como lista de tuplas `(pregunta, veredicto)`. Un veredicto `ambiguo` solo permite reformular mientras queden reintentos; `incorrecto` abstiene de inmediato.'
+  - 'Llama a `rewrite_fn(pregunta_actual)` solo cuando vayas a reintentar y a `answer_fn` solo cuando vayas a responder.'
+relatedLessons:
+  - m07-rag-avanzado/02-self-rag-crag-y-adaptive-rag
+---
+
+## Objetivo
+
+El **RAG correctivo** (CRAG) añade a la recuperación un paso de **evaluación**: un evaluador puntúa la calidad de lo recuperado y, según el resultado, el sistema responde, busca de otra forma o reconoce que no tiene evidencia. Vas a construir una versión pequeña y determinista.
+
+## Qué tienes que hacer
+
+### `coverage(question, docs)`
+
+`docs` es una lista de diccionarios con `text`. Devuelve la fracción (entre 0 y 1) de las palabras de la pregunta (con `ragkit.text.tokenize`, que ya quita las palabras vacías) cuya **raíz de 5 letras** aparece entre las raíces de las palabras de los documentos. Si la pregunta no tiene palabras útiles, devuelve `0.0`.
+
+### `evaluate_retrieval(question, docs, high=0.6, low=0.35)`
+
+Devuelve `"correcto"` si la cobertura es `>= high`, `"incorrecto"` si es `< low` y `"ambiguo"` en cualquier otro caso.
+
+### `crag_answer(question, retrieve, answer_fn, rewrite_fn, max_retries=1, high=0.6, low=0.35)`
+
+- `retrieve(pregunta)` devuelve una lista de documentos, `answer_fn(pregunta, docs)` el texto de la respuesta y `rewrite_fn(pregunta)` una pregunta reformulada.
+- Recupera con la pregunta actual y evalúa:
+  - `correcto` → responde con `answer_fn` (acción `"answer"`).
+  - `incorrecto` → se abstiene (acción `"abstain"`), sin reintentar.
+  - `ambiguo` → si quedan reintentos, reformula con `rewrite_fn` y vuelve a empezar; si no quedan, se abstiene.
+- Devuelve un diccionario con `action`, `answer` (`None` si se abstuvo), `question` (la pregunta con la que terminó) y `trace` (lista de tuplas `(pregunta, veredicto)` de cada intento).
+
+## Un ejemplo para comprobar a mano
+
+```python
+docs = [{"text": "El reembolso se realiza por el mismo medio de pago"}]
+coverage("¿Cuánto tarda el reembolso del pago?", docs)   # 0.5 (reembolso y pago; faltan «cuanto» y «tarda»)
+```
+
+<Callout type="nota" title="Un evaluador de juguete">
+
+La cobertura léxica es un evaluador muy simple. En CRAG original lo hace un modelo ligero entrenado para puntuar la relevancia de cada documento, y la acción incluye ampliar la búsqueda a la web. La estructura del bucle (evaluar, decidir, actuar) es la misma, y es lo que practicas aquí.
+
+</Callout>

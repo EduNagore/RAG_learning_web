@@ -1,0 +1,236 @@
+---
+title: Métricas de recuperación (hit rate, recall, precision, MRR, nDCG)
+description: Qué mide cada métrica de recuperación, cómo se calcula a mano, cuándo usar cada una y cómo interpretarlas juntas, con un ejemplo que compara BM25, búsqueda densa y fusión sobre el corpus Nimbus.
+module: m08-evaluacion-rag
+order: 1
+level: intermedio
+estimatedMinutes: 18
+objectives:
+  - Calcular hit rate, recall@k, precision@k, MRR y nDCG@k a partir de un ranking y un conjunto de documentos relevantes.
+  - Elegir la métrica adecuada según lo que importe (cobertura, posición, ruido, graduación).
+  - Interpretar varias métricas a la vez y reconocer que un cambio puede mejorar unas y empeorar otras.
+  - Entender los límites de medir con pocas preguntas.
+prerequisites:
+  - m07-rag-avanzado/04-multimodal-estructurado-y-conversacional
+volatility: low
+lastReviewed: 2026-10-05
+sources:
+  - title: "BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation of Information Retrieval Models"
+    url: https://arxiv.org/abs/2104.08663
+    type: paper
+    authors: Thakur, Reimers, Rücklé, Srivastava, Gurevych
+    year: 2021
+  - title: "MTEB: Massive Text Embedding Benchmark"
+    url: https://arxiv.org/abs/2210.07316
+    type: paper
+    authors: Muennighoff, Tazi, Magne, Reimers
+    year: 2022
+  - title: Retrieval-Augmented Generation for Large Language Models, a Survey
+    url: https://arxiv.org/abs/2312.10997
+    type: paper
+    authors: Gao et al.
+    year: 2023
+relatedLabs:
+  - rag-10-metricas-recuperacion
+  - rag-09-reranking
+---
+
+## Intuición: evaluar la recuperación por separado
+
+Un sistema RAG puede fallar en dos sitios: la **recuperación** no trae la evidencia, o la **generación** no la usa bien. Si solo miras la respuesta final no sabes cuál de los dos falló. Por eso se evalúa cada etapa por separado, y la recuperación se mide con métricas de **recuperación de información** que llevan décadas en uso, aplicadas a un **conjunto dorado**: una lista de preguntas, cada una con los documentos que contienen la respuesta (los **relevantes**).
+
+Para cada pregunta, el sistema devuelve un **ranking** (los documentos ordenados de mejor a peor) y las métricas comparan ese ranking con los relevantes conocidos. Todas dependen de un corte **$k$**: cuántos resultados del principio de la lista se tienen en cuenta, normalmente el número que luego entregarás al generador.
+
+## Cómo funciona
+
+Tomemos un ejemplo mínimo: el sistema devuelve `[d3, d1, d9, d2]` y los relevantes son `{d1, d2}`.
+
+### Hit rate (acierto) @k
+
+**¿Hay al menos un relevante entre los $k$ primeros?** Vale 1 o 0 por pregunta y se promedia. Con $k=1$ el ejemplo da 0 (el primero, `d3`, no es relevante); con $k=2$, 1. Es la métrica más intuitiva y suele ser la más relevante en RAG cuando **basta un fragmento** para responder. No distingue si encontraste uno o todos.
+
+### Recall@k (cobertura)
+
+**¿Qué fracción de los relevantes aparece entre los $k$ primeros?**
+
+$$
+\text{recall@}k = \frac{|\text{relevantes} \cap \text{top-}k|}{|\text{relevantes}|}
+$$
+
+Con $k=2$: solo `d1` está entre los dos primeros, así que 1/2. Con $k=4$, 2/2. Importa cuando la respuesta **necesita varios documentos** (preguntas de varios saltos o de síntesis). Si cada pregunta tiene un único relevante, recall@k es igual a hit@k.
+
+### Precision@k (ruido)
+
+**¿Qué fracción de los $k$ primeros son relevantes?**
+
+$$
+\text{precision@}k = \frac{|\text{relevantes} \cap \text{top-}k|}{k}
+$$
+
+Con $k=2$: 1/2. Mide cuánto ruido entregas al generador. Tiene una **limitación estructural**: no puede superar `(número de relevantes) / k`. Con una sola respuesta correcta por pregunta y $k=3$, el máximo es 0,33, aunque el sistema sea perfecto; no la interpretes como «solo acierta un tercio».
+
+### MRR (rango recíproco medio)
+
+**¿Qué tan arriba está el primer relevante?** Para cada pregunta, $1/\text{posición}$ del primer relevante (0 si no aparece), promediado:
+
+$$
+\text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}_q}
+$$
+
+En el ejemplo, el primer relevante está en la posición 2: 0,5. Premia mucho estar el primero (1,0) frente a ser el tercero (0,33). Es adecuada cuando **el orden importa** porque el generador atiende más a lo primero (recuerda *lost in the middle*) o cuando muestras un único resultado.
+
+### nDCG@k (ganancia acumulada descontada normalizada)
+
+**¿Está bien ordenado todo el ranking?** Suma la relevancia de cada resultado descontada por su posición ($1/\log_2(\text{posición}+1)$) y la **normaliza** dividiendo por el mejor orden posible:
+
+$$
+\text{nDCG@}k = \frac{\sum_{i=1}^{k} \text{rel}_i / \log_2(i+1)}{\sum_{i=1}^{\min(|R|,k)} 1/\log_2(i+1)}
+$$
+
+En el ejemplo con $k=4$ y relevancia binaria: DCG = $1/\log_2 3 + 1/\log_2 5 = 1{,}0616$; el ideal sería `[d1, d2, ...]`, con $1 + 1/\log_2 3 = 1{,}6309$; nDCG = 0,651. Es la única de las cinco que admite **relevancia graduada** (0, 1, 2, 3...) y la que mejor refleja la calidad de todo el orden. La usaste en el laboratorio de reranking.
+
+### Resumen y cuándo elegir cada una
+
+| Métrica | Pregunta que responde | Úsala cuando |
+| --- | --- | --- |
+| Hit rate@k | ¿Encontré algo útil? | Basta un fragmento para responder |
+| Recall@k | ¿Encontré todo lo necesario? | La respuesta necesita varios documentos |
+| Precision@k | ¿Cuánto ruido entrego? | El contexto es caro o el ruido daña la respuesta |
+| MRR | ¿Qué tan arriba está el primero? | El orden importa o se muestra un solo resultado |
+| nDCG@k | ¿Está bien ordenado todo? | Hay relevancia graduada o importa el orden global |
+
+### Un experimento: tres sistemas, cinco métricas
+
+El código evalúa sobre las 28 preguntas del conjunto dorado de Nimbus con documentos relevantes los tres sistemas de las lecciones anteriores: BM25, la búsqueda densa de juguete y la fusión RRF, con $k=3$.
+
+```python
+import math
+
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.embeddings import HashingEmbedder
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+golden = [q for q in load_golden() if q["relevant_ids"]]
+ids = [d["id"] for d in corpus]
+docs = {d["id"]: tokenize(d["title"] + " " + d["text"]) for d in corpus}
+avgdl = sum(map(len, docs.values())) / len(docs)
+emb = HashingEmbedder()
+E = emb.embed_many([d["title"] + ". " + d["text"] for d in corpus])
+
+
+def bm25(query, k1=1.5, b=0.75):
+    scores = {i: 0.0 for i in ids}
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs.values())
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in docs.items():
+            f = d.count(t)
+            if f:
+                scores[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(d) / avgdl))
+    return sorted(ids, key=lambda i: -scores[i])
+
+
+def denso(query):
+    return [ids[i] for i in np.argsort(-(E @ emb.embed(query)), kind="stable")]
+
+
+def rrf(*rankings, k=60):
+    puntos = {}
+    for r in rankings:
+        for pos, d in enumerate(r, start=1):
+            puntos[d] = puntos.get(d, 0) + 1 / (k + pos)
+    return sorted(puntos, key=lambda d: (-puntos[d], ids.index(d)))
+
+
+def metricas(ranked, relevant, k):
+    rel = set(relevant)
+    hit = float(any(d in rel for d in ranked[:k]))
+    recall = len(set(ranked[:k]) & rel) / len(rel)
+    precision = sum(d in rel for d in ranked[:k]) / k
+    rr = next((1 / p for p, d in enumerate(ranked[:k], 1) if d in rel), 0.0)
+    dcg = sum(1 / math.log2(i + 2) for i, d in enumerate(ranked[:k]) if d in rel)
+    ndcg = dcg / sum(1 / math.log2(i + 2) for i in range(min(len(rel), k)))
+    return hit, recall, precision, rr, ndcg
+
+
+sistemas = {
+    "BM25": lambda q: bm25(q),
+    "denso (hashing)": lambda q: denso(q),
+    "RRF (k=60)": lambda q: rrf(bm25(q), denso(q)),
+}
+print("sistema            hit@3  recall@3  precision@3   MRR  nDCG@3")
+for nombre, buscar in sistemas.items():
+    filas = [metricas(buscar(q["question"]), q["relevant_ids"], 3) for q in golden]
+    print(f"{nombre:<18}", *(f"{np.mean(col):6.3f}" for col in zip(*filas)))
+print("preguntas evaluadas:", len(golden))
+```
+
+Salida (determinista):
+
+```text
+sistema            hit@3  recall@3  precision@3   MRR  nDCG@3
+BM25                0.893  0.893  0.333  0.857  0.864
+denso (hashing)     0.750  0.732  0.274  0.613  0.637
+RRF (k=60)          0.929  0.929  0.345  0.827  0.850
+preguntas evaluadas: 28
+```
+
+Lectura:
+
+- **Las métricas no coinciden en quién gana.** RRF gana en hit@3, recall@3 y precision@3, pero BM25 gana en MRR y nDCG@3: la fusión encuentra algo más, pero coloca los relevantes algo más abajo. Elegir «el mejor» depende de qué te importe (cobertura o posición): decídelo **antes** de mirar los números.
+- **Precision@3 es baja para todos (0,27 a 0,35)** y no porque el sistema sea malo: casi todas las preguntas tienen un único documento relevante, y con $k=3$ el máximo posible ronda 0,37.
+- **Las diferencias son pequeñas frente al ruido.** Con 28 preguntas, cada una vale 3,6 puntos de hit@3: la diferencia entre BM25 y RRF (0,893 frente a 0,929) es **una sola pregunta**. No es una conclusión, es un indicio. Para decidir con confianza necesitas más preguntas o un intervalo de confianza (por ejemplo con *bootstrap* sobre las preguntas).
+- Este conjunto incluye `q27` (restringida): evalúa la recuperación **sin** filtro de permisos. En producción, mide siempre con los filtros reales aplicados.
+
+### Cuánto fiarse de una diferencia
+
+Un hit rate medido con $n$ preguntas es una **estimación** con incertidumbre. Para una proporción $p$, el error estándar aproximado es $\sqrt{p(1-p)/n}$, y un intervalo de confianza del 95 % ronda $\pm 1{,}96$ veces ese valor. Con $p = 0{,}9$ y $n = 28$: $1{,}96 \cdot \sqrt{0{,}9 \cdot 0{,}1 / 28} \approx 0{,}11$, es decir, **±11 puntos**. Las diferencias de 3 o 4 puntos entre BM25 y RRF caben holgadamente dentro de ese margen: no son distinguibles del azar con tan pocas preguntas. Para ver si una diferencia es real, compara los sistemas **sobre las mismas preguntas** (diseño pareado), cuenta en cuántas preguntas gana cada uno y, si puedes, usa *bootstrap* (remuestrear las preguntas con reemplazo y ver cuánto varía la diferencia). Y, sobre todo, aumenta el conjunto dorado: pasar de 28 a 300 preguntas reduce el margen a unos ±3,4 puntos.
+
+### Más allá de tu corpus: benchmarks públicos
+
+Dos referencias para comparar modelos de recuperación y de embeddings fuera de tu dominio. **BEIR** (Thakur et al., 2021) es un benchmark heterogéneo para evaluar modelos de recuperación en modo *zero-shot* sobre múltiples tareas y dominios. **MTEB** (Muennighoff et al., 2022) cubre 8 tareas de embeddings con 58 conjuntos de datos y 112 idiomas, y concluye que **ningún método de embeddings domina en todas las tareas**. Sirven para **preseleccionar** modelos, no para decidir: un modelo que gana en el promedio de MTEB puede perder en tu dominio. Valida siempre con tu propio conjunto dorado.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Optimizar hit@k | Alineado con «basta un fragmento» | Ignora el orden y la necesidad de varios documentos |
+| Optimizar recall@k | Cubre preguntas de varios documentos | Premia traer ruido si $k$ crece |
+| Optimizar MRR / nDCG | Cuida el orden que ve el generador | Más sensible a pocas preguntas; nDCG exige juicios graduados |
+| Relevancia binaria | Barata de etiquetar | No distingue «muy relevante» de «algo relevante» |
+| Relevancia graduada | Más fina | Etiquetar es más caro y subjetivo |
+| Benchmark público | Comparable, sin esfuerzo de etiquetado | Puede no reflejar tu dominio |
+
+## Errores comunes en producción
+
+- **Mirar una sola métrica.** Un cambio puede mejorar una y empeorar otra (como RRF). Reporta varias y decide con criterio previo.
+- **Interpretar precision@k sin su techo.** Con un único relevante por pregunta no puede superar $1/k$.
+- **Conjunto dorado diminuto.** Con decenas de preguntas, una pregunta mueve varios puntos; una mejora de «+3 %» puede ser una pregunta.
+- **Etiquetas de relevancia incompletas.** Si el conjunto dorado solo marca un documento y existe otro igual de bueno, el sistema es penalizado injustamente. Revisa los fallos.
+- **Evaluar con las mismas preguntas con las que ajustas.** Reserva un conjunto de validación.
+- **Ignorar las preguntas sin respuesta.** No tienen relevantes y quedan fuera de estas métricas; se evalúan con las de abstención.
+- **No aplicar los filtros reales.** Medir sin permisos ni filtros sobrestima el rendimiento.
+- **Elegir $k$ distinto del que entregas al generador.** Si luego entregas 5 fragmentos, mide con $k=5$.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué métricas usarías para evaluar la recuperación de un RAG?"_ Pista: hit rate y recall@k para cobertura, MRR y nDCG para el orden, precision@k para el ruido, sobre un conjunto dorado, con el mismo $k$ que entregas al generador.
+- _"Diferencia entre recall@k y precision@k."_ Pista: recall = fracción de relevantes recuperados; precision = fracción de lo recuperado que es relevante; precision tiene un techo si hay pocos relevantes.
+- _"¿Cuándo prefieres nDCG a MRR?"_ Pista: cuando hay relevancia graduada o varios documentos relevantes y te importa todo el orden; MRR solo mira el primero.
+- _"¿Cómo sabes que una mejora de recuperación es real y no ruido?"_ Pista: más preguntas, intervalos de confianza o bootstrap, validación en preguntas reservadas, revisar qué preguntas cambian.
+
+</Callout>
+
+<KeyTakeaways>
+
+- La recuperación se evalúa **por separado** de la generación, con un conjunto dorado y un corte $k$ igual al que entregas al generador.
+- **Hit rate** (¿encontré algo?), **recall** (¿todo?), **precision** (¿cuánto ruido?), **MRR** (¿qué tan arriba el primero?) y **nDCG** (¿bien ordenado, con relevancia graduada?).
+- **Las métricas pueden discrepar:** en Nimbus, RRF ganó en hit@3 y BM25 en MRR y nDCG.
+- Con pocas preguntas, una sola mueve varios puntos: no concluyas sin intervalos o más datos.
+- Los benchmarks públicos (BEIR, MTEB) preseleccionan modelos; **decide con tu propio conjunto**.
+
+</KeyTakeaways>

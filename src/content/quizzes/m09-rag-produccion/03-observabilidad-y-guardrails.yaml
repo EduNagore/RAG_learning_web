@@ -1,0 +1,95 @@
+lesson: m09-rag-produccion/03-observabilidad-y-guardrails
+questions:
+  - id: m09-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es un span en una traza?'
+    options:
+      - 'Un tramo con nombre, inicio, duración y atributos, anidado dentro de la traza de una consulta.'
+      - 'Un tipo de base de datos vectorial.'
+      - 'Una métrica de recuperación.'
+      - 'Un guardarraíl de salida.'
+    answer: [0]
+    explanation: 'Una traza representa una consulta de extremo a extremo y se compone de spans por etapa (recuperación, reranking, generación...).'
+    ref: '#trazas-y-spans'
+
+  - id: m09-03-q2
+    type: single
+    difficulty: 2
+    prompt: 'En el ejemplo, 100 latencias dieron media 1,49 s y p99 de 9 s. ¿Qué conclusión es correcta?'
+    options:
+      - 'La media es la mejor métrica de experiencia de usuario.'
+      - 'La media oculta la cola: una de cada cien consultas es muy lenta, por lo que los objetivos y alertas se definen sobre percentiles.'
+      - 'El p99 siempre coincide con la media.'
+      - 'Los percentiles no se pueden calcular.'
+    answer: [1]
+    explanation: 'Una media aceptable puede esconder una cola larga. Los percentiles altos reflejan la peor experiencia habitual y son la base de SLOs y alertas.'
+    ref: '#trazas-y-spans'
+
+  - id: m09-03-q3
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué conviene registrar en la traza de una consulta de RAG? Marca todas las correctas.'
+    options:
+      - 'Identificadores y puntuaciones de los documentos recuperados.'
+      - 'Versiones del índice, del modelo de embeddings, del prompt y del modelo generativo.'
+      - 'Tokens de entrada y salida y latencia por span.'
+      - 'Datos personales de los usuarios sin ningún tratamiento ni control de acceso.'
+    answer: [0, 1, 2]
+    explanation: 'Los tres primeros permiten depurar y reproducir. Los datos personales deben enmascararse, protegerse con permisos y limitarse con una política de retención.'
+    ref: '#qué-registrar-y-qué-no'
+
+  - id: m09-03-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué un sistema de trazas puede convertirse en una fuga de datos?'
+    options:
+      - 'Porque los spans ocupan mucho espacio.'
+      - 'Porque guarda preguntas, documentos y respuestas que pueden ser sensibles, y si no hereda los permisos actúa como un repositorio paralelo sin control.'
+      - 'Porque OpenTelemetry cifra los datos.'
+      - 'Porque solo registra identificadores.'
+    answer: [1]
+    explanation: 'Si las trazas contienen texto sensible y cualquiera con acceso a la plataforma puede verlo, se salta el control de acceso del corpus. Hay que enmascarar, controlar el acceso y definir retención.'
+    ref: '#qué-registrar-y-qué-no'
+
+  - id: m09-03-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Qué ventaja ofrece seguir las convenciones semánticas de OpenTelemetry para GenAI?'
+    options:
+      - 'Que garantizan respuestas correctas.'
+      - 'Que usan nombres y atributos estándar y permiten cambiar de herramienta de observabilidad sin reinstrumentar el código.'
+      - 'Que eliminan la necesidad de guardarraíles.'
+      - 'Que hacen innecesario medir latencias.'
+    answer: [1]
+    explanation: 'Un estándar común evita quedar atado a un proveedor. Aun así, las convenciones están en evolución, así que hay que comprobar su estado vigente.'
+    ref: '#el-estándar-y-las-herramientas'
+
+  - id: m09-03-q6
+    type: single
+    difficulty: 3
+    prompt: 'El servicio de moderación de salida no responde. ¿Qué política es la más segura para un guardarraíl?'
+    options:
+      - 'Dejar pasar la respuesta sin comprobar para no afectar al usuario.'
+      - 'Fallar de forma segura: denegar o abstenerse según el caso, y registrar el incidente.'
+      - 'Reintentar indefinidamente.'
+      - 'Apagar todos los guardarraíles.'
+    answer: [1]
+    explanation: 'Un guardarraíl que falla abierto equivale a no tenerlo. La política por defecto ante un fallo debe ser la segura, con aviso y registro.'
+    ref: '#guardarraíles-guardrails'
+
+  - id: m09-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Los guardarraíles deben evaluarse midiendo sus falsos positivos (bloquean lo legítimo) y sus falsos negativos (dejan pasar lo malo).'
+    answer: [0]
+    explanation: 'Es verdadero. Un guardarraíl es un componente más y puede fallar en las dos direcciones; sin medirlo, deteriora el producto o da una falsa sensación de seguridad.'
+    ref: '#guardarraíles-guardrails'
+
+  - id: m09-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Basta con mirar los paneles de observabilidad: no hace falta convertir los fallos reales en preguntas del conjunto dorado.'
+    answer: [1]
+    explanation: 'Es falso. Sin llevar los fallos al conjunto de evaluación no se verifica que las correcciones funcionen ni se evitan regresiones: el ciclo debe cerrarse.'
+    ref: '#del-dato-a-la-mejora-cerrar-el-ciclo'

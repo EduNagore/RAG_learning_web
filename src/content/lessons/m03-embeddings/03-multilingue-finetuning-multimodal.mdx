@@ -1,0 +1,148 @@
+---
+title: Embeddings multilingües, ajuste fino y multimodales
+description: Qué cambia cuando el corpus no está en inglés, cuándo compensa afinar un modelo de embeddings con tus datos y cómo se recuperan imágenes y páginas de documentos con CLIP y ColPali.
+module: m03-embeddings
+order: 3
+level: avanzado
+estimatedMinutes: 17
+objectives:
+  - Explicar los retos del español y de la recuperación entre idiomas en embeddings y tokenización.
+  - Decidir si compensa afinar un modelo de embeddings y qué datos de entrenamiento necesita.
+  - Describir el entrenamiento contrastivo y el papel de los negativos difíciles.
+  - Distinguir recuperación multimodal con CLIP y recuperación de páginas con interacción tardía (ColPali).
+prerequisites:
+  - m03-embeddings/01-densos-dispersos-y-modelos
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: "M3-Embedding: Multi-Linguality, Multi-Functionality, Multi-Granularity Text Embeddings Through Self-Knowledge Distillation"
+    url: https://arxiv.org/abs/2402.03216
+    type: paper
+    authors: Chen et al.
+    year: 2024
+  - title: Learning Transferable Visual Models From Natural Language Supervision
+    url: https://arxiv.org/abs/2103.00020
+    type: paper
+    authors: Radford et al. (OpenAI)
+    year: 2021
+  - title: "ColPali: Efficient Document Retrieval with Vision Language Models"
+    url: https://arxiv.org/abs/2407.01449
+    type: paper
+    authors: Faysse et al.
+    year: 2024
+  - title: "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"
+    url: https://arxiv.org/abs/1908.10084
+    type: paper
+    authors: Reimers, Gurevych
+    year: 2019
+  - title: Dense Passage Retrieval for Open-Domain Question Answering
+    url: https://arxiv.org/abs/2004.04906
+    type: paper
+    authors: Karpukhin et al.
+    year: 2020
+---
+
+## Intuición: el modelo que no es de tu mundo
+
+Un modelo de embeddings aprende **de los datos con los que se entrenó**. Si se entrenó sobre todo con inglés y texto general de internet, hará un buen trabajo con consultas y documentos parecidos, y un trabajo peor con otro idioma, con la jerga de tu sector o con contenido que no es texto (diapositivas, planos, tablas escaneadas). Esta lección repasa tres situaciones en las que el modelo «de serie» se queda corto y qué hacer en cada una: **otro idioma**, **otro dominio** y **otro tipo de contenido**.
+
+## Cómo funciona
+
+### Multilingüe: el español y la recuperación entre idiomas
+
+Para un corpus en español hay tres cuestiones que conviene separar:
+
+1. **Calidad en español.** Un modelo puede liderar los rankings en inglés y ser mediocre en español. Comprueba su rendimiento en tu idioma, no solo la media global (lo viste en la lección anterior).
+2. **Recuperación entre idiomas** (_cross-lingual_): la pregunta está en un idioma y el documento en otro (un usuario pregunta en español sobre documentación en inglés). Requiere un modelo que coloque en el mismo espacio textos de idiomas distintos con el mismo significado.
+3. **Coste de tokens.** Como viste en la primera lección, el mismo texto en español ocupa más tokens que en inglés con muchos tokenizadores, lo que afecta al límite de longitud del modelo de embeddings y al tamaño real de tus fragmentos.
+
+Los modelos multilingües modernos abordan el segundo punto. Un ejemplo documentado es **M3-Embedding** (Chen et al., 2024), cuyo nombre resume sus tres «multi»: **multilingüe** (según sus autores, ofrece soporte uniforme para la recuperación semántica en más de 100 idiomas), **multifuncional** (puede hacer a la vez recuperación densa, multivector y dispersa) y **multigranular** (procesa desde frases cortas hasta documentos de hasta 8 192 tokens). Es un buen ejemplo de una tendencia: **un solo modelo que ofrece varias representaciones**, de modo que se puede construir una búsqueda híbrida sin cargar con modelos distintos.
+
+Para un corpus **monolingüe en español** no hace falta un modelo multilingüe a toda costa; basta con uno que rinda bien en español. Para un corpus **mezclado** (documentos en varios idiomas y usuarios que preguntan en cualquiera), un modelo multilingüe es lo razonable, y conviene incluir en tu golden set preguntas en cada idioma.
+
+<Snapshot date="2026-10">
+
+M3-Embedding se cita aquí como ejemplo de modelo multilingüe, multifuncional y multigranular según el resumen de su artículo (febrero de 2024): más de 100 idiomas y entradas de hasta 8 192 tokens, con resultados que sus autores califican de estado del arte en recuperación multilingüe, entre idiomas y de documentos largos. El panorama de modelos de embeddings cambia cada pocos meses: consulta la clasificación de MTEB y la documentación del modelo antes de decidir.
+
+</Snapshot>
+
+### Ajuste fino de embeddings: cuándo compensa
+
+Si el modelo preentrenado no entiende bien **tu jerga** (nombres de producto, siglas internas, terminología legal o médica), una opción es **afinarlo** con tus datos. Funciona igual que en Sentence-BERT y DPR: un entrenamiento **contrastivo** en el que el modelo ve parejas «consulta, pasaje relevante» y aprende a acercarlas, y a alejar los pasajes irrelevantes.
+
+Lo que necesitas:
+
+- **Pares positivos:** preguntas reales (o sintéticas) con el fragmento que las responde. Puedes obtener cientos o miles con registros de búsqueda y valoraciones de usuarios, o **generando preguntas sintéticas** con un LLM a partir de tus fragmentos (con revisión humana de una muestra).
+- **Negativos difíciles** (_hard negatives_): pasajes que **parecen** relevantes pero no lo son, por ejemplo el segundo resultado de una búsqueda inicial que no es el correcto. Entrenar solo con negativos fáciles (pasajes al azar) produce un modelo que no aprende a distinguir lo sutil.
+- **Un conjunto de evaluación separado:** si lo mides con las mismas preguntas con las que entrenaste, medirás memoria, no mejora.
+
+Cuándo compensa, con honestidad:
+
+- **Sí:** dominios muy especializados donde el modelo base tropieza, con datos suficientes y una mejora medida en un golden set independiente.
+- **No, todavía:** si no has probado antes alternativas más baratas: mejor troceado, contexto en los fragmentos, búsqueda híbrida y reordenación. Suelen dar más mejora por menos esfuerzo.
+- **Con precaución:** cada modelo afinado es un artefacto más que mantener. Si cambias de modelo base, hay que repetir el ajuste y reindexar todo.
+
+### Multimodal: cuando el contenido no es texto
+
+Mucha información útil vive en imágenes: diapositivas, esquemas, facturas escaneadas, catálogos con fotos. Dos enfoques cubren la mayoría de los casos.
+
+**CLIP: texto e imágenes en el mismo espacio.** Radford et al. (2021) entrenaron un modelo prediciendo **qué descripción corresponde a qué imagen**, sobre un conjunto de **400 millones de pares (imagen, texto)** de internet. El resultado es un espacio compartido donde una frase («un camión de reparto naranja») y la imagen de ese camión quedan cerca, lo que permite buscar imágenes con texto y viceversa, y transferir el modelo a tareas nuevas sin entrenamiento específico (_zero-shot_). Es la base de la búsqueda de productos por foto o por descripción.
+
+**ColPali: recuperar páginas de documentos como imágenes.** Los documentos con tablas, gráficos y maquetación compleja pierden información al convertirlos a texto (lo viste en la ingesta). Faysse et al. (2024) proponen **incrustar directamente las imágenes de las páginas**: ColPali es un modelo de visión y lenguaje que produce **embeddings multivector** de una imagen de página, que se comparan con la consulta mediante un mecanismo de **interacción tardía**. En su evaluación (el banco ViDoRe, que presentan en el mismo trabajo), según los autores, supera a los _pipelines_ modernos de recuperación de documentos siendo mucho más sencillo y rápido. Evita buena parte de la cadena de ingesta (análisis de layout, OCR, troceado) a cambio de modelos más pesados y de índices más grandes, porque cada página genera **muchos vectores** en lugar de uno.
+
+<Diagram
+  caption="Dos formas de recuperar contenido visual: un vector por imagen en un espacio compartido con el texto (CLIP) o muchos vectores por página con interacción tardía (ColPali)."
+  code={`flowchart LR
+  subgraph CLIP["CLIP: un vector por elemento"]
+    I1["Imagen"] --> V1["1 vector"]
+    T1["Texto de la consulta"] --> V2["1 vector"]
+    V1 --- S1["coseno"]
+    V2 --- S1
+  end
+  subgraph COLPALI["ColPali: multivector"]
+    P["Imagen de una página"] --> M["Muchos vectores de parche"]
+    Q["Consulta"] --> QV["Vectores de cada término"]
+    M --- S2["interacción tardía (MaxSim)"]
+    QV --- S2
+  end`}
+/>
+
+## Trade-offs
+
+Las tres decisiones de esta lección comparten el mismo patrón: cada paso más potente cuesta más en datos, cómputo y mantenimiento, y solo se justifica si **una medición sobre tus preguntas lo demuestra**. Por eso conviene escalar en orden: primero comprobar si un modelo general rinde bien en tu idioma y dominio; después, mejorar el troceado, el contexto y la recuperación; solo entonces plantearse un modelo multilingüe distinto, un ajuste fino o un enfoque multimodal. Y en cada salto, guardar la versión del modelo y del índice para poder volver atrás si el resultado no mejora.
+
+| Situación | Opción | Coste | Beneficio |
+| --- | --- | --- | --- |
+| Corpus en español | Modelo con buen rendimiento en español | Bajo | Calidad evidente en tu idioma |
+| Corpus y usuarios en varios idiomas | Modelo multilingüe | Medio (modelo más grande) | Recuperación entre idiomas |
+| Jerga muy especializada | Ajuste fino con negativos difíciles | Alto (datos, entrenamiento, mantenimiento) | Mejor recall en tu dominio |
+| Documentos con mucho contenido visual | CLIP (imágenes) o ColPali (páginas) | Alto (modelos de visión, más vectores) | No se pierde la información visual |
+| Documentos de texto limpio | Embeddings de texto | Bajo | Simplicidad |
+
+## Errores comunes en producción
+
+- **Dar por hecho que un modelo «multilingüe» rinde igual en todos los idiomas.** Mide cada uno por separado.
+- **Afinar antes de agotar las mejoras baratas** (troceado, contexto, híbrida, reordenación).
+- **Evaluar el modelo afinado con datos de entrenamiento.** Usa un conjunto independiente.
+- **Negativos fáciles.** El modelo no aprende los matices que necesitas.
+- **Generar preguntas sintéticas sin revisarlas.** Un LLM puede producir preguntas que ningún usuario haría o con la respuesta equivocada.
+- **Elegir un enfoque multimodal sin necesidad.** Si tus documentos son texto, el coste extra no se justifica.
+- **Subestimar el tamaño del índice multivector.** Una página con cientos de vectores multiplica el almacenamiento respecto a un embedding único.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"Tu corpus está en español pero el modelo de embeddings rinde peor de lo esperado. ¿Qué haces?"_ Pista: medir en español con un golden set propio, probar modelos multilingües o específicos de español, revisar longitud máxima y el coste de tokens.
+- _"¿Cuándo afinarías un modelo de embeddings y con qué datos?"_ Pista: jerga muy especializada tras agotar las mejoras baratas; pares consulta-pasaje, negativos difíciles y evaluación independiente.
+- _"¿Diferencia entre CLIP y ColPali?"_ Pista: CLIP pone imágenes y texto en un mismo espacio con un vector por elemento; ColPali incrusta páginas completas como imágenes con embeddings multivector e interacción tardía.
+
+</Callout>
+
+<KeyTakeaways>
+
+- El modelo aprende de sus datos: **idioma, dominio y tipo de contenido** determinan si te sirve.
+- Para otro idioma, **mide en ese idioma**; para recuperación entre idiomas, usa un modelo multilingüe (p. ej. M3-Embedding, con más de 100 idiomas y 8 192 tokens según sus autores).
+- El **ajuste fino** exige pares positivos, **negativos difíciles** y evaluación independiente; solo compensa tras agotar las mejoras baratas.
+- **CLIP** une texto e imagen en un espacio compartido; **ColPali** recupera **páginas como imágenes** con embeddings multivector e interacción tardía.
+- Cada opción más potente suma **coste y mantenimiento**: elige la más simple que pase tu evaluación.
+
+</KeyTakeaways>

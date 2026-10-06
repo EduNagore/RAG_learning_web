@@ -1,0 +1,217 @@
+---
+title: Latencia, coste, caché semántica y actualización incremental
+description: Dónde se va el tiempo y el dinero en un pipeline de RAG, qué palancas hay para reducirlos (caché de prefijos, caché semántica, modelos más pequeños), cómo evitar reindexar todo y qué riesgos tiene cada atajo.
+module: m09-rag-produccion
+order: 1
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Descomponer la latencia y el coste de una consulta de RAG por etapas e identificar el cuello de botella.
+  - Diseñar una caché semántica con umbral, TTL y claves seguras, y explicar por qué el umbral es una decisión de calidad y de seguridad.
+  - Implementar una actualización incremental del índice con huellas de contenido (altas, cambios y bajas).
+  - Proteger el sistema frente al consumo descontrolado (límites, presupuestos, cuotas).
+prerequisites:
+  - m08-evaluacion-rag/03-golden-sets-benchmarks-y-evaluacion-online
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: Prompt caching (documentación de la API de Claude)
+    url: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: OWASP Top 10 for LLM Applications 2025
+    url: https://genai.owasp.org/llm-top-10/
+    type: docs
+    authors: OWASP GenAI Security Project
+    year: 2025
+  - title: Retrieval-Augmented Generation for Large Language Models, a Survey
+    url: https://arxiv.org/abs/2312.10997
+    type: paper
+    authors: Gao et al.
+    year: 2023
+relatedLabs:
+  - rag-17-cache-semantica
+---
+
+## Intuición: el prototipo funciona; producción exige presupuestos
+
+Un prototipo de RAG responde en cinco segundos y nadie se queja porque lo usan tres personas. En producción, con miles de consultas al día, esos cinco segundos son una experiencia mala y la factura del modelo es una partida de presupuesto. La ingeniería de producción consiste en tres hábitos: **medir por etapas**, **fijar presupuestos** de latencia y de coste, y **recortar donde más pesa** sin romper la calidad.
+
+## Cómo funciona
+
+### Dónde se va el tiempo y el dinero
+
+Una consulta típica atraviesa estas etapas, casi siempre en serie:
+
+1. **Transformación de la consulta** (reescritura, expansión): una llamada a un LLM si la usas.
+2. **Embedding de la consulta:** rápido y barato.
+3. **Recuperación** (búsqueda vectorial, BM25, filtros): decenas de milisegundos con un buen índice.
+4. **Reranking:** una pasada por modelo para cada candidato; puede ser la etapa más lenta de la recuperación.
+5. **Construcción del prompt:** casi instantánea.
+6. **Generación:** la etapa dominante en tiempo y en coste. El tiempo hasta el primer token depende del tamaño del prompt, y el tiempo total, del número de tokens que se generan.
+7. **Postproceso:** verificación de citas, guardrails, filtros; añade latencia si usa más modelos.
+
+La regla práctica es **medir cada etapa** (percentiles 50, 95 y 99, no medias) y ver el desglose antes de optimizar. En la mayoría de los sistemas, la generación y las llamadas extra a modelos (reescritura, juez, reranking) dominan, y la recuperación vectorial no es el problema. El coste sigue la misma lógica: tokens de entrada y de salida del modelo generativo, más las llamadas auxiliares.
+
+### Palancas de latencia y coste
+
+- **Menos tokens de entrada:** menos fragmentos, compresión del contexto y fragmentos más cortos. Cada token de entrada cuesta y retrasa el primer token.
+- **Prompt caching** (de prefijos): reutiliza el procesamiento de un prefijo largo y repetido. Según la documentación de Anthropic, una lectura de caché cuesta una fracción del precio base de entrada; los detalles y las cifras (que cambian) están en la lección de contexto de este curso.
+- **Modelos más pequeños para tareas auxiliares:** reescritura, clasificación de intención y juez pueden usar un modelo ligero.
+- **Streaming de la respuesta:** no reduce el tiempo total, pero mejora la latencia percibida al mostrar los primeros tokens enseguida.
+- **Paralelizar lo independiente:** la búsqueda léxica y la densa pueden ejecutarse a la vez; el reranking y la recuperación, no.
+- **Límite de tokens de salida:** respuestas más cortas, menos coste y menos tiempo.
+- **Caché de resultados:** exacta (misma consulta normalizada) o **semántica** (consultas parecidas), que estudiamos a continuación.
+
+### Caché semántica
+
+Una caché exacta devuelve la respuesta solo si la consulta es idéntica; en lenguaje natural casi nunca lo es. La **caché semántica** compara el embedding de la consulta con los de consultas anteriores y, si la similitud supera un **umbral**, devuelve la respuesta guardada sin llamar al modelo. Es lo que implementas en el laboratorio, con tamaño máximo (expulsión LRU) y caducidad (TTL).
+
+El problema es que **parecido no significa lo mismo**. El código siguiente mide con el embedder de juguete del curso la similitud de tres parejas de preguntas y calcula el ahorro esperado según la tasa de aciertos (con costes **ficticios**: 1,0 por llamada al modelo y 0,02 por consulta a la caché).
+
+```python
+import hashlib
+
+import numpy as np
+from ragkit.data import load_corpus
+from ragkit.embeddings import HashingEmbedder
+
+emb = HashingEmbedder()
+
+
+def similitud(a, b):
+    return round(float(emb.embed(a) @ emb.embed(b)), 3)
+
+
+pares = {
+    "misma pregunta, otra forma": (
+        "¿Cuánto tarda el reembolso de una devolución?",
+        "¿Cuánto tarda en llegar el reembolso de mi devolución?",
+    ),
+    "casi igual pero distinta": (
+        "¿Cuál es el plazo de devolución para clientes particulares?",
+        "¿Cuál es el plazo de devolución para clientes empresa?",
+    ),
+    "otro tema": (
+        "¿Cuánto tarda el reembolso de una devolución?",
+        "¿Cuál es el horario del chat de atención al cliente?",
+    ),
+}
+print("pareja                        similitud coseno")
+for nombre, (a, b) in pares.items():
+    print(f"{nombre:<29} {similitud(a, b)}")
+
+
+# Ahorro esperado de una caché: coste medio por consulta según la tasa de aciertos.
+def coste_medio(tasa_aciertos, coste_llm=1.0, coste_cache=0.02):
+    return coste_cache + (1 - tasa_aciertos) * coste_llm
+
+
+for tasa in (0.0, 0.2, 0.5):
+    print(f"tasa de aciertos {tasa:.0%}: coste relativo {coste_medio(tasa):.2f}")
+
+# Actualización incremental: solo se reindexa lo que cambió (huella del contenido).
+corpus = load_corpus()
+
+
+def huella(doc):
+    return hashlib.sha256(f"{doc['title']}\n{doc['text']}".encode()).hexdigest()
+
+
+indexado = {d["id"]: huella(d) for d in corpus}
+nuevo = [dict(d) for d in corpus]
+nuevo[1]["text"] += " Nuevo: ahora también por transferencia."  # se modifica un documento
+nuevo = [d for d in nuevo if d["id"] != "doc-005"]  # se borra otro
+nuevo.append({"id": "doc-099", "title": "Nuevo", "text": "Documento nuevo."})  # se añade uno
+
+actual = {d["id"]: huella(d) for d in nuevo}
+reindexar = sorted(i for i in actual if indexado.get(i) != actual[i])
+borrar = sorted(set(indexado) - set(actual))
+print("reindexar:", reindexar, "| borrar:", borrar, "| sin cambios:", len(actual) - len(reindexar))
+```
+
+Salida (determinista):
+
+```text
+pareja                        similitud coseno
+misma pregunta, otra forma    0.756
+casi igual pero distinta      0.714
+otro tema                     0.0
+tasa de aciertos 0%: coste relativo 1.02
+tasa de aciertos 20%: coste relativo 0.82
+tasa de aciertos 50%: coste relativo 0.52
+reindexar: ['doc-002', 'doc-099'] | borrar: ['doc-005'] | sin cambios: 40
+```
+
+Cómo leer el resultado:
+
+- **El umbral apenas separa lo igual de lo parecido.** La paráfrasis legítima puntúa 0,756 y la pareja «particulares frente a empresa», que **tiene respuestas distintas**, 0,714: una diferencia de 0,04. Cualquier umbral que acepte la primera casi acepta la segunda, y devolver el plazo de los particulares a un cliente empresa es una respuesta errónea servida con total confianza. Con embeddings reales la separación puede ser mejor, pero **el riesgo es estructural**: los embeddings capturan el tema, y las diferencias que importan (un «no», un número, un tipo de cliente) pesan poco.
+- **El ahorro es proporcional a la tasa de aciertos:** con un 50 % cuesta la mitad. Y con 0 % cuesta **más** que no tener caché (1,02), por el coste de consultarla. Mide la tasa de aciertos real antes de mantener la complejidad.
+- **La actualización incremental** reindexa solo dos documentos de 42 (uno modificado y uno nuevo), borra el eliminado y deja 40 intactos. Con una huella del contenido (un *hash*) comparada con la del índice, el coste de actualizar es proporcional a **lo que cambia**, no al tamaño del corpus.
+
+### Diseño seguro de una caché semántica
+
+- **Umbral alto y validado** con un conjunto de parejas reales (equivalentes y casi iguales), no elegido a ojo. Prefiere perder aciertos a servir una respuesta equivocada.
+- **Clave con contexto:** incluye en la clave lo que cambia la respuesta: versión del corpus, idioma, tipo de cliente, **permisos del usuario**. Una caché compartida entre usuarios con permisos distintos filtra información.
+- **TTL y invalidación:** una respuesta cacheada queda desactualizada cuando cambia el documento del que salió. Invalida las entradas que dependen de documentos modificados (guarda sus identificadores) o usa un TTL corto.
+- **Cachear solo lo cacheable:** no respuestas personalizadas, ni con datos del usuario, ni de abstención por falta de permiso.
+- **Observabilidad:** registra aciertos y fallos, y revisa una muestra de aciertos para detectar respuestas servidas por error.
+
+### Actualización incremental del índice
+
+Reindexar todo cada noche es simple y suficiente para corpus pequeños, pero no escala y deja datos desactualizados todo el día. El patrón incremental:
+
+1. **Identidad estable** de cada documento y de cada fragmento (un id que no cambie).
+2. **Huella del contenido** (hash) guardada junto al índice.
+3. En cada ejecución, comparar: **alta** (id nuevo), **cambio** (huella distinta: reindexar), **baja** (id que ya no existe: borrar del índice **y de la caché**).
+4. **Versión del modelo de embeddings:** si cambia, hay que reindexar todo; guarda la versión en cada vector.
+5. **Metadatos** (permisos, fecha) actualizables sin recalcular el embedding.
+
+Cuidado con los **borrados**: un documento retirado por motivos legales debe desaparecer del índice, de las cachés y de cualquier copia derivada.
+
+### Proteger el presupuesto
+
+La tabla de riesgos de OWASP para aplicaciones con LLM incluye el **consumo no acotado** (*Unbounded Consumption*): un uso abusivo o un bucle descontrolado puede agotar el presupuesto. Protecciones básicas: **cuotas por usuario**, **límite de longitud** de la pregunta y de la respuesta, **límite de pasos** en agentes, **presupuesto diario** con alertas y corte, y **detección de abuso** (muchas consultas casi idénticas o muy largas).
+
+## Trade-offs
+
+| Palanca | Ahorro | Riesgo |
+| --- | --- | --- |
+| Menos fragmentos / compresión | Menos tokens, menos latencia | Perder evidencia |
+| Prompt caching | Gran ahorro con prefijos repetidos | Exige prefijos idénticos y tráfico |
+| Caché semántica | Evita llamadas al modelo | Respuesta equivocada por «parecido»; fugas entre usuarios |
+| Modelo pequeño para tareas auxiliares | Coste y latencia menores | Menor calidad en la tarea auxiliar |
+| Streaming | Mejor latencia percibida | No reduce el tiempo total |
+| Actualización incremental | Frescura y coste proporcional al cambio | Lógica de huellas, bajas y versiones |
+| Reindexado completo | Simple | No escala; datos desactualizados |
+
+## Errores comunes en producción
+
+- **Optimizar sin medir por etapas.** Se acelera la búsqueda vectorial cuando el tiempo se va en la generación y en una llamada de reescritura.
+- **Mirar solo la media.** El percentil 95 o 99 es lo que sufren los usuarios.
+- **Caché semántica con un umbral bajo y sin validar.** Sirve respuestas de otra pregunta.
+- **Caché compartida sin permisos en la clave.** Un usuario recibe la respuesta construida con documentos que no puede ver.
+- **No invalidar la caché al actualizar un documento.** Se siguen sirviendo respuestas antiguas durante horas.
+- **Borrar del índice pero no de la caché ni de las copias.** El documento «borrado» sigue apareciendo.
+- **Cambiar el modelo de embeddings sin reindexar.** Los vectores nuevos y los viejos no son comparables.
+- **Sin límites de consumo.** Un bucle de agente o un usuario abusivo pueden vaciar el presupuesto en una noche.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo reducirías la latencia y el coste de un RAG?"_ Pista: medir por etapas; menos tokens (menos fragmentos, compresión), prompt caching, modelos pequeños para tareas auxiliares, streaming, paralelizar lo independiente y cachés.
+- _"¿Qué riesgos tiene una caché semántica?"_ Pista: servir la respuesta de una pregunta parecida pero distinta, fugas entre usuarios con permisos distintos y respuestas desactualizadas; mitigar con umbral validado, claves con contexto y TTL o invalidación.
+- _"¿Cómo mantendrías el índice actualizado?"_ Pista: ids estables, huella del contenido, altas, cambios y bajas incrementales, versión del modelo de embeddings y borrado también en cachés.
+- _"¿Cómo proteges el sistema del consumo descontrolado?"_ Pista: cuotas, límites de longitud y de pasos, presupuesto con alertas y detección de abuso.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Mide por etapas y percentiles**: casi siempre dominan la generación y las llamadas auxiliares a modelos.
+- La **caché semántica** ahorra en proporción a su tasa de aciertos, pero **parecido no es igual**: en el ejemplo la paráfrasis (0,756) y la pregunta distinta (0,714) apenas se separan.
+- Diseña la caché con **umbral validado, claves con permisos y contexto, y TTL o invalidación**.
+- La **actualización incremental** con huellas reindexa solo lo que cambia (altas, cambios, bajas) y cuida los borrados en cachés.
+- Fija **cuotas y presupuestos** para evitar el consumo no acotado.
+
+</KeyTakeaways>

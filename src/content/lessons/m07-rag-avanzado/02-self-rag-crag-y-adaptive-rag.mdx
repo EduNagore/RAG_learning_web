@@ -1,0 +1,202 @@
+---
+title: Self-RAG, CRAG y Adaptive-RAG
+description: Arquitecturas de RAG que deciden cuándo recuperar, evalúan lo recuperado y corrigen el rumbo con la reflexión del modelo (Self-RAG), un evaluador de recuperación (CRAG) y el enrutado por complejidad (Adaptive-RAG).
+module: m07-rag-avanzado
+order: 2
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Explicar por qué recuperar siempre y de la misma forma es subóptimo y qué problema atacan Self-RAG, CRAG y Adaptive-RAG.
+  - Describir los componentes de cada arquitectura (tokens de reflexión, evaluador de recuperación, clasificador de complejidad).
+  - Implementar la lógica de un bucle correctivo y medir sus veredictos sobre preguntas con y sin respuesta.
+  - Valorar el coste y los riesgos de añadir etapas de decisión al pipeline.
+prerequisites:
+  - m07-rag-avanzado/01-graphrag-y-lightrag
+  - m06-generacion-contexto/03-abstencion-no-lo-se
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection"
+    url: https://arxiv.org/abs/2310.11511
+    type: paper
+    authors: Asai, Wu, Wang, Sil, Hajishirzi
+    year: 2023
+  - title: Corrective Retrieval Augmented Generation
+    url: https://arxiv.org/abs/2401.15884
+    type: paper
+    authors: Yan, Gu, Zhu, Ling
+    year: 2024
+  - title: "Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large Language Models through Question Complexity"
+    url: https://arxiv.org/abs/2403.14403
+    type: paper
+    authors: Jeong, Baek, Cho, Hwang, Park
+    year: 2024
+relatedLabs:
+  - rag-21-crag-simplificado
+---
+
+## Intuición: un pipeline fijo no se adapta a la pregunta
+
+El RAG básico hace siempre lo mismo: recupera $k$ fragmentos, los pega en el prompt y genera. Eso es un fallo de diseño por tres motivos:
+
+1. **A veces no hace falta recuperar.** «¿Cuánto es 2 + 2?» o «Hola» no necesitan buscar nada, y hacerlo añade latencia, coste y a veces ruido que empeora la respuesta.
+2. **A veces lo recuperado es malo.** Si la búsqueda trae documentos que parecen relacionados pero no lo están, el modelo los usa igualmente y construye una respuesta sobre arena.
+3. **A veces una sola búsqueda no basta.** Una pregunta de varios pasos necesita recuperar, razonar y volver a recuperar.
+
+Las tres arquitecturas de esta lección responden a cada punto: **Self-RAG** enseña al modelo a decidir cuándo recuperar y a criticar lo que usa; **CRAG** evalúa la calidad de lo recuperado y corrige; **Adaptive-RAG** elige la estrategia según la complejidad de la pregunta. Comparten la idea de pasar de un pipeline fijo a un **pipeline con decisiones**.
+
+## Cómo funciona
+
+### Self-RAG: el modelo reflexiona
+
+Asai et al. (2023) proponen un modelo de lenguaje entrenado para **recuperar bajo demanda** y **criticar** su propia generación mediante unos **tokens de reflexión** (*reflection tokens*) que el propio modelo emite. En lugar de recuperar siempre un número fijo de pasajes, decide en cada momento si necesita recuperar; y los tokens de reflexión le permiten evaluar tanto los pasajes recuperados como su salida. Como esos tokens se pueden controlar en inferencia, el comportamiento se **adapta a los requisitos de cada tarea**.
+
+Según el artículo, las versiones de 7 000 y 13 000 millones de parámetros superan a ChatGPT y a Llama2-chat con recuperación en varias tareas (preguntas de dominio abierto, razonamiento y verificación de hechos), con mejoras notables en la **factualidad** y en la **precisión de las citas** en generación de textos largos. Dos implicaciones prácticas: requiere **entrenar** (ajustar) un modelo con esos tokens, y los resultados son de 2023 con modelos de esa época.
+
+### CRAG: evaluar la recuperación y corregirla
+
+Yan et al. (2024) parten de una vulnerabilidad: el RAG depende de que los documentos recuperados sean relevantes. Su propuesta, **Corrective Retrieval Augmented Generation (CRAG)**, añade tres piezas:
+
+- **Un evaluador de recuperación** ligero que puntúa la calidad de los documentos recuperados y asigna una confianza, que determina la acción siguiente.
+- **Una extensión de búsqueda web:** cuando el evaluador detecta que la recuperación es insuficiente, se amplía a búsquedas a gran escala para complementar un corpus limitado.
+- **Un algoritmo de «descomponer y recomponer»** que procesa los documentos para centrarse selectivamente en la información clave y filtrar la irrelevante.
+
+Los autores describen CRAG como *plug-and-play* (se acopla a pipelines RAG existentes) y reportan mejoras significativas en cuatro conjuntos de datos de generación corta y larga. En la práctica se resume en un bucle de **tres acciones**: si la evidencia es **correcta**, se responde; si es **ambigua**, se reformula la consulta y/o se amplía la búsqueda; si es **incorrecta**, no se usa y se abstiene o se busca en otra fuente.
+
+<Diagram
+  caption="Bucle correctivo estilo CRAG: un evaluador decide entre responder, reformular y reintentar, o abstenerse."
+  code={`flowchart TD
+  Q[Pregunta] --> R[Recuperar]
+  R --> E{Evaluador de recuperación}
+  E -->|correcta| G[Generar respuesta]
+  E -->|ambigua| W[Reformular o ampliar la búsqueda]
+  W --> R
+  E -->|incorrecta| A[Abstenerse o buscar en otra fuente]`}
+/>
+
+### Adaptive-RAG: elegir la estrategia según la complejidad
+
+Jeong et al. (2024) observan que los métodos existentes o **malgastan cómputo** en preguntas simples o **resuelven mal** las complejas de varios pasos. Su **Adaptive-RAG** usa un **clasificador** (un modelo de lenguaje más pequeño) que estima la dificultad de la pregunta entrante y elige entre tres estrategias: **sin recuperación**, **recuperación en un paso** o **recuperación iterativa de varios pasos**. Los autores afirman que así mejora la eficiencia y la precisión frente a las alternativas que aplican siempre la misma estrategia.
+
+Es la misma idea de enrutado (*routing*) que viste en la transformación de consulta, aplicada a **cuánto esfuerzo** dedicar. El clasificador es una pieza más que entrenar o ajustar y que puede equivocarse: subestimar una pregunta compleja da una respuesta superficial, y sobreestimar una simple cuesta de más.
+
+### Cómo se comparan
+
+| Arquitectura | ¿Quién decide? | Qué decide | ¿Requiere entrenar? |
+| --- | --- | --- | --- |
+| Self-RAG | El propio modelo con tokens de reflexión | Si recuperar y si lo recuperado y lo generado son buenos | Sí, un modelo ajustado con esos tokens |
+| CRAG | Un evaluador ligero externo | Si la evidencia es correcta, ambigua o incorrecta, y qué acción tomar | Entrenar o configurar el evaluador; el resto se acopla |
+| Adaptive-RAG | Un clasificador de complejidad | Qué estrategia usar: ninguna, un paso o varios | Sí, un clasificador pequeño |
+
+En producción, las tres ideas se pueden implementar **sin entrenar nada de lo anterior** usando un LLM como evaluador o clasificador mediante prompts, a cambio de más latencia y coste por consulta. Lo que cambia es dónde pones el coste y cuánto control tienes.
+
+### Un experimento: el bucle correctivo sobre Nimbus
+
+Con la lógica del laboratorio, el código siguiente recupera los tres mejores documentos con BM25 y asigna un veredicto a cada pregunta: **correcto**, **ambiguo** o **incorrecto**, usando como evaluador la cobertura léxica de la pregunta por los documentos recuperados (raíces de cinco letras) con umbrales de 0,6 y 0,35. Es un evaluador de juguete; la estructura (evaluar y decidir) es la de CRAG.
+
+```python
+import math
+from collections import Counter
+
+from ragkit.data import load_corpus, load_golden
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+golden = load_golden()
+ids = [d["id"] for d in corpus]
+por_id = {d["id"]: d for d in corpus}
+docs = {d["id"]: tokenize(d["title"] + " " + d["text"]) for d in corpus}
+avgdl = sum(map(len, docs.values())) / len(docs)
+
+
+def recuperar(query, k=3):
+    scores = {i: 0.0 for i in ids}
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs.values())
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in docs.items():
+            f = d.count(t)
+            if f:
+                scores[i] += idf * f * 2.5 / (f + 1.5 * (0.25 + 0.75 * len(d) / avgdl))
+    return [por_id[i] for i in sorted(ids, key=lambda i: -scores[i])[:k]]
+
+
+def cobertura(question, documentos):
+    buscadas = {t[:5] for t in tokenize(question)}
+    if not buscadas:
+        return 0.0
+    disponibles = {t[:5] for d in documentos for t in tokenize(d["text"])}
+    return len(buscadas & disponibles) / len(buscadas)
+
+
+def veredicto(question, documentos, alto=0.6, bajo=0.35):
+    c = cobertura(question, documentos)
+    return "correcto" if c >= alto else "incorrecto" if c < bajo else "ambiguo"
+
+
+tabla = {True: Counter(), False: Counter()}
+for q in golden:
+    tabla[q["answerable"]][veredicto(q["question"], recuperar(q["question"]))] += 1
+print("tipo de pregunta       correcto  ambiguo  incorrecto")
+for etiqueta, clave in (("con respuesta (28)", True), ("sin respuesta (3)", False)):
+    t = tabla[clave]
+    print(f"{etiqueta:<22}{t['correcto']:>8}{t['ambiguo']:>9}{t['incorrecto']:>12}")
+```
+
+Salida (determinista):
+
+```text
+tipo de pregunta       correcto  ambiguo  incorrecto
+con respuesta (28)          19        7           2
+sin respuesta (3)            0        2           1
+```
+
+Cómo leerlo, con la cautela que merece:
+
+- De las 28 preguntas con respuesta, **19 pasan directo** a generación, **7 caen en «ambiguo»** (candidatas a reformular y reintentar) y **2 se rechazan por error** (falsas abstenciones). Ninguna de las 3 preguntas sin respuesta se responde a la primera: una se rechaza y dos quedan en «ambiguo», donde un segundo intento con otra consulta, si tampoco convence, acabaría en abstención.
+- Frente al **umbral único** sobre BM25 de la lección de abstención, la banda intermedia es lo que aporta: en vez de decidir «responder o no» con una sola raya, existe una zona de duda donde se gasta una **segunda oportunidad** antes de abstenerse.
+- **Cautela de rigor:** fijé los umbrales de 0,6 y 0,35 **después de ver** las coberturas de estas 31 preguntas, así que el resultado está optimizado para este conjunto y no es una estimación honesta del rendimiento. Con solo 3 preguntas sin respuesta, además, no se puede concluir casi nada. El experimento ilustra el mecanismo y el compromiso; el rendimiento real se mide con preguntas que no usaste para fijar los umbrales.
+- El evaluador **ignora los permisos**: la pregunta `q27` (restringida) obtiene cobertura máxima y se respondería. El control de acceso va antes de la recuperación, no dentro del evaluador.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Pipeline fijo | Simple, predecible, barato | Recupera cuando no hace falta y no corrige lo malo |
+| Evaluador de recuperación (CRAG) | Evita generar sobre evidencia mala | Una llamada extra y un evaluador que puede equivocarse |
+| Reformular y reintentar | Rescata consultas ambiguas | Latencia y coste por cada vuelta; riesgo de desvío |
+| Recuperar bajo demanda (Self-RAG) | No gasta recuperación en lo que no la necesita | Requiere un modelo ajustado; menos control externo |
+| Clasificador de complejidad (Adaptive-RAG) | Ajusta el esfuerzo a la pregunta | Un error de clasificación degrada la respuesta |
+| Búsqueda web como plan B | Cubre lagunas del corpus | Fuentes no controladas; riesgo de seguridad y de calidad |
+
+## Errores comunes en producción
+
+- **Confiar en el evaluador sin evaluarlo.** Si el evaluador se equivoca, el sistema abstiene en preguntas contestables o responde con evidencia pobre. Mídelo con un conjunto dorado, incluidas preguntas sin respuesta.
+- **Bucles sin límite.** Cada reformulación cuesta; fija un máximo de reintentos (en el laboratorio, `max_retries`) y una condición de parada clara.
+- **Ajustar umbrales sobre pocas preguntas.** Es sobreajuste: reserva preguntas para validar.
+- **Búsqueda web sin filtros.** Ampliar a la web como plan B abre la puerta a contenido no fiable o malicioso (inyección indirecta); trata lo que traiga como no confiable y limita los dominios.
+- **Evaluar y no registrar.** Si no guardas el veredicto y las reformulaciones, no puedes saber por qué el sistema se abstuvo.
+- **Tratar «no recupera» como éxito.** Un sistema que se abstiene mucho parece seguro y es inútil: mide también las abstenciones innecesarias.
+- **Olvidar la latencia acumulada.** Evaluar, reformular y recuperar de nuevo suman tiempos en serie; vigila el percentil 95.
+- **Saltarse los permisos en el plan B.** Una segunda búsqueda no puede ignorar los filtros de acceso que aplicó la primera.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es CRAG?"_ Pista: evaluador ligero de la calidad de lo recuperado que decide entre responder, corregir (reformular/ampliar la búsqueda) o descartar; más descomponer y recomponer los documentos.
+- _"¿Qué aporta Self-RAG frente a un RAG normal?"_ Pista: el modelo decide cuándo recuperar y critica pasajes y respuesta con tokens de reflexión; requiere entrenarlo.
+- _"¿Cómo decidirías cuánto esfuerzo dedicar a cada pregunta?"_ Pista: clasificador de complejidad (Adaptive-RAG): sin recuperación, un paso o varios pasos.
+- _"¿Qué riesgos añade un evaluador de recuperación?"_ Pista: coste, latencia, errores del propio evaluador, abstenciones innecesarias, ajuste de umbrales con pocas preguntas.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un pipeline fijo recupera de más, no corrige la mala recuperación y no se adapta a preguntas complejas.
+- **Self-RAG:** el modelo decide cuándo recuperar y se critica con **tokens de reflexión** (requiere entrenarlo).
+- **CRAG:** un **evaluador de recuperación** decide entre responder, reformular/ampliar o descartar, y filtra los documentos.
+- **Adaptive-RAG:** un **clasificador de complejidad** elige entre no recuperar, un paso o varios.
+- Añadir decisiones cuesta latencia y puede introducir errores; evalúalas con preguntas con y sin respuesta, y fija los umbrales con datos aparte.
+
+</KeyTakeaways>

@@ -1,0 +1,187 @@
+---
+title: Qué es RAG y por qué existe
+description: La idea central de la generación aumentada por recuperación, su origen en la investigación y el problema que resuelve frente a un LLM aislado.
+module: m01-intro-rag
+order: 1
+level: básico
+estimatedMinutes: 15
+objectives:
+  - Definir RAG como combinación de memoria paramétrica y no paramétrica.
+  - Describir los tres pasos de un sistema RAG y qué ocurre en cada uno.
+  - Situar históricamente REALM, RAG, RETRO y Atlas y qué aportó cada uno.
+  - Identificar para qué problemas RAG es una buena solución y para cuáles no.
+prerequisites:
+  - m00-fundamentos-llm/08-limitaciones
+volatility: low
+lastReviewed: 2026-10-05
+sources:
+  - title: Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
+    url: https://arxiv.org/abs/2005.11401
+    type: paper
+    authors: Lewis et al.
+    year: 2020
+  - title: "REALM: Retrieval-Augmented Language Model Pre-Training"
+    url: https://arxiv.org/abs/2002.08909
+    type: paper
+    authors: Guu et al.
+    year: 2020
+  - title: Improving language models by retrieving from trillions of tokens
+    url: https://arxiv.org/abs/2112.04426
+    type: paper
+    authors: Borgeaud et al.
+    year: 2021
+  - title: "Atlas: Few-shot Learning with Retrieval Augmented Language Models"
+    url: https://arxiv.org/abs/2208.03299
+    type: paper
+    authors: Izacard et al.
+    year: 2022
+  - title: "Retrieval-Augmented Generation for Large Language Models: A Survey"
+    url: https://arxiv.org/abs/2312.10997
+    type: paper
+    authors: Gao et al.
+    year: 2023
+relatedLabs:
+  - rag-01-coseno-topk
+---
+
+## Intuición: un examen con libro abierto
+
+Imagina dos alumnos ante la misma pregunta de examen. El primero debe responder solo de memoria. El segundo puede consultar el libro, localizar el capítulo relevante y redactar su respuesta con él delante. Si la pregunta trata de un dato concreto, reciente o muy específico, el segundo tiene ventaja evidente: no necesita haberlo memorizado, solo saber **buscarlo** y **usarlo**.
+
+La generación aumentada por recuperación (_Retrieval-Augmented Generation_, **RAG**) aplica exactamente esa idea a un modelo de lenguaje. En la lección anterior viste las limitaciones de un LLM aislado: alucina, su conocimiento está congelado y no conoce tus datos. RAG ataca las tres a la vez con un cambio de enfoque: **antes de generar, se buscan los fragmentos relevantes en una base de conocimiento y se entregan al modelo como parte del prompt**.
+
+Dicho de otro modo, se separan dos funciones que un LLM mezcla: el **conocimiento** (que vive en un índice que tú controlas y actualizas) y el **razonamiento y la redacción** (que sigue haciendo el modelo).
+
+## Cómo funciona
+
+### Memoria paramétrica y no paramétrica
+
+El artículo que dio nombre a la técnica, de Lewis et al. (2020), la define como la combinación de **memoria paramétrica** y **no paramétrica** para generar lenguaje. La paramétrica es el propio modelo: lo que aprendió y quedó almacenado en sus pesos. La no paramétrica es un índice externo que se consulta; en aquel trabajo, un índice vectorial denso de Wikipedia al que se accedía con un recuperador neuronal preentrenado.
+
+La diferencia práctica entre ambas es enorme:
+
+| | Memoria paramétrica (pesos) | Memoria no paramétrica (índice) |
+| --- | --- | --- |
+| Cómo se actualiza | Reentrenando o ajustando el modelo | Añadiendo, cambiando o borrando documentos |
+| Trazabilidad | Ninguna: no sabes de dónde sale un dato | Cada fragmento tiene un origen citable |
+| Control de acceso | Imposible por usuario | Se puede filtrar por permisos |
+| Coste de cambiar un dato | Alto | Bajo |
+
+### Los tres pasos
+
+Un sistema RAG, por simple que sea, hace tres cosas:
+
+1. **Indexar** (offline): trocear los documentos, convertir cada fragmento en un vector y guardarlo en un índice junto con sus metadatos.
+2. **Recuperar** (online): convertir la pregunta en un vector y buscar los fragmentos más cercanos.
+3. **Generar** (online): construir un prompt con la pregunta y los fragmentos recuperados, y pedir al modelo que responda **basándose en ellos**.
+
+<Diagram
+  caption="Los tres pasos de RAG. La indexación ocurre antes; recuperar y generar, en cada consulta."
+  code={`flowchart LR
+  subgraph IDX["1. Indexar (offline)"]
+    D["Documentos"] --> C["Trocear"] --> E["Embeddings"] --> I[("Índice + metadatos")]
+  end
+  subgraph QRY["2 y 3. Consulta (online)"]
+    Q["Pregunta"] --> R["Recuperar top-k"]
+    I --> R
+    R --> P["Prompt = pregunta + fragmentos"]
+    P --> L["LLM"] --> A["Respuesta con citas"]
+  end`}
+/>
+
+Este curso recorre cada caja del diagrama en profundidad: la ingesta y el _chunking_ (módulo 2), los embeddings (3), los índices (4), la recuperación avanzada (5) y la generación (6).
+
+### Un ejemplo mínimo y real
+
+El siguiente código implementa los tres pasos sobre el corpus ficticio de Nimbus Logística, con el embedder determinista de `ragkit` (no entiende sinónimos, pero sirve para ver la mecánica). Es el mismo código que ejecutarás en los laboratorios:
+
+```python
+import numpy as np
+from ragkit.data import load_corpus
+from ragkit.embeddings import HashingEmbedder
+
+corpus = [d for d in load_corpus() if d["access"] == "public"]
+embedder = HashingEmbedder(dim=512)
+# 1. Indexar (una vez)
+index = embedder.embed_many([d["title"] + ". " + d["text"] for d in corpus])
+
+def retrieve(question, k=2):
+    # 2. Recuperar: vectores normalizados, así el producto escalar es el coseno
+    scores = index @ embedder.embed(question)
+    order = np.argsort(-scores, kind="stable")[:k]
+    return [(corpus[i]["id"], corpus[i]["title"], round(float(scores[i]), 3)) for i in order]
+
+def build_prompt(question, k=2):
+    # 3. Generar: el prompt lleva la evidencia y una salida de escape
+    ids = [r[0] for r in retrieve(question, k)]
+    docs = [d for d in corpus if d["id"] in ids]
+    context = "\n".join(f"[{d['id']}] {d['text']}" for d in docs)
+    return (
+        "Responde solo con la información de los documentos y cita su id entre "
+        "corchetes. Si no está, di que no lo sabes.\n\n"
+        f"Documentos:\n{context}\n\nPregunta: {question}"
+    )
+
+print(retrieve("¿Cuántos días tengo para devolver un pedido?"))
+# [('doc-001', 'Política de devoluciones', 0.243), ('doc-015', 'Facturas', 0.19)]
+```
+
+Fíjate en dos cosas. El primer resultado es el correcto (`doc-001`, que dice «14 días naturales»), pero el segundo (`Facturas`) es ruido con una puntuación bastante próxima: la recuperación **siempre devuelve k resultados**, sean buenos o no. Y el prompt incluye una instrucción de abstención («di que no lo sabes»), que ya viste que es clave frente a las alucinaciones.
+
+## Un poco de historia: de la investigación a la práctica
+
+La idea de combinar recuperación y generación tiene su propia línea de trabajo, anterior a los asistentes comerciales:
+
+- **REALM** (Guu et al., 2020) incorporó un recuperador latente **durante el preentrenamiento**, de modo que el modelo aprende a recuperar documentos de un gran corpus como Wikipedia y a apoyarse en ellos. Sus autores reportaron mejoras de entre 4 y 16 puntos absolutos de exactitud en preguntas abiertas sobre los métodos anteriores, además de ventajas de interpretabilidad y modularidad.
+- **RAG** (Lewis et al., 2020) lo extendió a la generación: combina un modelo secuencia a secuencia con un índice denso de Wikipedia y propone dos variantes, una que condiciona toda la secuencia a los mismos pasajes y otra que puede usar pasajes distintos por token. Mejoró el estado del arte en tres tareas de preguntas abiertas y generó lenguaje «más específico, diverso y factual» que una línea base solo paramétrica.
+- **RETRO** (Borgeaud et al., 2021) llevó la idea a escala: con una base de datos de 2 billones de tokens obtuvo un rendimiento comparable al de GPT-3 y Jurassic-1 en The Pile usando **25 veces menos parámetros**.
+- **Atlas** (Izacard et al., 2022) mostró que un modelo con recuperación aprende tareas intensivas en conocimiento con muy pocos ejemplos: superó el 42 % de exactitud en Natural Questions con solo 64 ejemplos, por encima de un modelo de 540 000 millones de parámetros con 50 veces menos parámetros.
+
+Estos cuatro trabajos entrenan el recuperador y el generador de forma conjunta o especializada. La práctica industrial actual es distinta y más sencilla: se usa un LLM **ya entrenado** como generador, sin tocar sus pesos, y se le añade un sistema de recuperación aparte. Es la variante que verás a lo largo del curso; el resumen de Gao et al. (2023) la sitúa dentro de una evolución desde el RAG «ingenuo» hasta arquitecturas modulares, que veremos en la tercera lección de este módulo.
+
+## El índice es un sistema de datos más
+
+Conviene interiorizar pronto algo que los tutoriales omiten: al construir RAG no solo añades una técnica, añades **un nuevo sistema de datos** a tu organización, con sus propias responsabilidades.
+
+- **Propiedad y calidad:** alguien debe ser responsable de qué documentos entran, de que estén vigentes y de retirar los obsoletos. Un índice con la política de devoluciones de hace dos años dará respuestas coherentes... y equivocadas.
+- **Gobierno del acceso:** el índice contiene texto de tus documentos, a veces confidencial. Debe respetar los mismos permisos que los documentos originales, no ser un atajo para saltárselos.
+- **Ciclo de vida:** los documentos cambian, se borran y se corrigen. Necesitas un proceso para reindexar lo modificado y eliminar lo borrado, con la misma fiabilidad con que gestionas cualquier otra base de datos.
+- **Observabilidad:** hay que poder responder a «¿qué fragmentos se usaron para esta respuesta?» cuando un usuario reclama. Eso exige registrar la recuperación, no solo la respuesta final.
+
+Tratar el índice como un sistema con dueño, calidad y auditoría es lo que distingue un prototipo de demostración de una solución que una empresa puede mantener. Los módulos 8 y 9 se dedican precisamente a medir y operar estas piezas.
+
+## Trade-offs: cuándo RAG es una buena idea
+
+RAG brilla cuando el conocimiento necesario es **externo al modelo, cambiante o privado**, y cuando necesitas **trazabilidad**:
+
+- **Buen encaje:** preguntas sobre documentación interna, políticas de empresa, soporte técnico, normativa, catálogos de producto, bases de conocimiento que se actualizan.
+- **Encaje dudoso:** tareas que no dependen de conocimiento externo (reescribir, traducir, clasificar con reglas dadas), o cuando todo el conocimiento relevante cabe de sobra en el prompt y apenas cambia (en ese caso un prompt largo con caché puede ser más simple).
+- **Mal encaje:** cuando lo que necesitas cambiar es el **comportamiento o el estilo** del modelo (tono, formato, razonamiento especializado), no su conocimiento. Eso se parece más a ajuste fino, que veremos en la siguiente lección.
+
+El coste de RAG es de **complejidad**: añades un sistema de ingesta, un índice, una etapa de recuperación que puede fallar, y nuevas formas de error. Un RAG mal construido puede ser peor que un LLM sin él.
+
+## Errores comunes en producción
+
+- **Pensar que RAG elimina las alucinaciones.** Las reduce si la recuperación trae la evidencia correcta; si trae la equivocada, el modelo responde con aparente autoridad y una cita errónea.
+- **Tratar RAG como "poner una base de datos vectorial".** La calidad depende de la ingesta, el troceado, el modelo de embeddings, la recuperación y el prompt. El índice es una pieza más.
+- **No separar los fallos.** Cuando una respuesta es mala, ¿falló la recuperación (no trajo el fragmento), la generación (lo trajo y lo ignoró) o los datos (el documento no lo decía)? Sin medir cada etapa por separado no sabrás qué arreglar. Lo veremos en el módulo de evaluación.
+- **Devolver siempre k fragmentos.** Como viste en el ejemplo, el segundo resultado puede ser irrelevante. Rellenar el prompt con ruido empeora la respuesta y encarece la llamada.
+- **Olvidar los permisos.** Un índice compartido sin control de acceso puede filtrar documentos a quien no debe verlos.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"Explica RAG a alguien que no es técnico."_ Pista: examen con libro abierto; separar conocimiento (índice actualizable) de razonamiento (modelo).
+- _"¿Qué diferencia hay entre memoria paramétrica y no paramétrica y qué ventajas da la segunda?"_ Pista: pesos frente a índice externo; actualización, trazabilidad y control de acceso.
+- _"¿Cuáles son los tres pasos de un sistema RAG y dónde puede fallar cada uno?"_ Pista: indexar, recuperar, generar; ingesta mala, recuperación que no trae la evidencia, generación que la ignora o inventa.
+
+</Callout>
+
+<KeyTakeaways>
+
+- RAG combina **memoria paramétrica** (el modelo) y **no paramétrica** (un índice consultable): el conocimiento se separa del razonamiento.
+- Tres pasos: **indexar** (offline), **recuperar** y **generar** (online). Cada uno puede fallar de forma distinta.
+- La idea viene de REALM, RAG, RETRO y Atlas; hoy lo habitual es usar un LLM ya entrenado y añadirle recuperación sin tocar sus pesos.
+- Encaja con conocimiento **externo, cambiante o privado** y cuando necesitas **trazabilidad**; no sirve para cambiar el comportamiento del modelo.
+- La recuperación devuelve siempre k resultados, buenos o no: hay que medirla y filtrarla.
+
+</KeyTakeaways>

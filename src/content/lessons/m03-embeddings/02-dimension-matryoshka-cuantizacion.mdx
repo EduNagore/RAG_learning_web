@@ -1,0 +1,187 @@
+---
+title: Dimensión, Matryoshka y cuantización
+description: Cómo reducir el tamaño y el coste de los vectores, acortando su dimensión o cuantizándolos, qué se pierde en cada caso y cómo medirlo antes de decidir.
+module: m03-embeddings
+order: 2
+level: avanzado
+estimatedMinutes: 17
+objectives:
+  - Calcular el almacenamiento de un índice según la dimensión y el tipo numérico de los vectores.
+  - Explicar qué hace distinta a una representación Matryoshka frente a truncar un vector cualquiera.
+  - Describir la cuantización escalar (int8) y binaria, y la reordenación con vectores completos.
+  - Diseñar una medición que muestre la pérdida de calidad de cada reducción en tus datos.
+prerequisites:
+  - m03-embeddings/01-densos-dispersos-y-modelos
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: Matryoshka Representation Learning
+    url: https://arxiv.org/abs/2205.13147
+    type: paper
+    authors: Kusupati et al.
+    year: 2022
+  - title: Binary and Scalar Embedding Quantization for Significantly Faster & Cheaper Retrieval
+    url: https://huggingface.co/blog/embedding-quantization
+    type: blog
+    authors: Shakir, Aarsen, Lee (Hugging Face)
+    year: 2024
+  - title: Vector embeddings (documentación de OpenAI)
+    url: https://developers.openai.com/api/docs/guides/embeddings
+    type: docs
+    authors: OpenAI
+    year: 2026
+  - title: "MTEB: Massive Text Embedding Benchmark"
+    url: https://arxiv.org/abs/2210.07316
+    type: paper
+    authors: Muennighoff et al.
+    year: 2022
+---
+
+## Intuición: el coste de un millón de vectores
+
+Un vector de 1 536 números en coma flotante de 32 bits ocupa unos 6 KB. Un millón de fragmentos son **6 GB solo de vectores**, antes de contar el índice, los metadatos y las réplicas. Con cien millones, hablamos de cientos de gigabytes que además conviene mantener en memoria para buscar rápido. La **dimensión** de los embeddings y la **precisión numérica** con la que se guardan son dos palancas directas sobre tres costes: **almacenamiento, latencia de búsqueda y dinero**.
+
+La pregunta práctica es siempre la misma: ¿cuánta calidad de recuperación estoy dispuesto a perder a cambio de vectores más pequeños, y cómo lo mido? Esta lección da las herramientas para responder con datos y no con intuición.
+
+## Cómo funciona
+
+### La aritmética del almacenamiento
+
+El tamaño de un índice de vectores es sencillo de calcular:
+
+$$
+\text{bytes} = N \times d \times b
+$$
+
+donde $N$ es el número de fragmentos, $d$ la dimensión y $b$ los bytes por valor (4 para `float32`, 1 para `int8`, 1/8 para un bit). Por ejemplo, con $N = 1\,000\,000$ y $d = 1536$:
+
+| Formato | Bytes por vector | Total |
+| --- | ---: | ---: |
+| `float32` | 6 144 | ≈ 6,1 GB |
+| `int8` | 1 536 | ≈ 1,5 GB |
+| Binario (1 bit) | 192 | ≈ 0,19 GB |
+
+Reducir $d$ y reducir $b$ se pueden combinar: la reducción total es el producto de ambas.
+
+### Acortar la dimensión
+
+Hay modelos que permiten usar **menos dimensiones** de las que producen por defecto. La documentación de OpenAI, por ejemplo, indica que `text-embedding-3-small` genera por defecto vectores de 1 536 dimensiones y `text-embedding-3-large` de 3 072, y que se puede pasar el parámetro `dimensions` para reducir el embedding «sin perder sus propiedades de representar conceptos», es decir, acortarlo quitando números del final de la secuencia; indica además que, si se acorta manualmente, hay que **volver a normalizar** el vector.
+
+¿Por qué eso funciona con algunos modelos y no con cualquiera? Porque no basta con cortar: si un modelo no se entrenó para ello, las primeras dimensiones no contienen necesariamente lo más importante. La técnica que lo hace posible es la **representación Matryoshka**.
+
+### Matryoshka: dimensiones anidadas
+
+_Matryoshka Representation Learning_ (Kusupati et al., 2022) entrena un único embedding de modo que **sus primeras $m$ dimensiones formen, por sí solas, una buena representación más pequeña**, para varios valores de $m$ (por ejemplo, 64, 128, 256, 512…), como las muñecas rusas que se encajan unas dentro de otras. Los autores reportan, en tareas de visión, representaciones de hasta **14 veces menos tamaño** con la misma exactitud en clasificación y aceleraciones de hasta **14 veces** en recuperación a gran escala, y que las representaciones de grano grueso a fino son al menos tan precisas como las de baja dimensión entrenadas por separado. Algunos modelos de embeddings de texto ofrecen esta capacidad de acortar el vector; consulta siempre la documentación del tuyo.
+
+El resultado práctico es una flexibilidad muy útil: con **un solo modelo y un solo cálculo de embeddings** puedes elegir después el compromiso calidad-coste, e incluso usar dos niveles (buscar con 256 dimensiones y reordenar los mejores con las 1 536 completas).
+
+<Callout type="aviso" title="Truncar no es lo mismo que Matryoshka">
+
+Cortar un vector de un modelo que **no** está entrenado para ello puede degradar mucho el resultado. Antes de acortar dimensiones comprueba en la documentación del modelo que lo soporta y **mide** con tus datos.
+
+</Callout>
+
+### Cuantización: menos bytes por valor
+
+La **cuantización** conserva todas las dimensiones pero guarda cada valor con menos bits. Hugging Face describe dos variantes populares (Shakir, Aarsen y Lee, 2024):
+
+- **Escalar (`int8`):** cada valor `float32` se asigna a uno de 256 niveles (de −128 a 127), calculando el rango con datos de calibración. Reduce el tamaño **4 veces**.
+- **Binaria:** cada valor se reduce a **1 bit** según su signo (umbral en 0 sobre vectores normalizados), y se compara con la **distancia de Hamming** (cuántos bits difieren). Reduce el tamaño **32 veces**.
+
+Según su medición sobre la tarea de recuperación de MTEB, la cuantización binaria conserva aproximadamente un **92,5 %** del rendimiento sin más, y **hasta un 96 %** si se aplica una **reordenación** (_rescoring_); con `int8` la retención que reportan ronda el **99 %**. También informan de aceleraciones medias de unas **3,7×** (`int8`) y **24,8×** (binaria) en la búsqueda.
+
+La reordenación es la clave de la cuantización binaria: se recuperan primero, con vectores binarios, varias veces más candidatos de los necesarios (por ejemplo, 4 × _k_) y después se **reordenan** calculando el producto escalar entre el vector de consulta **completo** (`float32`) y los vectores cuantizados de esos candidatos. Así se gana casi toda la velocidad y memoria sin perder gran parte de la calidad.
+
+<Snapshot date="2026-10">
+
+Cifras y parámetros citados: dimensiones por defecto y parámetro `dimensions` de los modelos `text-embedding-3` según la documentación de OpenAI (que además indica una entrada máxima de 8 192 tokens y que sus embeddings vienen normalizados, de modo que producto escalar y coseno dan el mismo orden), y retenciones de la cuantización de Hugging Face (marzo de 2024) medidas sobre MTEB con modelos concretos. Los modelos disponibles, sus dimensiones y los resultados varían con el tiempo y con el modelo: **mide con el tuyo**.
+
+</Snapshot>
+
+### Medirlo en el laboratorio
+
+La mejor forma de entender el compromiso es medirlo. El siguiente ejemplo parte de vectores **densos sintéticos** (una proyección aleatoria de los vectores del embedder de juguete del curso, para que todas las dimensiones tengan valor, como en un modelo real) y compara el tamaño y el acierto con distintas reducciones:
+
+```python
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.embeddings import HashingEmbedder
+
+corpus = load_corpus()
+golden = [q for q in load_golden() if q["answerable"]]
+ids = [d["id"] for d in corpus]
+
+base = HashingEmbedder(dim=1024)
+x = base.embed_many([d["title"] + " " + d["text"] for d in corpus])
+proy = np.random.default_rng(0).normal(size=(1024, 512)) / np.sqrt(512)
+
+def denso(v):
+    w = v @ proy
+    return w / np.linalg.norm(w)          # vectores densos y normalizados de 512 dimensiones
+
+M = np.vstack([denso(v) for v in x])
+Q = {q["id"]: denso(base.embed(q["question"])) for q in golden}
+
+def hit3(puntuar):
+    aciertos = 0
+    for q in golden:
+        top = np.argsort(-puntuar(Q[q["id"]]), kind="stable")[:3]
+        aciertos += bool(set(q["relevant_ids"]) & {ids[i] for i in top})
+    return round(aciertos / len(golden), 3)
+
+escala = np.abs(M).max()
+M_int8 = np.round(M / escala * 127).astype(np.int8)
+M_bits = M > 0                                         # 1 bit por dimensión
+
+print("float32 ", hit3(lambda q: M @ q), "| bytes/vector:", 512 * 4)
+print("int8    ", hit3(lambda q: M_int8.astype(np.float32) @ q), "| bytes/vector:", 512)
+print("binario ", hit3(lambda q: (M_bits == (q > 0)).sum(axis=1)), "| bytes/vector:", 512 // 8)
+for d in (64, 128, 256):                               # truncado simple (no es Matryoshka)
+    print("truncado", d, hit3(lambda q: M[:, :d] @ q[:d]))
+```
+
+Con esta semilla se obtiene un acierto@3 de **0,786** en `float32`, en `int8` y en binario (los tres idénticos), mientras que truncar a 64, 128 y 256 dimensiones da 0,571, 0,75 y 0,821. Conviene leerlo con cuidado:
+
+- **El ahorro de memoria es exacto:** 2 048 bytes por vector en `float32`, 512 en `int8` y 64 en binario.
+- **La cuantización no perdió nada aquí**, pero el corpus tiene solo 42 documentos y 28 preguntas: con tan poco material el orden es robusto. Con corpus de millones de documentos la competencia entre candidatos es mucho más fina y las pérdidas son reales, como muestran las mediciones de Hugging Face (92,5 % a 99 %).
+- **Truncar sí degrada**, pero con ruido: el valor de 256 dimensiones (0,821) supera al de 512 por azar de una muestra tan pequeña. Un cambio de una sola pregunta mueve 3,6 puntos. **No extraigas conclusiones finas de una muestra así.**
+
+La enseñanza no son los números concretos sino el **método**: una función que devuelve una métrica para cada variante, sobre tus datos, comparada con la línea base sin reducir.
+
+## Trade-offs
+
+| Técnica | Ahorro | Riesgo | Requisitos |
+| --- | --- | --- | --- |
+| Menos dimensiones (Matryoshka) | Proporcional a la reducción | Pérdida de calidad en reducciones fuertes | Un modelo entrenado para ello |
+| Cuantización `int8` | 4× en memoria | Pérdida pequeña | Calibración de rangos |
+| Cuantización binaria | 32× en memoria, búsqueda mucho más rápida | Pérdida mayor sin reordenación | Reordenar con vectores completos |
+| Combinar ambas | Producto de los ahorros | Efectos acumulados difíciles de prever | Medir cada combinación |
+| Buscar barato + reordenar con el vector completo | Casi toda la calidad | Guardar también los vectores completos (en disco) | Almacenamiento en dos niveles |
+
+## Errores comunes en producción
+
+- **Truncar un vector de un modelo que no lo soporta** y ver cómo se desploma la recuperación.
+- **Olvidar renormalizar** tras acortar: el producto escalar deja de equivaler al coseno.
+- **Cuantizar sin calibrar** los rangos con datos representativos: valores atípicos pueden recortar la resolución.
+- **Cuantizar a binario sin reordenar** y asumir que la pérdida será mínima en cualquier corpus.
+- **No medir con tus datos** y confiar en las cifras de un artículo hechas con otros modelos y corpus.
+- **Optimizar el almacenamiento antes que la calidad.** Si la recuperación ya es mala, reducir tamaño no la arregla; mide la calidad primero.
+- **Mezclar vectores de distinta dimensión o formato** en el mismo índice.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cuánto ocupan 10 millones de vectores de 1 024 dimensiones en `float32` y cómo lo reducirías?"_ Pista: 10⁷ × 1 024 × 4 B ≈ 41 GB; menos dimensiones (Matryoshka), `int8` (÷4), binario (÷32) con reordenación; midiendo la pérdida.
+- _"¿Qué es una representación Matryoshka?"_ Pista: embeddings entrenados para que sus primeras dimensiones sean por sí solas una buena representación; permite elegir el tamaño después.
+- _"¿Cómo se recupera la calidad perdida con la cuantización binaria?"_ Pista: recuperar más candidatos con bits y reordenarlos con el producto escalar entre la consulta completa y los vectores cuantizados.
+
+</Callout>
+
+<KeyTakeaways>
+
+- El almacenamiento es $N \times d \times b$ bytes: **dimensión** y **precisión numérica** son las dos palancas.
+- Las representaciones **Matryoshka** permiten acortar la dimensión sin reentrenar; truncar un modelo que no las soporta puede degradar mucho.
+- La cuantización **int8** ahorra 4× y la **binaria** 32×; con **reordenación** con el vector completo se recupera casi toda la calidad.
+- En nuestro experimento con un corpus pequeño la cuantización no perdió acierto, pero con corpus grandes hay pérdidas reales: **mide con tus datos**.
+- Una muestra de 28 preguntas da mucho ruido: usa el método, no los números concretos.
+
+</KeyTakeaways>

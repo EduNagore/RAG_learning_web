@@ -1,0 +1,95 @@
+lesson: m07-rag-avanzado/01-graphrag-y-lightrag
+questions:
+  - id: m07-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué tipo de pregunta falla típicamente con un RAG por fragmentos y motivó a GraphRAG?'
+    options:
+      - 'Preguntas globales sobre todo el corpus, como «¿cuáles son los temas principales?».'
+      - 'Preguntas con un único dato en un documento corto.'
+      - 'Preguntas que contienen un código de producto exacto.'
+      - 'Preguntas de una sola palabra.'
+    answer: [0]
+    explanation: 'La respuesta a una pregunta global está repartida por todo el corpus y no se parece a ningún pasaje. Es una tarea de resumen guiado por la consulta, no de recuperación de pasajes.'
+    ref: '#intuición-preguntas-que-ningún-fragmento-contesta'
+
+  - id: m07-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Cuáles son las dos etapas de indexación de GraphRAG descritas por Edge et al.?'
+    options:
+      - 'Entrenar un reranker y construir un índice HNSW.'
+      - 'Extraer un grafo de entidades con un LLM y pregenerar resúmenes de las comunidades de entidades.'
+      - 'Dividir en frases y calcular BM25.'
+      - 'Cuantizar los embeddings y filtrar por metadatos.'
+    answer: [1]
+    explanation: 'Un LLM construye el grafo de conocimiento (entidades y relaciones) y después se detectan comunidades y se pregeneran sus resúmenes, que se usan al responder.'
+    ref: '#graphrag-del-texto-al-grafo-y-a-los-resúmenes-por-comunidad'
+
+  - id: m07-01-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cómo se responde una pregunta global en GraphRAG?'
+    options:
+      - 'Se recuperan los diez fragmentos más parecidos y se concatenan.'
+      - 'Cada resumen de comunidad genera una respuesta parcial y estas se consolidan en una respuesta final.'
+      - 'Se pide al modelo que responda sin contexto.'
+      - 'Se devuelve el documento con más palabras.'
+    answer: [1]
+    explanation: 'Es un esquema tipo map-reduce: respuestas parciales por comunidad y una consolidación final.'
+    ref: '#graphrag-del-texto-al-grafo-y-a-los-resúmenes-por-comunidad'
+
+  - id: m07-01-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento con Nimbus, ¿qué resultado ilustra que el grafo no siempre compensa?'
+    options:
+      - 'Las comunidades coincidían al 100 % con los departamentos.'
+      - 'Las tres preguntas que necesitan dos documentos ya tenían ambos entre los tres primeros de BM25.'
+      - 'BM25 no encontraba ningún documento.'
+      - 'El grafo no tenía aristas.'
+    answer: [1]
+    explanation: 'En un corpus de 42 documentos cortos no hay un problema real de varios saltos: BM25 coloca ambos documentos en el top 3. GraphRAG está pensado para corpus grandes y preguntas globales.'
+    ref: '#un-experimento-un-grafo-de-juguete-sobre-nimbus'
+
+  - id: m07-01-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué propuestas describe LightRAG? Marca todas las correctas.'
+    options:
+      - 'Integrar estructuras de grafo en la indexación y la recuperación.'
+      - 'Un sistema de recuperación de doble nivel (bajo y alto nivel de conocimiento).'
+      - 'Un algoritmo de actualización incremental para incorporar datos nuevos.'
+      - 'Eliminar por completo el uso de modelos de lenguaje.'
+    answer: [0, 1, 2]
+    explanation: 'Esas son las tres propuestas del artículo. LightRAG sigue usando modelos de lenguaje; lo que busca es una arquitectura más ligera.'
+    ref: '#lightrag-grafo-e-índice-vectorial-con-actualización-incremental'
+
+  - id: m07-01-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'La calidad de un RAG con grafo depende en gran medida de la calidad de la extracción de entidades y relaciones.'
+    answer: [0]
+    explanation: 'Es verdadero. Entidades duplicadas o ruido en la extracción fragmentan el grafo y distorsionan las comunidades. En el experimento, una extracción burda mezcló temas.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m07-01-q7
+    type: truefalse
+    difficulty: 3
+    prompt: 'Un resumen de comunidad es seguro de mostrar a cualquier usuario aunque algunos de sus documentos sean restringidos.'
+    answer: [1]
+    explanation: 'Es falso. El resumen mezcla información de varios documentos y puede filtrar contenido restringido. Hay que calcular comunidades y resúmenes por nivel de acceso.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m07-01-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Qué tienen en común RAPTOR y GraphRAG?'
+    options:
+      - 'Ambos eliminan la necesidad de un modelo de lenguaje.'
+      - 'Ambos preprocesan el corpus al indexar para tener resúmenes de varios niveles, aunque agrupan con criterios distintos.'
+      - 'Ambos funcionan solo con documentos de una página.'
+      - 'Ambos agrupan siempre por departamento.'
+    answer: [1]
+    explanation: 'RAPTOR agrupa por similitud de embeddings y forma un árbol; GraphRAG agrupa por comunidades del grafo de entidades. Ambos guardan resúmenes por grupo para responder preguntas de síntesis.'
+    ref: '#la-relación-con-raptor'

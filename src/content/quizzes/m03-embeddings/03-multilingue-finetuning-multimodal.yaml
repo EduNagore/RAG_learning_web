@@ -1,0 +1,82 @@
+lesson: m03-embeddings/03-multilingue-finetuning-multimodal
+questions:
+  - id: m03-03-q1
+    type: single
+    difficulty: 2
+    prompt: '¿Qué significan las tres "multi" de **M3-Embedding**?'
+    options:
+      - 'Multilingüe, multifuncional (denso, multivector y disperso) y multigranular (de frases a documentos largos).'
+      - 'Multiusuario, multihilo y multiplataforma.'
+      - 'Multimedia, multicolor y multitarea.'
+      - 'Multimillonario, multinacional y multitud.'
+    answer: [0]
+    explanation: 'Según sus autores, soporta más de 100 idiomas, ofrece a la vez recuperación densa, multivector y dispersa, y procesa entradas de hasta 8 192 tokens. Las otras opciones no describen el modelo.'
+    ref: '#multilingüe-el-español-y-la-recuperación-entre-idiomas'
+
+  - id: m03-03-q2
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué necesitas para afinar con buenos resultados un modelo de embeddings? Marca todo lo correcto.'
+    options:
+      - 'Pares positivos de consulta y pasaje relevante.'
+      - 'Negativos difíciles, pasajes que parecen relevantes pero no lo son.'
+      - 'Un conjunto de evaluación separado del de entrenamiento.'
+      - 'Evaluar con las mismas preguntas con las que entrenaste.'
+    answer: [0, 1, 2]
+    explanation: 'Se necesitan pares positivos, negativos difíciles para aprender los matices y una evaluación independiente. Evaluar con las preguntas de entrenamiento mide memoria, no mejora real.'
+    ref: '#ajuste-fino-de-embeddings-cuándo-compensa'
+
+  - id: m03-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cómo se entrenó **CLIP**?'
+    options:
+      - 'Prediciendo qué descripción corresponde a qué imagen sobre unos 400 millones de pares imagen-texto.'
+      - 'Solo con texto de Wikipedia.'
+      - 'Con un único idioma y sin imágenes.'
+      - 'Con tablas de datos numéricos.'
+    answer: [0]
+    explanation: 'CLIP aprende un espacio compartido de imágenes y texto con entrenamiento contrastivo sobre pares imagen-texto de internet, lo que permite buscar imágenes con texto y transferir a tareas nuevas sin entrenamiento específico.'
+    ref: '#multimodal-cuando-el-contenido-no-es-texto'
+
+  - id: m03-03-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Qué hace **ColPali**?'
+    options:
+      - 'Incrusta directamente imágenes de páginas de documentos como embeddings multivector y los compara con interacción tardía.'
+      - 'Convierte siempre los PDF a texto con OCR.'
+      - 'Comprime los documentos en un solo vector de pocas dimensiones.'
+      - 'Traduce los documentos a inglés.'
+    answer: [0]
+    explanation: 'ColPali evita parte de la cadena de ingesta (layout, OCR, troceado) al recuperar páginas como imágenes, a cambio de modelos más pesados y de más vectores por página.'
+    ref: '#multimodal-cuando-el-contenido-no-es-texto'
+
+  - id: m03-03-q5
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un modelo de embeddings multilingüe rinde igual de bien en todos los idiomas que soporta.'
+    answer: [1]
+    explanation: 'Es falso. La calidad varía por idioma, así que hay que medir cada uno con preguntas propias. Soportar un idioma no equivale a rendir igual que en inglés.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m03-03-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Cuándo tiene sentido afinar un modelo de embeddings?'
+    options:
+      - 'Cuando hay jerga muy especializada y ya has probado mejoras más baratas como mejor troceado, contexto, búsqueda híbrida y reordenación.'
+      - 'Siempre, antes de probar ninguna otra cosa.'
+      - 'Nunca, porque no se puede.'
+      - 'Solo si el corpus tiene menos de diez documentos.'
+    answer: [0]
+    explanation: 'Afinar exige datos, entrenamiento y mantenimiento. Las mejoras baratas suelen dar más por menos esfuerzo, así que se prueban antes y se afina solo si la mejora medida lo justifica.'
+    ref: '#ajuste-fino-de-embeddings-cuándo-compensa'
+
+  - id: m03-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un negativo difícil es un pasaje que parece relevante para la consulta pero en realidad no la responde.'
+    answer: [0]
+    explanation: 'Es verdadero. Entrenar con negativos difíciles obliga al modelo a distinguir matices, mientras que con negativos al azar solo aprendería diferencias evidentes.'
+    ref: '#ajuste-fino-de-embeddings-cuándo-compensa'

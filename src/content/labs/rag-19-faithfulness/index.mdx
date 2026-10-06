@@ -1,0 +1,62 @@
+---
+title: Faithfulness simplificada
+description: Divide una respuesta en afirmaciones y comprueba cuáles respalda el contexto, con detección de números inventados, y calcula también cuánta de la respuesta de referencia cubre el contexto recuperado.
+part: rag
+module: m08-evaluacion-rag
+difficulty: 3
+estimatedMinutes: 40
+concepts:
+  - faithfulness (fidelidad)
+  - afirmaciones atómicas
+  - context recall
+  - evaluación sin LLM juez
+packages: []
+hints:
+  - 'Para quitar las citas usa una expresión como `re.compile(r"\[doc-\d+(?:\s*,\s*doc-\d+)*\]")` y luego `" ".join(texto.split())` para limpiar espacios; quita el espacio que quede antes de `.`, `!` o `?` con `re.sub(r"\s+([.!?])", r"\1", texto)`.'
+  - 'Los números se extraen con `re.findall(r"\d+(?:[.,]\d+)?", texto)`. Si alguno de la afirmación no está entre los del contexto, no está respaldada, aunque las palabras coincidan.'
+  - 'Las palabras útiles son `{t[:5] for t in tokenize(texto)}`. La cobertura es `len(afirmadas & disponibles) / len(afirmadas)` y se compara con `>= threshold`.'
+  - '`faithfulness` y `context_recall` reutilizan `split_claims` y `claim_supported`; con cero afirmaciones el score es `None`, no 0.'
+relatedLessons:
+  - m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez
+---
+
+## Objetivo
+
+La **fidelidad** (*faithfulness*) mide si lo que afirma la respuesta está respaldado por el contexto recuperado. Las herramientas modernas (RAGAS, ARES, TruLens, DeepEval) la calculan descomponiendo la respuesta en **afirmaciones** y pidiendo a un modelo que verifique cada una. Aquí lo harás **sin LLM**, con una comprobación léxica, para entender la estructura y sus límites.
+
+## Qué tienes que hacer
+
+### `split_claims(answer)`
+
+Devuelve la lista de afirmaciones: una por frase (separadas por `.`, `!` o `?` seguidos de espacio), **sin las citas** `[doc-123]` o `[doc-1, doc-2]` y con espacios y puntuación limpios (`"Hola [doc-001]."` → `"Hola."`). Se descartan las frases sin ninguna letra ni número (como `"..."`). La abstención `NO_LO_SE` no contiene afirmaciones: devuelve `[]`.
+
+### `claim_supported(claim, context_texts, threshold=0.6)`
+
+`context_texts` es una lista de textos. Una afirmación está **respaldada** si:
+
+1. **Todo número** que contiene (como `7` o `3,5`) aparece también en el contexto, y
+2. al menos `threshold` de sus palabras útiles (con `ragkit.text.tokenize`, comparando por **raíz de 5 letras**) aparecen en el contexto.
+
+Una afirmación sin palabras útiles no está respaldada.
+
+### `faithfulness(answer, context_texts, threshold=0.6)`
+
+Devuelve `{"score": ..., "claims": [(afirmación, respaldada), ...]}`; `score` es el cociente entre afirmaciones respaldadas y totales, o `None` si no hay afirmaciones.
+
+### `context_recall(reference_answer, context_texts, threshold=0.6)`
+
+Fracción de las afirmaciones de la **respuesta de referencia** que el contexto respalda; mide si la recuperación trajo lo necesario. `None` si la referencia no tiene afirmaciones.
+
+## Un ejemplo para comprobar a mano
+
+```python
+contexto = ["El reembolso tarda un máximo de 7 días hábiles desde que el paquete llega."]
+faithfulness("El reembolso tarda 7 días hábiles [doc-002]. Es gratis para todos.", contexto)
+# {'score': 0.5, 'claims': [('El reembolso tarda 7 días hábiles.', True), ('Es gratis para todos.', False)]}
+```
+
+<Callout type="nota" title="Un verificador léxico se puede engañar">
+
+Tu comprobación acepta «El reembolso tarda 7 días» aunque el contexto dijera «**no** tarda 7 días»: las palabras coinciden, el significado es el contrario. Detectar contradicciones y paráfrasis exige un modelo de inferencia (NLI) o un LLM juez, y es lo que usan las herramientas de evaluación reales, con sus propios sesgos.
+
+</Callout>

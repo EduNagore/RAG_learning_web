@@ -1,0 +1,99 @@
+lesson: m07-rag-avanzado/04-multimodal-estructurado-y-conversacional
+questions:
+  - id: m07-04-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué se pierde típicamente al extraer solo el texto de un PDF con tablas y gráficos?'
+    options:
+      - 'Nada, el texto contiene toda la información.'
+      - 'La estructura de las tablas, los gráficos y el diseño de la página.'
+      - 'Las fechas de los documentos.'
+      - 'El idioma del documento.'
+    answer: [1]
+    explanation: 'La extracción de texto lineal aplana o descarta elementos visuales como figuras, diseños y tablas, que a veces contienen la respuesta.'
+    ref: '#rag-multimodal-recuperar-páginas-como-imágenes'
+
+  - id: m07-04-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué hace ColPali de distinto respecto a un pipeline de extracción de texto?'
+    options:
+      - 'Genera embeddings multivectoriales directamente a partir de la imagen de cada página, con interacción tardía.'
+      - 'Traduce los documentos a SQL.'
+      - 'Comprime el texto con LLMLingua.'
+      - 'Elimina las imágenes antes de indexar.'
+    answer: [0]
+    explanation: 'ColPali evita la extracción de texto: un modelo de visión y lenguaje representa cada página como imagen y compara con la consulta mediante interacción tardía.'
+    ref: '#rag-multimodal-recuperar-páginas-como-imágenes'
+
+  - id: m07-04-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué una pregunta como «¿cuántos pedidos se entregaron tarde en marzo?» se resuelve mejor con text-to-SQL que con búsqueda semántica?'
+    options:
+      - 'Porque es una agregación sobre datos tabulares, no un pasaje de texto que recuperar.'
+      - 'Porque SQL entiende el significado de las palabras mejor que un embedding.'
+      - 'Porque los embeddings no admiten números.'
+      - 'Porque así no hace falta una base de datos.'
+    answer: [0]
+    explanation: 'La respuesta es un cálculo sobre filas, no un fragmento de texto. Text-to-SQL traduce la pregunta a una consulta que la base de datos ejecuta de forma exacta.'
+    ref: '#rag-sobre-datos-estructurados-text-to-sql'
+
+  - id: m07-04-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Dónde deben aplicarse las salvaguardas de un text-to-SQL?'
+    options:
+      - 'Solo en el prompt, pidiendo al modelo que no borre nada.'
+      - 'En código y en la base de datos: usuario de solo lectura, validación de la consulta, límites y filtro de filas por usuario.'
+      - 'Solo en la interfaz de usuario.'
+      - 'No hacen falta si el modelo es bueno.'
+    answer: [1]
+    explanation: 'El SQL lo escribe un modelo a partir de texto controlado por usuarios. Las garantías se imponen con permisos mínimos y validación en código, no confiando en instrucciones del prompt.'
+    ref: '#rag-sobre-datos-estructurados-text-to-sql'
+
+  - id: m07-04-q5
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código, parecido al validador de la lección?'
+    code: |-
+      import re
+      sql = "UPDATE docs SET access = 'public'"
+      print(bool(re.match(r"(?is)^select\b", sql.strip())))
+    options:
+      - 'True'
+      - 'False'
+      - 'None'
+      - 'Lanza una excepción'
+    answer: [1]
+    explanation: 'La sentencia empieza por UPDATE, no por SELECT, así que la expresión no coincide y match devuelve None, cuyo bool es False. El validador la rechazaría.'
+    ref: '#rag-sobre-datos-estructurados-text-to-sql'
+
+  - id: m07-04-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué técnicas ayudan en un RAG conversacional? Marca todas las correctas.'
+    options:
+      - 'Reescribir el último mensaje como una pregunta autocontenida usando el historial.'
+      - 'Limitar el historial entregado con una ventana de turnos.'
+      - 'Resumir o recuperar la memoria cuando la conversación es larga.'
+      - 'Recuperar siempre con el mensaje crudo, aunque sea «¿y para empresas?».'
+    answer: [0, 1, 2]
+    explanation: 'Reescritura, ventana y memoria resumida o recuperada son las técnicas habituales. Buscar con un mensaje que depende del contexto no recupera nada útil.'
+    ref: '#rag-conversacional-reescribir-recordar-y-acotar'
+
+  - id: m07-04-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una lista de palabras prohibidas (DROP, DELETE...) es una defensa completa contra un SQL peligroso generado por un modelo.'
+    answer: [1]
+    explanation: 'Es falso. Es solo una capa, fácil de rodear o de equivocar (rechaza columnas legítimas y no controla qué tablas se leen). La defensa real son los permisos mínimos de la base de datos.'
+    ref: '#rag-sobre-datos-estructurados-text-to-sql'
+
+  - id: m07-04-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'En text-to-SQL, la respuesta final debe construirse a partir de las filas devueltas por la consulta y conviene mostrar la consulta ejecutada.'
+    answer: [0]
+    explanation: 'Es verdadero. Así la respuesta se apoya en datos reales y es comprobable. Responder de memoria reintroduciría las alucinaciones.'
+    ref: '#errores-comunes-en-producción'

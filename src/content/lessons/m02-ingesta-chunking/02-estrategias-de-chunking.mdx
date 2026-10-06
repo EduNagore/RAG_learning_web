@@ -1,0 +1,176 @@
+---
+title: Estrategias de chunking
+description: Cómo dividir los documentos en fragmentos recuperables. Tamaño fijo, recursivo, por estructura, semántico y por proposiciones, con la evidencia disponible sobre cuándo compensa cada uno.
+module: m02-ingesta-chunking
+order: 2
+level: intermedio
+estimatedMinutes: 18
+objectives:
+  - Explicar por qué el tamaño de los fragmentos condiciona la precisión, el recall y el coste.
+  - Comparar chunking de tamaño fijo, recursivo, por estructura, semántico y por proposiciones.
+  - Elegir tamaño y solapamiento con un procedimiento de medición y no por intuición.
+  - Implementar un troceado de tamaño fijo con solapamiento y reconocer sus casos límite.
+prerequisites:
+  - m02-ingesta-chunking/01-ingesta-y-limpieza
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: "Dense X Retrieval: What Retrieval Granularity Should We Use?"
+    url: https://arxiv.org/abs/2312.06648
+    type: paper
+    authors: Chen et al.
+    year: 2023
+  - title: Is Semantic Chunking Worth the Computational Cost?
+    url: https://arxiv.org/abs/2410.13070
+    type: paper
+    authors: Qu, Tu, Bao
+    year: 2024
+  - title: "Reconstructing Context: Evaluating Advanced Chunking Strategies for Retrieval-Augmented Generation"
+    url: https://arxiv.org/abs/2504.19754
+    type: paper
+    authors: Merola, Singh
+    year: 2025
+  - title: "Lost in the Middle: How Language Models Use Long Contexts"
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu et al.
+    year: 2023
+relatedLabs:
+  - rag-02-chunk-fijo
+  - rag-03-chunk-recursivo
+  - rag-04-chunk-markdown
+---
+
+import ChunkingVisualizer from '../../../components/widgets/ChunkingVisualizer';
+
+## Intuición: el fragmento es la unidad de todo
+
+En RAG, un **fragmento** (_chunk_) es a la vez la unidad que se **indexa**, la unidad que se **recupera** y la unidad que se **entrega al modelo**. Esa triple función explica por qué dividir bien es tan importante y por qué no existe un tamaño universal:
+
+- Si los fragmentos son **demasiado pequeños**, cada uno puede ser muy preciso, pero queda sin el contexto que lo hace comprensible («el plazo es de 14 días»: ¿de qué?). El modelo recibe piezas sueltas.
+- Si son **demasiado grandes**, un fragmento contiene varios temas, su embedding es una mezcla borrosa y la señal relevante se diluye entre texto que no viene al caso; además consumen más ventana y más coste por consulta.
+
+El objetivo es que cada fragmento sea una **unidad de significado autocontenida**: lo bastante pequeña para ser específica y lo bastante grande para entenderse sola.
+
+## Cómo funciona
+
+### Las estrategias, de la más simple a la más elaborada
+
+**1. Tamaño fijo con solapamiento.** Se corta el texto cada _n_ unidades (caracteres, palabras o tokens), y cada fragmento comparte con el siguiente un **solape** de _s_ unidades. Es trivial de implementar, rápido y predecible. Su defecto: corta por donde toca, a mitad de frase o de tabla. El solape reduce el daño (lo que quedó partido aparece completo en uno de los dos fragmentos), a costa de duplicar parte del texto.
+
+**2. Recursivo por separadores.** Se intenta dividir con el separador más «grande» (doble salto de línea = párrafo); si un trozo aún supera el tamaño máximo, se divide con el siguiente (salto de línea, luego punto, luego espacio), y así sucesivamente. Respeta mejor la estructura natural del texto y es la opción por defecto razonable en muchos marcos de trabajo. Es lo que implementarás en el laboratorio de chunking recursivo.
+
+**3. Por estructura del documento.** Si el documento tiene títulos, secciones, listas o tablas, se usa esa estructura: un fragmento por sección, con el **camino de encabezados** como metadato («Devoluciones > Plazos»). Funciona muy bien con Markdown, HTML bien formado o documentos técnicos. Una sección demasiado larga se subdivide con una estrategia recursiva.
+
+**4. Semántico.** Se calcula el embedding de cada frase y se corta donde la similitud entre frases consecutivas cae (un cambio de tema). Suena ideal, pero la evidencia es matizada: un estudio específico sobre el coste de esta técnica (Qu et al., 2024) concluye que **los costes computacionales del chunking semántico no están justificados por mejoras de rendimiento consistentes**. Es un resultado a tener en cuenta antes de adoptarlo por defecto: pruébalo contra el troceado recursivo en **tus** datos.
+
+**5. Por proposiciones.** En lugar de fragmentos de texto, se indexan **proposiciones**: expresiones atómicas y autocontenidas que expresan un solo hecho («El plazo de devolución para clientes particulares es de 14 días naturales»). Chen et al. (2023) argumentan que indexar un corpus por unidades finas como las proposiciones **supera de forma significativa** a hacerlo por pasajes en tareas de recuperación, y que mejora también la respuesta a preguntas posteriores. El precio es que **hay que generar** las proposiciones (normalmente con un LLM), lo que encarece la ingesta y exige validar que no se inventen ni pierdan información.
+
+<Diagram
+  caption="Mismo texto, tres troceados. Las llaves marcan dónde corta cada estrategia; el solape repite parte del texto entre fragmentos."
+  code={`flowchart TB
+  T["Texto: 'Devoluciones. Plazo: 14 días. Reembolso: 7 días hábiles. Excepciones: perecederos.'"]
+  T --> F["Tamaño fijo: corta cada N palabras, puede partir una frase"]
+  T --> R["Recursivo: corta por párrafo, luego frase, luego palabra"]
+  T --> E["Estructura: un fragmento por título con su ruta"]`}
+/>
+
+### Tamaño y solapamiento: cómo elegirlos
+
+No hay un valor correcto universal: depende de los documentos, del modelo de embeddings (cada uno tiene una **longitud máxima** de entrada y rinde mejor en un rango) y del tipo de pregunta (preguntas puntuales favorecen fragmentos pequeños; preguntas que necesitan contexto, fragmentos mayores).
+
+Como **punto de partida** (una regla práctica habitual, no una ley), se suelen probar fragmentos de unos pocos cientos de tokens con un solape del 10 al 20 %. Pero lo importante es el **procedimiento**, que siempre es el mismo:
+
+1. Reúne un **conjunto de preguntas** representativas con su fragmento o documento correcto (el golden set del módulo 8).
+2. Genera el índice con **varias configuraciones** (por ejemplo, 128, 256 y 512 tokens; 0, 10 y 20 % de solape).
+3. Mide, para cada una, el **recall@k** y la calidad de las respuestas finales.
+4. Elige la que mejor equilibra calidad, coste y latencia, y **vuelve a medir** cuando cambie el modelo de embeddings o el tipo de documentos.
+
+<Callout type="aviso" title="Cuidado con la unidad de medida">
+
+Un límite de «500 caracteres» no es lo mismo que uno de «500 tokens», y el mismo texto tiene distinto número de tokens según el idioma y el modelo (lo viste en la primera lección). Mide en la unidad que realmente limita: los **tokens del modelo de embeddings** para indexar y los **tokens del LLM** para el prompt.
+
+</Callout>
+
+### Un ejemplo ejecutable
+
+Este troceado de tamaño fijo por palabras con solape muestra la mecánica y sus casos límite:
+
+```python
+def chunk_fijo(texto: str, tam: int, solape: int) -> list[str]:
+    """Trocea por palabras: ventanas de `tam` palabras que se solapan `solape`."""
+    if solape >= tam:
+        raise ValueError("el solape debe ser menor que el tamaño")
+    palabras = texto.split()
+    paso = tam - solape
+    chunks = []
+    for inicio in range(0, len(palabras), paso):
+        ventana = palabras[inicio : inicio + tam]
+        chunks.append(" ".join(ventana))
+        if inicio + tam >= len(palabras):   # esta ventana ya llega al final
+            break
+    return chunks
+
+texto = "uno dos tres cuatro cinco seis siete ocho nueve diez"
+for c in chunk_fijo(texto, tam=4, solape=1):
+    print(c)
+# uno dos tres cuatro
+# cuatro cinco seis siete
+# siete ocho nueve diez
+```
+
+Fíjate en que cada fragmento repite la última palabra del anterior (solape de 1), que el último termina exactamente donde acaba el texto y que **no se genera un fragmento vacío o redundante** al final. Esa condición de parada es un caso límite clásico: sin ella, el último fragmento de este ejemplo se repetiría casi entero. Y la comprobación `solape >= tam` evita un bucle sin avance.
+
+### Pruébalo tú
+
+Cambia la estrategia y los controles del siguiente visualizador y fíjate en cómo cambia el número de fragmentos, dónde se corta y qué parte se repite por el solape. Prueba a pegar un texto tuyo con párrafos y títulos.
+
+<ChunkingVisualizer client:visible />
+
+## Qué dice la evidencia (y qué no)
+
+La literatura sobre chunking es amplia pero dispersa, y los resultados dependen mucho de los datos, los modelos y las métricas. Tres ideas se sostienen razonablemente:
+
+- **El tamaño importa y es específico del caso.** Por eso se mide en lugar de copiar valores.
+- **Estrategias más sofisticadas no ganan siempre.** Qu et al. (2024) no encuentran mejoras consistentes que justifiquen el coste del chunking semántico frente a opciones más simples.
+- **La granularidad fina puede ayudar mucho**, a cambio de más coste de ingesta: es el caso de las proposiciones (Chen et al., 2023).
+
+Y hay una tensión que veremos en la siguiente lección: cuanto más pequeño es el fragmento, más **contexto pierde**. Una línea de trabajo reciente (Merola y Singh, 2025) compara enfoques que intentan devolver ese contexto y encuentra que el que mejor preserva la coherencia semántica requiere más cómputo, mientras que el más eficiente sacrifica relevancia y completitud: no hay almuerzo gratis.
+
+## Trade-offs
+
+| Estrategia | Ventaja | Inconveniente | Cuándo encaja |
+| --- | --- | --- | --- |
+| Tamaño fijo | Simple, rápido, predecible | Corta por donde sea | Texto uniforme, primera versión |
+| Recursivo | Respeta párrafos y frases | Tamaños algo irregulares | Opción por defecto razonable |
+| Por estructura | Fragmentos coherentes con metadatos de sección | Necesita estructura fiable | Markdown, HTML, documentación técnica |
+| Semántico | Corta en cambios de tema | Coste de calcular embeddings y resultados no siempre mejores | Prueba antes de adoptar |
+| Proposiciones | Unidades finas y autocontenidas | Coste y riesgo de generarlas con un LLM | Corpus de hechos concretos con alto valor |
+
+## Errores comunes en producción
+
+- **Copiar un tamaño de un tutorial** sin medir en tus documentos y con tu modelo de embeddings.
+- **Medir el tamaño en caracteres** y comparar con un límite de tokens, o al revés.
+- **Cortar tablas y listas por la mitad.** Una fila separada de su cabecera es un dato sin sentido; trata tablas y código como unidades.
+- **Solape excesivo.** Un 50 % de solape duplica el índice y llena el top-k de fragmentos casi iguales; reduce la diversidad de la evidencia.
+- **Fragmentos sin identidad.** Sin saber de qué documento y de qué sección viene un fragmento no se puede citar ni reconstruir el contexto.
+- **Fiarse de un chunker «inteligente» sin compararlo** con uno simple en tu golden set.
+- **No volver a medir.** Cambiar el modelo de embeddings cambia el tamaño óptimo.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo eliges el tamaño de los chunks?"_ Pista: no hay valor universal; golden set, barrido de tamaños y solapes, medir recall@k y calidad final, en tokens y con tu modelo de embeddings.
+- _"¿Qué ventaja tiene el chunking recursivo sobre el de tamaño fijo?"_ Pista: respeta la estructura natural (párrafos, frases) en lugar de cortar donde cae el contador.
+- _"¿Merece la pena el chunking semántico?"_ Pista: tiene coste de cómputo y la evidencia no muestra mejoras consistentes; compáralo con el recursivo en tus datos.
+
+</Callout>
+
+<KeyTakeaways>
+
+- El fragmento es la unidad que se **indexa, recupera y entrega**: debe ser autocontenido, ni muy pequeño (pierde contexto) ni muy grande (diluye la señal).
+- Estrategias: **tamaño fijo**, **recursivo**, **por estructura**, **semántico** y **por proposiciones**; las más elaboradas no ganan siempre.
+- El chunking semántico tiene un coste que, según Qu et al., **no se justifica por mejoras consistentes**; las proposiciones pueden mejorar la recuperación a cambio de más coste de ingesta (Chen et al.).
+- Tamaño y solapamiento se **eligen midiendo** con un golden set, en la unidad correcta (tokens), y se **revisan** al cambiar el modelo.
+- Cuida los casos límite: solape menor que el tamaño, último fragmento sin duplicar, tablas y código como unidades.
+
+</KeyTakeaways>

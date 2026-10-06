@@ -1,0 +1,100 @@
+lesson: m06-generacion-contexto/02-posicion-compresion-y-cache
+questions:
+  - id: m06-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué describe el fenómeno «lost in the middle»?'
+    options:
+      - 'Que los documentos del centro del índice se pierden al reindexar.'
+      - 'Que el rendimiento del modelo suele ser mejor cuando la información relevante está al principio o al final del contexto y peor cuando está en medio.'
+      - 'Que los fragmentos largos se cortan por la mitad.'
+      - 'Que el modelo ignora siempre el primer documento.'
+    answer: [1]
+    explanation: 'Liu et al. (2023) observaron una curva en forma de U con pregunta-respuesta sobre varios documentos y recuperación clave-valor, incluso en modelos diseñados para contextos largos.'
+    ref: '#lost-in-the-middle'
+
+  - id: m06-02-q2
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código de ordenación en extremos?'
+    code: |-
+      def extremos(ranking):
+          return ranking[0::2] + ranking[1::2][::-1]
+
+      print(extremos(["a", "b", "c", "d", "e"]))
+    options:
+      - "['a', 'b', 'c', 'd', 'e']"
+      - "['e', 'd', 'c', 'b', 'a']"
+      - "['a', 'c', 'e', 'd', 'b']"
+      - "['a', 'e', 'c', 'b', 'd']"
+    answer: [2]
+    explanation: 'Los elementos en posiciones pares (a, c, e) van primero y los impares (b, d) se añaden invertidos. El mejor queda al principio, el segundo al final y los peores en el centro.'
+    ref: '#lost-in-the-middle'
+
+  - id: m06-02-q3
+    type: single
+    difficulty: 2
+    prompt: 'En el experimento, la compresión extractiva a unas 74 palabras (frente a 161) bajó la cobertura de 0,837 a 0,657. ¿Qué conclusión es adecuada?'
+    options:
+      - 'Comprimir siempre mejora la calidad porque quita ruido.'
+      - 'La compresión extractiva inventa datos.'
+      - 'Comprimir ahorra tokens pero cuesta información; hay que medir el efecto sobre las preguntas propias antes de activarlo.'
+      - 'La cobertura no se puede calcular con texto.'
+    answer: [2]
+    explanation: 'La extractiva no inventa nada (todo lo que queda estaba en el original) pero descarta frases que contenían parte de la respuesta. Ningún compresor es gratis.'
+    ref: '#un-experimento-qué-cuesta-comprimir-ordenar-y-cachear'
+
+  - id: m06-02-q4
+    type: single
+    difficulty: 3
+    prompt: 'Con multiplicadores de escritura 1,25 y lectura 0,1, ¿cuál es el coste relativo medio del prefijo con 2 consultas que lo comparten (dentro de la vida de la caché)?'
+    options:
+      - '1,25'
+      - '0,675'
+      - '0,1'
+      - '1,00'
+    answer: [1]
+    explanation: '(1,25 + 0,1) / 2 = 0,675 del coste base. Con una sola consulta el coste es 1,25 (peor que no cachear), y mejora cuanto más se reutiliza el prefijo.'
+    ref: '#un-experimento-qué-cuesta-comprimir-ordenar-y-cachear'
+
+  - id: m06-02-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué prácticas ayudan a que el prompt caching funcione en un sistema RAG? Marca todas las correctas.'
+    options:
+      - 'Poner al principio lo que se repite (instrucciones, definiciones) y al final lo que cambia (fragmentos, pregunta).'
+      - 'Mantener el prefijo idéntico entre peticiones.'
+      - 'Comprobar que el prefijo supera la longitud mínima cacheable.'
+      - 'Colocar la pregunta del usuario al comienzo del prompt para que se cachee.'
+    answer: [0, 1, 2]
+    explanation: 'La caché reutiliza prefijos exactos: lo variable al principio la invalida. Por debajo del mínimo, el prompt se procesa sin caché y sin avisar.'
+    ref: '#prompt-caching'
+
+  - id: m06-02-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Los resultados de lost in the middle de 2023 garantizan que cualquier modelo actual rinde peor con la evidencia en el centro, así que no hace falta medirlo.'
+    answer: [1]
+    explanation: 'Es falso. Los modelos han cambiado y el efecto puede ser menor en los recientes. Se mide con una prueba que mueva la posición de la evidencia en el contexto con el modelo y las preguntas propias.'
+    ref: '#lost-in-the-middle'
+
+  - id: m06-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Con una única consulta, activar el prompt caching sale más caro que no usarlo, porque la escritura en caché cuesta más que el procesamiento normal.'
+    answer: [0]
+    explanation: 'Es verdadero. La escritura cuesta 1,25 veces el precio base de entrada (con la vida de 5 minutos), y solo se amortiza si el prefijo se reutiliza.'
+    ref: '#un-experimento-qué-cuesta-comprimir-ordenar-y-cachear'
+
+  - id: m06-02-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Qué criterio favorece usar RAG en lugar de meter todos los documentos en un contexto largo?'
+    options:
+      - 'Un corpus pequeño que cabe sobradamente en la ventana.'
+      - 'Un corpus grande o cambiante, con permisos distintos por usuario y volumen de consultas que hace importante el coste.'
+      - 'Preguntas de síntesis sobre todo el material siempre idéntico.'
+      - 'La ausencia total de restricciones de coste.'
+    answer: [1]
+    explanation: 'RAG compensa con corpus mayores que la ventana, actualizaciones frecuentes, permisos por usuario y coste por consulta relevante. Con corpus pequeño y estático, el contexto largo (con caché) puede ser más simple.'
+    ref: '#rag-o-contexto-largo'

@@ -1,0 +1,54 @@
+---
+title: Chunking de tamaño fijo con solapamiento
+description: Implementa el troceado más sencillo de RAG, ventanas de n palabras con solape, y domina sus casos límite.
+part: rag
+module: m02-ingesta-chunking
+difficulty: 1
+estimatedMinutes: 20
+concepts:
+  - chunking
+  - ventana deslizante
+  - solapamiento
+  - casos límite
+packages: []
+hints:
+  - El paso entre el inicio de dos ventanas consecutivas es `size - overlap`. Recorre los inicios con `range(0, len(palabras), paso)`.
+  - 'Cada ventana es `palabras[inicio : inicio + size]`. Úsalas con `" ".join(...)`.'
+  - Para no generar un fragmento redundante al final, detente en cuanto una ventana llegue al final del texto (`inicio + size >= len(palabras)`).
+  - Usa `texto.split()` sin argumentos para dividir en palabras. Con `split(" ")` los espacios dobles generarían palabras vacías.
+relatedLessons:
+  - m02-ingesta-chunking/02-estrategias-de-chunking
+---
+
+## Objetivo
+
+El troceado de tamaño fijo con solapamiento es la primera estrategia de _chunking_ que se prueba en cualquier proyecto RAG: simple, rápida y predecible. Aquí la implementas por palabras y aprendes por qué sus **casos límite** son donde fallan las implementaciones apresuradas.
+
+## Qué tienes que hacer
+
+Implementa `chunk_fixed(text, size, overlap)`:
+
+- Divide `text` en palabras (separadas por cualquier espacio en blanco) y devuelve una lista de fragmentos de **`size` palabras** como máximo.
+- Cada fragmento comparte sus **`overlap` últimas palabras** con el principio del siguiente.
+- Cada fragmento es un `str` con las palabras unidas por **un solo espacio**.
+- Si `text` está vacío o solo tiene espacios, devuelve `[]`.
+- Si el texto tiene `size` palabras o menos, devuelve un único fragmento.
+- Lanza `ValueError` si `size` no es positivo, si `overlap` es negativo o si `overlap >= size` (no habría avance).
+- El último fragmento debe terminar exactamente donde acaba el texto, **sin generar un fragmento extra** que solo repita palabras ya incluidas.
+
+## Ejemplo
+
+```python
+texto = "uno dos tres cuatro cinco seis siete ocho nueve diez"
+for c in chunk_fixed(texto, size=4, overlap=1):
+    print(c)
+# uno dos tres cuatro
+# cuatro cinco seis siete
+# siete ocho nueve diez
+```
+
+<Callout type="consejo" title="El error clásico">
+
+Con un `range(0, n, paso)` ingenuo, el último fragmento puede quedar duplicado casi entero (por ejemplo, 7 palabras con tamaño 4 y solape 2). Comprueba tu función con varios largos de texto, no solo con el ejemplo.
+
+</Callout>

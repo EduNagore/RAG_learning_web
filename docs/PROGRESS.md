@@ -12,18 +12,33 @@
 | F1 Núcleo de teoría | ✅ hecha, en `main` y desplegada | Layouts, Pagefind, KaTeX, Mermaid, progreso, **M00 completo (8 lecciones)** |
 | F2 Motor de tests | ✅ hecha, en `main` y desplegada | Quiz, examen, Leitner, panel de progreso, **65 preguntas de M00** |
 | F3 Laboratorios | ✅ hecha, en `main` y desplegada (verificada en producción) | 3 labs, Pyodide, CodeMirror, e2e en navegador real |
-| **Pausa de revisión tras F3** | ⏸️ **ACTIVA: esperando el visto bueno del usuario** | **No empezar F4 hasta que el usuario lo apruebe.** Ya se le dio el resumen de F3 |
-| F4 Contenido Parte I (RAG, M01–M09) | ⬜ | |
+| **Pausa de revisión tras F3** | ✅ superada | El usuario aprobó (2026-10-05, "haz todo lo que queda"): hacer F4–F7 completas |
+| F4 Contenido Parte I (RAG, M01–M09) | 🟡 en curso (rama `fase-4-rag`) | Ver "F4: avance" |
 | F5 Contenido Parte II (Agentes, M10–M17) | ⬜ | |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
-Contadores a fecha de hoy: 19 módulos definidos (solo M00 con lecciones), 8 lecciones, 65 preguntas, 3 labs, 51 tests unitarios, 27 e2e, 16 tests de labs + 23 mutantes, `main` = `5d3b107` + commit de cierre de F3.
+Contadores (fin de M08): 19 módulos definidos, 34 lecciones (M00–M08), 263 preguntas, 20 labs, 76 tests unitarios, 101 tests pytest de labs, 168 mutantes de labs (todos detectados), `main` = cierre de F3.
 
-## F3: HECHA (referencia histórica; para continuar ve a "Siguiente paso")
+## F4: avance (rama `fase-4-rag`, subida a origin hasta M08)
+
+- ✅ M01–M08 completos (lecciones, quizzes, labs). Labs hechos: rag-01…rag-16, rag-19, rag-20 (mini-graphrag, con networkx), rag-21 (CRAG) y agents-23. Widgets: ChunkingVisualizer, SimilarityPlayground, RRFCalculator.
+- ⬜ **Solo falta M09 RAG en producción (3 lecciones + labs 17 y 18):**
+  1. `m09-rag-produccion/01-latencia-coste-cache-y-actualizacion` (latencia/coste, caché semántica, actualización incremental) + lab `rag-17-cache-semantica`.
+  2. `02-seguridad-permisos-e-inyeccion` (inyección indirecta, ACL en recuperación, fuga de datos) + lab `rag-18-recuperacion-con-acl` (filtrar por permisos ANTES de recuperar; Nimbus tiene `access` public/internal/restricted y `q27` restringida).
+  3. `03-observabilidad-y-guardrails` (trazas, OpenTelemetry GenAI semconv, Langfuse, Arize Phoenix, LangSmith, guardrails); volatilidad alta → `<Snapshot>`.
+  - Fuentes ya verificadas: Greshake et al. 2023 (arXiv 2302.12173; inyección indirecta: robo de datos, gusanos, contaminación del ecosistema de información, ejecución de código, control de llamadas a API; demostrado en Bing Chat), OWASP Top 10 for LLM Applications 2025 (https://genai.owasp.org/llm-top-10/: LLM01 Prompt Injection, 02 Sensitive Information Disclosure, 03 Supply Chain, 04 Data and Model Poisoning, 05 Improper Output Handling, 06 Excessive Agency, 07 System Prompt Leakage, 08 Vector and Embedding Weaknesses, 09 Misinformation, 10 Unbounded Consumption), Anthropic prompt caching (usada en M06).
+  - **Sin verificar aún (abrirlas antes de afirmar nada):** OpenTelemetry GenAI semconv (https://opentelemetry.io/docs/specs/semconv/gen-ai/, estado de estabilidad), Langfuse (https://langfuse.com/docs), Arize Phoenix (https://arize.com/docs/phoenix), LangSmith.
+- Al cerrar F4: añadir fuentes de M01–M09 a `docs/SOURCES.md` (solo está M00), registrar decisiones de F4 en `docs/DECISIONS.md`, puerta completa (format/check/lint/test/validate/build/e2e + ruff/pytest/mutate/snippets), push, esperar CI, merge `--no-ff` a `main`, verificar despliegue.
+- Notas de M05: RRF verificado en el PDF original (k=60 «fijado en un piloto», casi óptimo, no crítico; Tabla 1). Cifras medidas en Nimbus (28 preguntas): BM25 hit@3 0,893; denso (hashing) 0,75; RRF k=60 0,929 pero MRR baja (0,873→0,827); reranker de juguete hit@1 0,821→0,893 (advertido: ajustado mirando fallos); frase sin contexto 0,786 vs con título 0,893. Los labs 16 y 17 del PLAN se reasignaron: lab 16 = ventana de frases (el contexto con encabezado ya está en M02).
+- Resultados medidos ya usados en lecciones (no repetir experimentos): umbral BM25 para abstención no separa q31 (8,02); compresión extractiva 161→74 palabras baja cobertura 0,837→0,657; CRAG de juguete 19/7/2 (correcto/ambiguo/incorrecto) en preguntas con respuesta; agente de búsqueda vs RAG de un paso en q25: 3 llamadas frente a 1 y mismos documentos; 139 preguntas para ±5 puntos con p=0,9 (28 preguntas ≈ ±11).
+- Decisiones de F4 a registrar en `docs/DECISIONS.md` al cerrar: lab 16 = ventana de frases (el contexto con encabezado ya está en M02); labs de RAG siempre `rag-NN-…` (también el 20); las cifras se miden sobre Nimbus y se avisa de sobreajuste/tamaño muestral; RRF k=60 leído en el PDF original; precios/reglas de caché solo en `<Snapshot>`.
+- Convenciones de trabajo: crear archivos con Write (heredocs múltiples fallan en Git Bash); Python con `.venv\Scripts\python.exe` y `PYTHONPATH=public/py`; `uv` no está en el PATH; `ruff format` reformatea `scripts/mutate_labs.py` (añadir mutantes anclando en `]\n\nsurvivors = []`); en frontmatter YAML no usar «: » dentro de `description`/`objectives` sin comillas; ancla de quiz = slug del encabezado sin `@` ni puntuación (`### Recall@k` → `#recallk`).
 
 ### Siguiente paso
-Tras el visto bueno del usuario, empezar **F4** (contenido Parte I, M01–M09: lecciones, quizzes, labs 2–21 y widgets de M02/M03/M05 según PLAN §7 y §12), en la rama `fase-4-rag`. Ampliar el corpus de Nimbus (hoy 42 docs / 31 preguntas) cuando los labs lo pidan; añadir los mutantes de cada lab nuevo a `scripts/mutate_labs.py`. Recordar: las lecciones exigen fuentes verificadas abriéndolas, código/cálculos ejecutados, `pnpm validate` en verde y todas las reglas de CONTENT_GUIDELINES.
+Escribir **M09** en `fase-4-rag` (lecciones ≈1500+ palabras sin código, quizzes 6–8 preguntas, labs con ≥4 tests y mutantes), y cerrar F4 con la lista «Al cerrar F4» (SOURCES.md, DECISIONS.md, puerta completa, e2e del widget RRFCalculator, push, CI, merge `--no-ff`, verificar despliegue). No empezar F5 hasta tener F4 en `main`.
+
+## F3: HECHA (referencia histórica)
 
 ### Detalle de F3 (histórico)
 

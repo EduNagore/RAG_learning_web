@@ -1,0 +1,104 @@
+lesson: m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf
+questions:
+  - id: m05-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Por qué tiene sentido combinar búsqueda léxica y búsqueda densa?'
+    options:
+      - 'Porque la densa siempre es peor y la léxica la corrige.'
+      - 'Porque fallan en sitios distintos: la léxica con sinónimos y morfología, la densa con códigos, siglas y nombres raros.'
+      - 'Porque así se evita tener que indexar los documentos.'
+      - 'Porque BM25 y los embeddings producen puntuaciones idénticas.'
+    answer: [1]
+    explanation: 'Si dos sistemas se equivocan de forma poco correlacionada, su combinación puede cubrir más preguntas que cualquiera por separado. Ninguna de las dos familias es mejor en todos los casos.'
+    ref: '#intuición-dos-buscadores-que-se-equivocan-en-sitios-distintos'
+
+  - id: m05-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué RRF fusiona posiciones y no las puntuaciones originales?'
+    options:
+      - 'Porque las puntuaciones de BM25 y del coseno tienen escalas y distribuciones distintas y no son directamente comparables.'
+      - 'Porque las posiciones son más rápidas de ordenar que las puntuaciones.'
+      - 'Porque las puntuaciones de los motores densos no existen.'
+      - 'Porque RRF necesita que todos los documentos aparezcan en todas las listas.'
+    answer: [0]
+    explanation: 'BM25 no tiene techo y depende de la consulta y del corpus; el coseno vive entre −1 y 1. Sumarlos haría que uno dominara sin decidirlo. Con posiciones no hace falta calibrar nada.'
+    ref: '#reciprocal-rank-fusion'
+
+  - id: m05-01-q3
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código con $k = 60$?'
+    code: |-
+      k = 60
+      bm25 = ["A", "B", "C"]
+      denso = ["C", "A", "D"]
+      puntos = {}
+      for lista in (bm25, denso):
+          for pos, d in enumerate(lista, start=1):
+              puntos[d] = puntos.get(d, 0) + 1 / (k + pos)
+      print(max(puntos, key=puntos.get))
+    options:
+      - 'C'
+      - 'D'
+      - 'A'
+      - 'B'
+    answer: [2]
+    explanation: 'A suma 1/61 + 1/62 ≈ 0,0325 (primero en una lista y segundo en la otra); C suma 1/63 + 1/61 ≈ 0,0323. Gana A por muy poco. B y D solo aparecen en una lista.'
+    ref: '#reciprocal-rank-fusion'
+
+  - id: m05-01-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento de la lección, ¿qué ocurrió al pasar de BM25 solo a RRF con $k = 60$?'
+    options:
+      - 'Mejoraron hit@3 y MRR, así que la fusión es siempre superior.'
+      - 'Empeoraron las dos métricas.'
+      - 'hit@3 subió en una pregunta, pero el MRR bajó: más cobertura y menos precisión en la cima.'
+      - 'No cambió ninguna métrica.'
+    answer: [2]
+    explanation: 'hit@3 pasó de 0,893 a 0,929 (una pregunta de 28) y el MRR bajó de 0,873 a 0,827 porque el buscador denso, más débil, arrastra hacia abajo documentos que BM25 ya colocaba primeros. Por eso se mide en lugar de suponer.'
+    ref: '#un-experimento-honesto-sobre-el-corpus-nimbus'
+
+  - id: m05-01-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué prácticas ayudan a que la búsqueda híbrida funcione bien en producción? Marca todas las correctas.'
+    options:
+      - 'Recuperar listas largas de cada buscador (por ejemplo 20-50) antes de fusionar y recortar después.'
+      - 'Aplicar los mismos filtros de metadatos y permisos en ambos buscadores.'
+      - 'Validar con un conjunto dorado que la fusión mejora respecto a cada buscador solo.'
+      - 'Sumar directamente la puntuación de BM25 y el coseno sin normalizar.'
+    answer: [0, 1, 2]
+    explanation: 'Listas largas dejan que el consenso aparezca, filtros distintos podrían reintroducir documentos restringidos y solo la evaluación demuestra la mejora. Sumar escalas incompatibles es justo lo que RRF evita.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m05-01-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'El artículo original de RRF concluyó que k = 60 era casi óptimo, pero que esa elección no era crítica.'
+    answer: [0]
+    explanation: 'Es verdadero. Su Tabla 1 muestra una MAP muy parecida para k entre 40 y 100 (en torno a 0,214), con valores algo peores para k = 0. Aun así, es un valor por defecto que conviene validar con datos propios.'
+    ref: '#la-constante-k'
+
+  - id: m05-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Con RRF, un documento que es el primero de una sola lista y no aparece en la otra siempre supera a uno que está en segunda posición en ambas.'
+    answer: [1]
+    explanation: 'Es falso. Con k = 60 el primero de una lista suma 1/61 ≈ 0,0164, mientras que ser segundo en dos listas suma 2/62 ≈ 0,0323. RRF premia el consenso entre listas.'
+    ref: '#reciprocal-rank-fusion'
+
+  - id: m05-01-q8
+    type: single
+    difficulty: 3
+    prompt: 'Un equipo observa que con k = 1 su búsqueda híbrida es peor que con k = 60. ¿Qué explicación encaja con la lección?'
+    options:
+      - 'RRF solo funciona con k = 60 y falla con cualquier otro valor.'
+      - 'k se ignora cuando solo hay dos listas.'
+      - 'Con k pequeño, ser el primero de una lista pesa muchísimo más que aparecer en ambas, y el consenso pierde importancia.'
+      - 'Un k pequeño hace que RRF use las puntuaciones originales.'
+    answer: [2]
+    explanation: 'k amortigua el peso de las primeras posiciones. Con k muy bajo la fusión se parece a «gana el primero de cualquier lista», y se pierde el efecto de consenso. En el experimento hit@3 bajó de 0,929 a 0,857.'
+    ref: '#la-constante-k'

@@ -1,0 +1,58 @@
+---
+title: Multi-query con fusión
+description: Convierte la salida de un LLM en reformulaciones limpias, amplía la pregunta y fusiona los resultados de varias búsquedas con RRF, conservando siempre la consulta original.
+part: rag
+module: m05-recuperacion-avanzada
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - multi-query
+  - RAG-Fusion
+  - parseo de la salida del modelo
+  - fusión de rankings
+packages: []
+hints:
+  - 'Para quitar numeración y viñetas usa una expresión regular como `re.sub(r"^\s*(?:\d+[.)]|[-*•])\s*", "", linea)` y después `.strip()`.'
+  - 'Para quitar duplicados sin distinguir mayúsculas guarda un conjunto de `variante.lower()` ya vistos y conserva el orden de aparición.'
+  - 'En `expand_queries` la pregunta original va siempre primera; descarta las variantes que, en minúsculas, coincidan con ella.'
+  - 'Cada retriever se llama una vez por consulta. `rrf_ids` (ya escrita) fusiona la lista de rankings; recorta con `[:top_k]` al final.'
+relatedLessons:
+  - m05-recuperacion-avanzada/03-transformacion-de-consulta
+---
+
+## Objetivo
+
+Un LLM suele devolver las reformulaciones como texto libre: numeradas, con viñetas, repetidas o vacías. Para usarlas en RAG-Fusion hay que **limpiarlas**, juntarlas con la pregunta original y fusionar los rankings de cada búsqueda. Vas a construir esa tubería sobre el `MockLLM` del curso.
+
+La fusión ya está escrita: `rrf_ids(rankings, k)` implementa RRF y devuelve los ids ordenados (la construiste en el laboratorio anterior).
+
+## Qué tienes que hacer
+
+### `parse_variants(text, n)`
+
+Recibe el texto del modelo y devuelve **como máximo `n`** reformulaciones:
+
+- Una por línea, sin numeración (`1.`, `2)`) ni viñetas (`-`, `*`, `•`) y sin espacios sobrantes.
+- Se ignoran las líneas vacías.
+- Se descartan los **duplicados**, sin distinguir mayúsculas, conservando la primera aparición.
+
+### `expand_queries(llm, question, n=3)`
+
+Hace **una sola llamada** al modelo con un mensaje de usuario que contenga la pregunta y el número `n`, y devuelve una lista: la **pregunta original primero** y después las variantes de `parse_variants`. Si una variante coincide con la pregunta original (sin distinguir mayúsculas), se descarta para no duplicarla.
+
+### `multi_query_search(question, llm, retriever, n=3, top_k=3, k=60)`
+
+Expande la pregunta, ejecuta `retriever(consulta)` (devuelve una lista de ids) para **cada** consulta, fusiona con `rrf_ids` y devuelve los `top_k` primeros ids.
+
+## Un ejemplo para comprobar a mano
+
+```python
+parse_variants("1. plazo de reembolso\n2) Plazo de reembolso\n- tiempo de devolución\n", 3)
+# ['plazo de reembolso', 'tiempo de devolución']
+```
+
+<Callout type="nota" title="¿Por qué conservar la original?">
+
+Si todas las reformulaciones se desvían, la consulta original sigue aportando su lista a la fusión. Es la red de seguridad que viste en la lección. Por eso `expand_queries` la pone siempre primera y no la duplica.
+
+</Callout>

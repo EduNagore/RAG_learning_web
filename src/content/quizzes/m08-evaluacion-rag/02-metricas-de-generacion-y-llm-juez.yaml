@@ -1,0 +1,95 @@
+lesson: m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez
+questions:
+  - id: m08-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué mide la fidelidad (faithfulness) de una respuesta de RAG?'
+    options:
+      - 'Cuánto se parece la respuesta a la pregunta.'
+      - 'Si las afirmaciones de la respuesta están respaldadas por el contexto recuperado.'
+      - 'La velocidad de generación.'
+      - 'El número de documentos recuperados.'
+    answer: [1]
+    explanation: 'La fidelidad detecta invenciones: se descompone la respuesta en afirmaciones y se comprueba que cada una se apoya en el contexto.'
+    ref: '#fidelidad-por-afirmaciones'
+
+  - id: m08-02-q2
+    type: single
+    difficulty: 2
+    prompt: 'El recall del contexto es bajo, pero la fidelidad de las respuestas es alta. ¿Dónde está el problema?'
+    options:
+      - 'En la generación, que inventa datos.'
+      - 'En la recuperación, que no trae la evidencia necesaria; el modelo es fiel a un contexto incompleto.'
+      - 'En el tamaño de la interfaz.'
+      - 'En el juez, siempre.'
+    answer: [1]
+    explanation: 'Un recall del contexto bajo indica que falta evidencia: no se arregla con el prompt. Si el contexto fuera bueno y la fidelidad baja, el fallo sería de generación.'
+    ref: '#las-métricas-y-qué-detectan'
+
+  - id: m08-02-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el ejemplo, la respuesta «el reembolso no se realiza por el mismo medio de pago» puntuó fidelidad 1,0. ¿Por qué?'
+    options:
+      - 'Porque el verificador léxico compara palabras y no detecta la negación: usa las mismas palabras que el contexto.'
+      - 'Porque la respuesta era correcta.'
+      - 'Porque el contexto contenía la negación.'
+      - 'Porque el verificador usa un LLM.'
+    answer: [0]
+    explanation: 'Una comprobación léxica no ve inversiones de significado. Detectar contradicciones exige un modelo de inferencia (NLI) o un LLM juez.'
+    ref: '#fidelidad-por-afirmaciones'
+
+  - id: m08-02-q4
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué sesgos de los LLM jueces documentan Zheng et al.? Marca todos los correctos.'
+    options:
+      - 'Sesgo de posición.'
+      - 'Sesgo de verbosidad.'
+      - 'Sesgo de autopreferencia.'
+      - 'Preferir siempre la respuesta más corta.'
+    answer: [0, 1, 2]
+    explanation: 'Documentan sesgo de posición, de verbosidad (prefieren la más larga) y de autopreferencia, además de razonamiento limitado. Preferir la más corta es lo contrario del sesgo de verbosidad.'
+    ref: '#llm-como-juez'
+
+  - id: m08-02-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es una mitigación recomendada para el sesgo de posición en comparaciones por pares?'
+    options:
+      - 'Mostrar siempre primero la respuesta nueva.'
+      - 'Intercambiar el orden de las dos respuestas y quedarse con los veredictos consistentes.'
+      - 'Aumentar la temperatura del juez.'
+      - 'Usar respuestas más largas.'
+    answer: [1]
+    explanation: 'Al invertir el orden, un veredicto que cambia con la posición se descarta o se cuenta como empate, lo que neutraliza el sesgo.'
+    ref: '#llm-como-juez'
+
+  - id: m08-02-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué ventaja tiene una métrica sin referencia (como la fidelidad) frente a una con referencia?'
+    options:
+      - 'Es siempre más precisa.'
+      - 'Se puede ejecutar sobre tráfico real sin respuestas esperadas etiquetadas.'
+      - 'No necesita contexto.'
+      - 'No requiere ningún modelo.'
+    answer: [1]
+    explanation: 'Al no necesitar una respuesta correcta conocida, se puede aplicar a preguntas reales de producción para detectar regresiones, aunque es menos fiable que una comparación con referencia.'
+    ref: '#referencia-o-sin-referencia'
+
+  - id: m08-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una respuesta que siempre se abstiene tiene fidelidad perfecta, así que la fidelidad por sí sola basta para evaluar un sistema.'
+    answer: [1]
+    explanation: 'Es falso. Una abstención no afirma nada y es fiel, pero inútil. Hay que medir también relevancia de la respuesta y corrección.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m08-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Conviene fijar la versión de la herramienta de evaluación y del modelo juez, y no comparar números obtenidos con configuraciones distintas.'
+    answer: [0]
+    explanation: 'Es verdadero. Las definiciones de las métricas y los modelos juez cambian entre versiones, y los resultados no son comparables entre configuraciones.'
+    ref: '#frameworks-de-evaluación'

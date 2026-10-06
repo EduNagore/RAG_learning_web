@@ -1,0 +1,203 @@
+---
+title: Métricas de generación y LLM como juez
+description: Cómo evaluar si la respuesta es fiel al contexto, relevante y completa, cómo funcionan los LLM jueces, qué sesgos tienen y cómo encajan frameworks como RAGAS y ARES.
+module: m08-evaluacion-rag
+order: 2
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Definir fidelidad, relevancia de la respuesta, precisión y recall del contexto, y corrección frente a referencia.
+  - Explicar cómo funciona un LLM juez, sus sesgos documentados y cómo mitigarlos.
+  - Distinguir evaluación sin referencia de evaluación con referencia y saber cuándo usar cada una.
+  - Implementar una comprobación de fidelidad por afirmaciones y reconocer sus límites.
+prerequisites:
+  - m08-evaluacion-rag/01-metricas-de-recuperacion
+  - m06-generacion-contexto/01-prompt-citas-y-grounding
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: "Ragas: Automated Evaluation of Retrieval Augmented Generation"
+    url: https://arxiv.org/abs/2309.15217
+    type: paper
+    authors: Es, James, Espinosa-Anke, Schockaert
+    year: 2023
+  - title: "ARES: An Automated Evaluation Framework for Retrieval-Augmented Generation Systems"
+    url: https://arxiv.org/abs/2311.09476
+    type: paper
+    authors: Saad-Falcon, Khattab, Potts, Zaharia
+    year: 2023
+  - title: Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena
+    url: https://arxiv.org/abs/2306.05685
+    type: paper
+    authors: Zheng et al.
+    year: 2023
+  - title: Enabling Large Language Models to Generate Text with Citations
+    url: https://arxiv.org/abs/2305.14627
+    type: paper
+    authors: Gao, Yen, Yu, Chen
+    year: 2023
+relatedLabs:
+  - rag-19-faithfulness
+---
+
+## Intuición: medir la respuesta es más difícil que medir el ranking
+
+Medir la recuperación es relativamente sencillo: el documento está o no está en la lista. Medir una **respuesta en lenguaje natural** es otra cosa: dos respuestas con palabras distintas pueden ser igual de correctas, y una respuesta fluida puede contener una invención sutil. Las métricas clásicas de coincidencia de texto (BLEU, ROUGE) miran solapamiento de palabras y casi no captan si la respuesta es verdadera o está respaldada.
+
+La evaluación de generación en RAG se centra en **cuatro preguntas**:
+
+1. ¿Lo que dice la respuesta está **respaldado por el contexto**? (fidelidad)
+2. ¿La respuesta **contesta lo que se preguntó**? (relevancia de la respuesta)
+3. ¿El contexto recuperado era **útil y estaba focalizado**? (precisión del contexto)
+4. ¿El contexto **contenía todo lo necesario**? (recall del contexto)
+
+A estas se suma, cuando hay respuesta de referencia, la **corrección**: ¿coincide con lo que se esperaba?
+
+## Cómo funciona
+
+### Las métricas y qué detectan
+
+| Métrica | Pregunta | Detecta | ¿Necesita referencia? |
+| --- | --- | --- | --- |
+| **Fidelidad** (*faithfulness*) | ¿Cada afirmación está respaldada por el contexto? | Alucinaciones e invenciones | No |
+| **Relevancia de la respuesta** | ¿Responde a la pregunta? | Respuestas evasivas o fuera de tema | No |
+| **Precisión del contexto** | ¿Los fragmentos útiles están arriba y sin ruido? | Recuperación ruidosa | A veces |
+| **Recall del contexto** | ¿El contexto cubre lo necesario? | Evidencia que falta | Sí (la referencia dice qué hacía falta) |
+| **Corrección** | ¿Coincide con la respuesta esperada? | Errores de contenido | Sí |
+
+Importa distinguir **fallos de recuperación** y **fallos de generación**. Si el recall del contexto es bajo, el problema está en la recuperación y no hay nada que arreglar en el prompt. Si el contexto era bueno (alto recall) pero la fidelidad es baja, el modelo no lo usó bien. Es la forma de saber dónde invertir el esfuerzo.
+
+### Fidelidad por afirmaciones
+
+La técnica estándar para medir fidelidad es descomponer la respuesta en **afirmaciones atómicas** y comprobar cada una contra el contexto; la puntuación es la fracción de afirmaciones respaldadas. En las herramientas reales, la comprobación la hace un modelo (un LLM o un modelo de inferencia); en el laboratorio la haces con una comprobación léxica. El código siguiente la aplica a cuatro respuestas escritas a mano sobre `doc-002` (reembolsos): una fiel, una con un número inventado, una mezcla de verdad e invención, y una **contradicción** del contexto.
+
+```python
+import re
+
+from ragkit.data import load_corpus
+from ragkit.text import tokenize
+
+contexto = [next(d["text"] for d in load_corpus() if d["id"] == "doc-002")]
+print(contexto[0][:120], "...")
+
+CITA = re.compile(r"\[doc-\d+(?:\s*,\s*doc-\d+)*\]")
+NUMERO = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def afirmaciones(respuesta):
+    frases = re.split(r"(?<=[.!?])\s+", respuesta.strip())
+    return [" ".join(CITA.sub("", f).split()) for f in frases if re.search(r"\w", f)]
+
+
+def respaldada(afirmacion, textos, umbral=0.6):
+    ctx = " ".join(textos)
+    if any(n not in NUMERO.findall(ctx) for n in NUMERO.findall(afirmacion)):
+        return False
+    palabras = {t[:5] for t in tokenize(afirmacion)}
+    disponibles = {t[:5] for t in tokenize(ctx)}
+    return bool(palabras) and len(palabras & disponibles) / len(palabras) >= umbral
+
+
+def fidelidad(respuesta, textos):
+    marcas = [respaldada(a, textos) for a in afirmaciones(respuesta)]
+    return sum(marcas) / len(marcas) if marcas else None
+
+
+respuestas = {
+    "fiel": "El reembolso tarda un máximo de 7 días hábiles desde que el paquete llega al almacén [doc-002].",
+    "número inventado": "El reembolso tarda un máximo de 3 días hábiles desde que el paquete llega al almacén [doc-002].",
+    "mezcla": "El reembolso tarda un máximo de 7 días hábiles [doc-002]. Además incluye una compensación del 10 % por las molestias.",
+    "contradicción": "El reembolso no se realiza por el mismo medio de pago que se usó en la compra [doc-002].",
+}
+for nombre, texto in respuestas.items():
+    print(f"{nombre:<18} fidelidad = {fidelidad(texto, contexto)}")
+```
+
+Salida (determinista):
+
+```text
+El reembolso se realiza por el mismo medio de pago que se usó en la compra y tarda un máximo de 7 días hábiles desde que ...
+fiel               fidelidad = 1.0
+número inventado   fidelidad = 0.0
+mezcla             fidelidad = 0.5
+contradicción      fidelidad = 1.0
+```
+
+- La respuesta **fiel** puntúa 1,0; el **número inventado** (3 días en lugar de 7) hace caer a 0,0 la única afirmación; la **mezcla** puntúa 0,5: una afirmación verdadera y una inventada (la compensación del 10 %). La comprobación de números es especialmente útil porque los modelos inventan cifras con aplomo.
+- La **contradicción** puntúa **1,0**: «el reembolso **no** se realiza por el mismo medio de pago» usa las mismas palabras que el contexto, y el verificador léxico no ve la negación. **Es el límite de la comprobación léxica**: detecta invenciones de datos, no inversiones de significado. Para eso se necesita un modelo que razone sobre la implicación entre texto y afirmación (NLI) o un LLM juez, que a su vez tiene sus propios fallos.
+
+### LLM como juez
+
+Un **LLM juez** es un modelo al que se le pide puntuar o comparar respuestas según unos criterios, normalmente con una rúbrica en el prompt. Hay dos formatos principales:
+
+- **Puntual (*pointwise*):** una respuesta y una rúbrica («puntúa de 1 a 5 la fidelidad»). Escala bien pero las puntuaciones están mal calibradas.
+- **Por pares (*pairwise*):** dos respuestas, «¿cuál es mejor?». Más discriminante para comparar versiones del sistema.
+
+Zheng et al. (2023) estudiaron este enfoque con MT-Bench y Chatbot Arena. Su conclusión es doble. Por un lado, jueces fuertes como GPT-4 igualan las preferencias humanas, con **más de un 80 % de acuerdo, el mismo nivel de acuerdo que hay entre humanos**. Por otro, documentan **sesgos y límites**: sesgo de **posición** (preferir la respuesta que aparece primero o última), de **verbosidad** (preferir la más larga), de **autopreferencia** (preferir las respuestas de su propia familia de modelos) y **capacidad de razonamiento limitada**.
+
+Mitigaciones prácticas:
+
+- **Intercambiar el orden** en las comparaciones por pares y quedarse con los veredictos consistentes.
+- **Rúbricas explícitas y concretas** («una afirmación sin respaldo en el contexto resta»), con ejemplos.
+- **Pedir primero la justificación** y luego la nota.
+- **No usar como juez al mismo modelo** que generó la respuesta, si es posible.
+- **Calibrar con etiquetas humanas:** mide el acuerdo del juez con un conjunto pequeño etiquetado por personas antes de fiarte de él.
+- **Controlar la longitud** como variable de confusión.
+
+### Frameworks de evaluación
+
+**Ragas** (Es et al., 2023) es un marco de evaluación de RAG **sin referencia**: evalúa distintas dimensiones sin depender de anotaciones humanas de verdad terreno, y lo estructura en tres aspectos: la capacidad del sistema de recuperación para encontrar pasajes relevantes y focalizados, la capacidad del LLM para usarlos de forma fiel y la calidad de la respuesta. **ARES** (Saad-Falcon et al., 2023) genera **datos sintéticos**, ajusta **jueces ligeros** para evaluar la relevancia del contexto, la fidelidad y la relevancia de la respuesta, y usa un pequeño conjunto de anotaciones humanas para **inferencia asistida por predicción** (PPI) que reduce el error; sus autores afirman que evalúa con precisión usando solo unos cientos de anotaciones humanas y que sus jueces se mantienen eficaces tras cambios de dominio.
+
+<Snapshot date="2026-10">
+
+El panorama de herramientas de evaluación de RAG (Ragas, ARES, TruLens, DeepEval y otras, de código abierto y comerciales) cambia con mucha rapidez: se modifican nombres de métricas, definiciones y modelos jueces por defecto, y los resultados no son comparables entre versiones ni entre herramientas. De las herramientas citadas, esta lección ha revisado los artículos de Ragas y ARES; para el resto, consulta su documentación vigente. Regla práctica: **fija la versión de la herramienta y del modelo juez** en cada evaluación, y no compares números obtenidos con configuraciones distintas.
+
+</Snapshot>
+
+### Referencia o sin referencia
+
+- **Sin referencia:** no necesita una respuesta esperada (fidelidad, relevancia de la respuesta). Es la que puedes ejecutar sobre **tráfico real** y detectar regresiones sin etiquetar.
+- **Con referencia:** compara con una respuesta correcta conocida (corrección, recall del contexto). Es más fiable pero exige un conjunto dorado con respuestas.
+
+Lo habitual es combinar: el conjunto dorado con referencia para decidir cambios (*offline*) y las métricas sin referencia como vigilancia continua (*online*), que verás en la lección siguiente.
+
+## Trade-offs
+
+| Enfoque | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Verificación léxica (como el laboratorio) | Gratis, determinista, detecta cifras inventadas | No detecta paráfrasis ni contradicciones |
+| NLI / modelo de inferencia | Detecta contradicciones y paráfrasis | Modelo adicional; se equivoca con contextos largos |
+| LLM juez pointwise | Escalable, flexible | Puntuaciones poco calibradas; sesgo de verbosidad |
+| LLM juez pairwise | Mejor para comparar versiones | Sesgo de posición; coste doble al invertir el orden |
+| Jueces ajustados (ARES) | Más baratos y estables a escala | Requieren datos sintéticos y algunas anotaciones |
+| Revisión humana | Referencia de calidad | Lenta, cara y subjetiva |
+
+## Errores comunes en producción
+
+- **Fiarse de un juez sin calibrarlo.** Mide su acuerdo con etiquetas humanas en una muestra antes de usarlo para decidir.
+- **Comparar versiones con jueces o rúbricas distintas.** Fija modelo, versión y prompt del juez.
+- **Ignorar el sesgo de verbosidad.** Una respuesta más larga puntúa mejor aunque no sea mejor; controla la longitud.
+- **Usar como juez al modelo evaluado.** Tiende a preferir sus propias respuestas.
+- **Medir solo la fidelidad.** Una respuesta que se abstiene siempre es perfectamente fiel y completamente inútil: mide también relevancia y corrección.
+- **Promediar sin mirar casos.** Una media de 0,9 oculta los fallos graves; revisa los peores casos a mano.
+- **No separar recuperación y generación.** Sin recall del contexto no sabes si arreglar la búsqueda o el prompt.
+- **Evaluar sobre datos filtrados.** Si las preguntas de evaluación están en el prompt de ajuste o en el entrenamiento del juez, el resultado se infla.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo evalúas un sistema RAG de extremo a extremo?"_ Pista: recuperación (recall, MRR, nDCG) y generación (fidelidad, relevancia de la respuesta, corrección), por separado, con conjunto dorado y vigilancia online.
+- _"¿Qué es la fidelidad y cómo se mide?"_ Pista: fracción de afirmaciones de la respuesta respaldadas por el contexto; se descompone en afirmaciones y se verifica cada una con NLI o un LLM.
+- _"¿Qué sesgos tiene un LLM como juez?"_ Pista: posición, verbosidad, autopreferencia y razonamiento limitado; se mitigan invirtiendo el orden, con rúbricas y calibrando con humanos.
+- _"¿Por qué una fidelidad alta no basta?"_ Pista: una abstención es fiel pero inútil; hay que medir también relevancia y corrección.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Cuatro preguntas: **fidelidad, relevancia de la respuesta, precisión del contexto y recall del contexto**, más **corrección** si hay referencia.
+- La fidelidad se mide **por afirmaciones**; una comprobación léxica detecta cifras inventadas pero **no contradicciones**.
+- Un **LLM juez** iguala a los humanos en más de un 80 % de acuerdo en MT-Bench (Zheng et al.), pero tiene sesgos de **posición, verbosidad y autopreferencia**.
+- **Ragas** (sin referencia) y **ARES** (jueces ajustados con pocas anotaciones) estructuran la evaluación; fija versiones y modelo juez.
+- Separa recuperación y generación para saber dónde arreglar, y calibra al juez con etiquetas humanas.
+
+</KeyTakeaways>

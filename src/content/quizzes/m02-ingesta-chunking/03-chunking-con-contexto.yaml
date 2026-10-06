@@ -1,0 +1,87 @@
+lesson: m02-ingesta-chunking/03-chunking-con-contexto
+questions:
+  - id: m02-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué problema resuelven las técnicas de contexto para fragmentos?'
+    options:
+      - 'Que un fragmento aislado pierde la información que su documento le daba y se vuelve ambiguo.'
+      - 'Que los fragmentos son demasiado cortos para indexarse.'
+      - 'Que los embeddings no existen en español.'
+      - 'Que el índice no admite más de mil documentos.'
+    answer: [0]
+    explanation: 'Un fragmento como "el plazo es de 14 días" no dice de qué plazo se trata. Las técnicas de contexto le devuelven el título, la sección o una explicación para que pueda recuperarse correctamente.'
+    ref: '#nivel-1-encabezados-contextuales-barato-y-determinista'
+
+  - id: m02-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué hace la técnica más simple de encabezados contextuales?'
+    options:
+      - 'Antepone al texto que se indexa el título, la ruta de secciones y el área, sin usar ningún LLM.'
+      - 'Elimina todos los títulos de los documentos.'
+      - 'Genera resúmenes con un modelo para cada fragmento.'
+      - 'Duplica cada fragmento tres veces.'
+    answer: [0]
+    explanation: 'Los encabezados contextuales usan información que ya tienes, no cuestan nada y son reproducibles. Generar texto con un modelo corresponde a Contextual Retrieval.'
+    ref: '#nivel-1-encabezados-contextuales-barato-y-determinista'
+
+  - id: m02-03-q3
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué afirmaciones sobre **Contextual Retrieval** son correctas? Marca todas.'
+    options:
+      - 'Usa un LLM para generar el contexto de cada fragmento.'
+      - 'El prompt caching abarata el proceso porque el documento completo se reutiliza entre llamadas.'
+      - 'Da sus mejores resultados combinado con búsqueda léxica y reranking.'
+      - 'Elimina la necesidad de evaluar con un golden set.'
+    answer: [0, 1, 2]
+    explanation: 'Se genera contexto con un LLM, la caché reduce el coste de reenviar el documento y la combinación con BM25 y reranker mejora más los resultados. Nunca elimina la necesidad de medir con tus propios datos.'
+    ref: '#nivel-2-contextual-retrieval-contexto-generado-por-un-llm'
+
+  - id: m02-03-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Cómo introduce el contexto el **late chunking**?'
+    options:
+      - 'Calcula los embeddings de todos los tokens con el documento completo y agrupa después los de cada fragmento.'
+      - 'Genera con un LLM un párrafo de contexto por fragmento.'
+      - 'Elimina los fragmentos más cortos.'
+      - 'Traduce el documento antes de indexarlo.'
+    answer: [0]
+    explanation: 'El late chunking pasa el documento largo por un modelo de embeddings de contexto largo y aplica el troceado al final, justo antes del promediado, de modo que cada fragmento incorpora información del documento entero.'
+    ref: '#nivel-3-late-chunking-contexto-dentro-del-embedding'
+
+  - id: m02-03-q5
+    type: truefalse
+    difficulty: 2
+    prompt: 'Aunque se indexe el fragmento con una cabecera de contexto, al usuario se le debe mostrar y citar el fragmento original.'
+    answer: [0]
+    explanation: 'Es verdadero. La cabecera existe para mejorar la recuperación; mostrarla al usuario como si fuera parte del documento sería engañoso. Se conserva el texto original aparte para mostrar y citar.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m02-03-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué compromiso observan Merola y Singh entre estos enfoques?'
+    options:
+      - 'Contextual Retrieval preserva mejor la coherencia pero exige más cómputo; late chunking es más eficiente pero tiende a sacrificar relevancia y completitud.'
+      - 'Los dos son idénticos en calidad y coste.'
+      - 'Late chunking siempre es mejor y más caro.'
+      - 'Ninguno mejora la recuperación.'
+    answer: [0]
+    explanation: 'Su comparación muestra un compromiso entre calidad del contexto y coste de cómputo. Es una comparación en unas condiciones concretas, así que conviene reproducirla con tus datos.'
+    ref: '#cuál-elegir'
+
+  - id: m02-03-q7
+    type: single
+    difficulty: 3
+    prompt: '¿Cuál es la idea común de parent-document, ventana de frases y metadatos de jerarquía?'
+    options:
+      - 'Separar la unidad con la que se busca de la unidad con la que se responde.'
+      - 'Indexar solo los títulos.'
+      - 'Evitar el uso de embeddings.'
+      - 'Aumentar siempre el número de fragmentos recuperados.'
+    answer: [0]
+    explanation: 'Se busca con fragmentos pequeños y precisos pero se entrega al modelo un contexto mayor (la sección, las frases vecinas o la ruta de títulos). No se renuncia a los embeddings ni se aumenta k por sí mismo.'
+    ref: '#metadatos-y-jerarquías-otra-forma-de-recuperar-contexto'

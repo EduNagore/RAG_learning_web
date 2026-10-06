@@ -1,0 +1,95 @@
+lesson: m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq
+questions:
+  - id: m04-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Cuál es el coste de la **búsqueda exacta** de vecinos por consulta?'
+    options:
+      - 'Proporcional a N × d: se compara la consulta con los N vectores de dimensión d.'
+      - 'Constante, no depende del número de vectores.'
+      - 'Logarítmico en N siempre.'
+      - 'Cero, porque está precalculada.'
+    answer: [0]
+    explanation: 'La búsqueda exacta compara con todos los vectores, así que crece de forma lineal con N y con la dimensión. Por eso a gran escala se recurre a la aproximada.'
+    ref: '#intuición-encontrar-una-aguja-sin-mirar-todo-el-pajar'
+
+  - id: m04-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué mide el **recall@k de un índice aproximado**?'
+    options:
+      - 'Qué fracción de los k vecinos verdaderos (de la búsqueda exacta) devuelve el índice.'
+      - 'Cuántos documentos relevantes hay en el corpus.'
+      - 'La velocidad de construcción del índice.'
+      - 'El tamaño en memoria del índice.'
+    answer: [0]
+    explanation: 'Se compara el resultado aproximado con el de la búsqueda exacta. Mide la calidad del índice, no la del sistema RAG completo, que depende también de embeddings, troceado y generación.'
+    ref: '#la-métrica-que-importa-recall-frente-a-la-búsqueda-exacta'
+
+  - id: m04-01-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cómo está organizado un índice **HNSW**?'
+    options:
+      - 'En varias capas de grafos de proximidad: pocos nodos con enlaces largos arriba y más nodos con enlaces cortos abajo.'
+      - 'En una tabla hash de palabras.'
+      - 'En un único árbol binario ordenado por longitud.'
+      - 'En una lista plana sin estructura.'
+    answer: [0]
+    explanation: 'HNSW construye una jerarquía de grafos de proximidad; la búsqueda baja de capa en capa acercándose al objetivo. Su coste escala de forma logarítmica según sus autores.'
+    ref: '#tres-familias-de-índices'
+
+  - id: m04-01-q4
+    type: single
+    difficulty: 2
+    prompt: 'En un índice **IVF**, ¿qué efecto tiene aumentar `n_probe`?'
+    options:
+      - 'Se visitan más listas, así que sube el recall y también el coste de la búsqueda.'
+      - 'Baja el recall y sube la velocidad.'
+      - 'No cambia nada.'
+      - 'Se reduce el tamaño del índice.'
+    answer: [0]
+    explanation: 'n_probe es el número de listas que se exploran. Más listas implican revisar más vectores: más recall y más latencia. Es la palanca para ajustar el compromiso sin reconstruir el índice.'
+    ref: '#tres-familias-de-índices'
+
+  - id: m04-01-q5
+    type: truefalse
+    difficulty: 2
+    prompt: 'Para unos cientos de miles de vectores es imprescindible usar un índice aproximado, porque la búsqueda exacta no es viable.'
+    answer: [1]
+    explanation: 'Es falso. Hasta cientos de miles de vectores la búsqueda exacta suele ser suficientemente rápida, además de simple, exacta y fácil de depurar. El índice aproximado se justifica cuando la escala lo exige.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m04-01-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué hace la **cuantización de producto (PQ)**?'
+    options:
+      - 'Divide cada vector en subvectores y sustituye cada uno por el índice del centroide más cercano de un diccionario aprendido.'
+      - 'Elimina los vectores duplicados.'
+      - 'Aumenta la dimensión de los vectores.'
+      - 'Ordena los vectores por longitud.'
+    answer: [0]
+    explanation: 'PQ comprime los vectores a unos pocos bytes representando cada subvector por un código. Se suele combinar con IVF y reordenar los mejores candidatos con los vectores originales para recuperar precisión.'
+    ref: '#tres-familias-de-índices'
+
+  - id: m04-01-q7
+    type: truefalse
+    difficulty: 3
+    prompt: 'El recall de un índice aproximado frente a la búsqueda exacta es la misma medida que el recall de la recuperación en la evaluación de un sistema RAG.'
+    answer: [1]
+    explanation: 'Es falso. El primero mide si el índice encuentra los vecinos que hallaría la búsqueda exacta; el segundo, si aparece el documento relevante entre los k recuperados. Miden la calidad del índice y la del sistema completo, respectivamente.'
+    ref: '#la-métrica-que-importa-recall-frente-a-la-búsqueda-exacta'
+
+  - id: m04-01-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Para qué situación está pensado **DiskANN**?'
+    options:
+      - 'Indexar y buscar volúmenes enormes que no caben en memoria usando un SSD.'
+      - 'Conjuntos de cien vectores.'
+      - 'Búsqueda por palabras clave exclusivamente.'
+      - 'Comprimir imágenes.'
+    answer: [0]
+    explanation: 'DiskANN propone un índice de grafo (Vamana) que reside en SSD, de modo que una sola máquina con RAM limitada puede manejar miles de millones de puntos. Es relevante cuando el volumen supera la memoria disponible.'
+    ref: '#cuando-no-cabe-en-memoria-diskann'

@@ -1,0 +1,190 @@
+---
+title: Búsqueda aproximada de vecinos, HNSW, IVF y PQ
+description: Por qué la búsqueda exacta no escala, qué intercambia un índice aproximado (recall por velocidad) y cómo funcionan los tres grandes enfoques, grafos, particiones y compresión.
+module: m04-indices-vectoriales
+order: 1
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Calcular el coste de la búsqueda exacta y explicar por qué se recurre a la aproximada.
+  - Definir recall@k frente a la búsqueda exacta y leer una curva recall-velocidad.
+  - Describir cómo funcionan HNSW, IVF y la cuantización de producto, y qué parámetros controlan.
+  - Reconocer cuándo un índice en disco como DiskANN es la opción adecuada.
+prerequisites:
+  - m03-embeddings/02-dimension-matryoshka-cuantizacion
+volatility: low
+lastReviewed: 2026-10-05
+sources:
+  - title: Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs
+    url: https://arxiv.org/abs/1603.09320
+    type: paper
+    authors: Malkov, Yashunin
+    year: 2016
+  - title: The Faiss library
+    url: https://arxiv.org/abs/2401.08281
+    type: paper
+    authors: Douze et al.
+    year: 2024
+  - title: "ANN-Benchmarks: A Benchmarking Tool for Approximate Nearest Neighbor Algorithms"
+    url: https://arxiv.org/abs/1807.05614
+    type: paper
+    authors: Aumüller, Bernhardsson, Faithfull
+    year: 2018
+  - title: "DiskANN: Fast Accurate Billion-point Nearest Neighbor Search on a Single Node"
+    url: https://papers.nips.cc/paper/2019/hash/09853c7fb1d3f8ee67a61b6bf4a7f8e6-Abstract.html
+    type: paper
+    authors: Subramanya et al.
+    year: 2019
+relatedLabs:
+  - rag-06-indice-vectorial
+  - rag-07-mini-ivf
+---
+
+## Intuición: encontrar una aguja sin mirar todo el pajar
+
+Buscar el vecino más cercano de una consulta entre $N$ vectores de dimensión $d$ tiene una solución evidente: calcular la similitud con **cada uno** y quedarse con los mejores. Es la **búsqueda exacta** (_brute force_) y su coste es proporcional a $N \times d$ operaciones por consulta. Para unos miles de vectores es instantánea; de hecho, es lo que hace el laboratorio de coseno y top-k, y es la mejor opción hasta tamaños sorprendentemente grandes porque es sencilla, exacta y fácil de depurar.
+
+El problema llega con la escala. Con 50 millones de vectores de 768 dimensiones, una sola consulta implica miles de millones de multiplicaciones y leer decenas de gigabytes de memoria. Si el sistema debe responder en milisegundos y atender muchas consultas por segundo, recorrer todo en cada una deja de ser viable.
+
+La solución es **renunciar a la exactitud absoluta**: aceptar que, de vez en cuando, el índice no devuelva exactamente el vecino más cercano sino uno casi tan bueno, a cambio de revisar una pequeña fracción de los vectores. Es la **búsqueda aproximada de vecinos** (_Approximate Nearest Neighbors_, **ANN**), el motor de las bases de datos vectoriales.
+
+## Cómo funciona
+
+### La métrica que importa: recall frente a la búsqueda exacta
+
+Todo índice aproximado intercambia **calidad por velocidad**, y se mide con el **recall@k respecto a la búsqueda exacta**: de los $k$ vecinos verdaderos, ¿qué fracción devuelve el índice?
+
+$$
+\text{recall@}k = \frac{|\text{resultados aproximados} \cap \text{resultados exactos}|}{k}
+$$
+
+No confundas este recall (¿encuentro los vecinos que encontraría la búsqueda exacta?) con el recall de recuperación de la evaluación RAG (¿aparece el documento relevante entre los k?). El primero mide la **calidad del índice**; el segundo, la **calidad de todo el sistema**. Un índice con recall 0,95 puede perder el fragmento relevante en un 5 % de los casos solo por ser aproximado, además de cualquier otro fallo.
+
+Ese compromiso se grafica como una curva de **recall frente a consultas por segundo**. ANN-Benchmarks (Aumüller et al., 2018) es la herramienta de referencia para comparar algoritmos con un interfaz común; una de sus observaciones es que enfoques muy distintos de búsqueda de vecinos producen compromisos de calidad y rendimiento comparables, de modo que **la elección suele depender de otros factores**: memoria, soporte de filtros, actualizaciones y operaciones.
+
+### Tres familias de índices
+
+**1. Basados en grafos: HNSW.** _Hierarchical Navigable Small World_ (Malkov y Yashunin) construye una **estructura de varias capas de grafos de proximidad**. Cada vector es un nodo conectado a sus vecinos cercanos. La capa superior tiene pocos nodos con enlaces largos (para dar saltos grandes); las capas inferiores, más nodos con enlaces cortos. La búsqueda empieza arriba, se acerca «voraz» al objetivo y va bajando de capa afinando. Los autores afirman que su coste escala de forma **logarítmica** y señalan su parecido con las listas de saltos (_skip lists_). Parámetros típicos:
+
+- `M`: número de conexiones por nodo. Más conexiones, más recall y más memoria.
+- `efConstruction`: amplitud de la búsqueda al construir el grafo. Más alto, mejor grafo y construcción más lenta.
+- `efSearch`: amplitud de la búsqueda al consultar. Más alto, más recall y más latencia. Es la palanca para ajustar el compromiso **sin reconstruir**.
+
+HNSW es hoy la opción por defecto en muchos sistemas por su excelente equilibrio, a costa de **consumir bastante memoria** (guarda el grafo además de los vectores) y de que construir y actualizar es más pesado que otras estructuras.
+
+**2. Basados en particiones: IVF.** _Inverted File Index_ divide el espacio en regiones con **k-means**: cada región tiene un centroide y una **lista** con los vectores más cercanos a él. Al consultar, se eligen los `n_probe` centroides más próximos a la consulta y se busca **solo en esas listas**. Es sencillo, rápido de construir y poco exigente en memoria. Su compromiso se controla con `n_probe`: más listas visitadas, más recall y más coste. Lo implementarás en un laboratorio.
+
+**3. Compresión: cuantización de producto (PQ).** Para ahorrar memoria, PQ **divide** cada vector en subvectores y sustituye cada uno por el **índice del centroide más cercano** de un pequeño diccionario aprendido. Un vector de 768 números pasa a ser unas pocas decenas de bytes. Se combina con IVF (IVF-PQ) para manejar miles de millones de vectores, a costa de una pérdida de precisión que suele corregirse reordenando los mejores candidatos con los vectores originales, como ya viste con la cuantización binaria.
+
+La biblioteca Faiss, descrita por sus autores como un conjunto de métodos de indexación y primitivas para buscar, agrupar, comprimir y transformar vectores, implementa estas y otras familias y es la base de muchos sistemas.
+
+### Cuando no cabe en memoria: DiskANN
+
+HNSW e IVF típicos necesitan los índices en memoria principal, lo que limita el tamaño del conjunto y encarece el sistema. **DiskANN** (Subramanya et al., NeurIPS 2019) propone un índice basado en grafos (**Vamana**) pensado para residir en **SSD**: según el artículo, permite indexar y buscar mil millones de puntos en una sola estación de trabajo con 64 GB de RAM y un SSD económico, atendiendo más de 5 000 consultas por segundo con menos de 3 ms de latencia media y más del 95 % de acierto del vecino más cercano en el conjunto SIFT1B, mientras que otros sistemas de memoria similar como Faiss se estancaban en torno al 50 %. Es el ejemplo de por qué los **índices en disco** son relevantes cuando el volumen supera la memoria disponible.
+
+<Diagram
+  caption="Tres formas de no mirar todo: saltar por un grafo (HNSW), visitar solo las particiones cercanas (IVF) o comprimir los vectores (PQ)."
+  code={`flowchart TB
+  Q["Consulta"] --> H["HNSW: bajar por capas de grafos hacia el vecino"]
+  Q --> I["IVF: elegir n_probe listas y buscar solo en ellas"]
+  Q --> P["PQ: comparar vectores comprimidos y reordenar los mejores"]
+  H --> R["Candidatos"]
+  I --> R
+  P --> R
+  R --> F["Top-k final (opcionalmente reordenado con vectores completos)"]`}
+/>
+
+### Un experimento: IVF en 30 líneas
+
+El siguiente código construye un IVF desde cero con NumPy sobre 20 000 vectores sintéticos agrupados (como los embeddings de textos de temas distintos) y mide recall y fracción de vectores revisados al variar `n_probe`:
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(0)
+N, D, CLUSTERS, K = 20_000, 64, 50, 10
+
+centros = rng.normal(size=(CLUSTERS, D))
+X = centros[rng.integers(0, CLUSTERS, N)] + 0.35 * rng.normal(size=(N, D))
+X /= np.linalg.norm(X, axis=1, keepdims=True)
+consultas = X[rng.choice(N, 200, replace=False)] + 0.05 * rng.normal(size=(200, D))
+consultas /= np.linalg.norm(consultas, axis=1, keepdims=True)
+
+exacto = np.argsort(-(consultas @ X.T), axis=1)[:, :K]      # búsqueda exacta de referencia
+
+LISTAS = 64
+cent = X[rng.choice(N, LISTAS, replace=False)]
+for _ in range(10):                                          # k-means de 10 iteraciones
+    asignado = np.argmax(X @ cent.T, axis=1)
+    for j in range(LISTAS):
+        miembros = X[asignado == j]
+        if len(miembros):
+            c = miembros.mean(axis=0)
+            cent[j] = c / np.linalg.norm(c)
+asignado = np.argmax(X @ cent.T, axis=1)
+listas = [np.flatnonzero(asignado == j) for j in range(LISTAS)]
+
+def buscar(q, n_probe):
+    cercanas = np.argsort(-(cent @ q))[:n_probe]             # 1) listas más cercanas
+    candidatos = np.concatenate([listas[j] for j in cercanas])
+    mejores = np.argsort(-(X[candidatos] @ q))[:K]            # 2) exacta solo entre candidatos
+    return candidatos[mejores], len(candidatos)
+
+for n_probe in (1, 2, 4, 8, 16, 64):
+    recall, visitados = [], []
+    for q, ex in zip(consultas, exacto):
+        ids, n = buscar(q, n_probe)
+        recall.append(len(set(ids) & set(ex)) / K)
+        visitados.append(n)
+    print(n_probe, round(np.mean(recall), 3), f"{np.mean(visitados) / N:.1%}")
+```
+
+Los resultados con esta semilla:
+
+| `n_probe` | recall@10 | Vectores revisados |
+| ---: | ---: | ---: |
+| 1 | 0,944 | 2,2 % |
+| 2 | 0,990 | 3,7 % |
+| 4 | 1,000 | 6,8 % |
+| 8 | 1,000 | 13,1 % |
+| 64 (todas) | 1,000 | 100 % |
+
+Con solo el **2,2 %** de los vectores revisados se alcanza un recall de 0,944, y con el 6,8 % se recupera todo. Pero conviene leer el resultado con espíritu crítico: los datos sintéticos tienen **grupos muy marcados**, un escenario favorable para IVF. Los embeddings reales suelen ser menos separables, y el recall a igualdad de fracción revisada será menor. La enseñanza no es el número sino el **método**: medir recall frente a la búsqueda exacta sobre **tus** vectores y elegir `n_probe` en consecuencia.
+
+## Trade-offs
+
+| Índice | Memoria | Velocidad de consulta | Construcción y actualizaciones | Cuándo encaja |
+| --- | --- | --- | --- | --- |
+| Exacto (_flat_) | Solo los vectores | Lineal en $N$ | Trivial | Hasta cientos de miles de vectores; referencia de recall |
+| HNSW | Alta (grafo + vectores) | Muy rápida | Más pesada | Opción general con memoria suficiente |
+| IVF | Baja-media | Rápida | Rápida; requiere entrenar centroides | Grandes conjuntos y memoria limitada |
+| IVF-PQ | Muy baja | Rápida con pérdida de precisión | Entrenamiento de centroides y diccionarios | Miles de millones de vectores |
+| DiskANN (en disco) | Baja en RAM, usa SSD | Rápida con SSD | Más compleja | Volumen mayor que la memoria |
+
+## Errores comunes en producción
+
+- **Usar un índice aproximado antes de necesitarlo.** Hasta cientos de miles de vectores, la búsqueda exacta suele ser suficiente y elimina una fuente de error.
+- **No medir el recall del índice.** Sin compararlo con la búsqueda exacta no sabes cuánto pierdes.
+- **Dejar los parámetros por defecto** (`efSearch`, `n_probe`) sin ajustarlos a tu compromiso de latencia y recall.
+- **Confundir el recall del índice con el recall de la recuperación.** Son medidas de cosas distintas.
+- **Subestimar la memoria de HNSW** y descubrir en producción que el índice no cabe.
+- **Reconstruir siempre desde cero** cuando el modelo de embeddings o el contenido cambian, sin plan de actualización incremental.
+- **Medir con datos sintéticos** y extrapolar: usa tus embeddings reales.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué se usa búsqueda aproximada y qué se sacrifica?"_ Pista: la exacta cuesta $N \times d$ por consulta; la aproximada revisa una fracción a cambio de algo de recall.
+- _"Explica HNSW en dos frases y sus parámetros."_ Pista: grafo de varias capas, de enlaces largos arriba a cortos abajo, búsqueda voraz descendente; M, efConstruction y efSearch.
+- _"¿Qué haces cuando tu índice no cabe en memoria?"_ Pista: cuantización de producto, IVF-PQ, índices en disco como DiskANN, o repartir en nodos.
+
+</Callout>
+
+<KeyTakeaways>
+
+- La búsqueda exacta cuesta $N \times d$ por consulta; la **aproximada** revisa una fracción a cambio de algo de **recall**.
+- El **recall frente a la búsqueda exacta** mide la calidad del índice; es distinto del recall de la recuperación del sistema RAG.
+- **HNSW** (grafos por capas), **IVF** (particiones con `n_probe`) y **PQ** (compresión) son las familias principales; **DiskANN** lleva el índice al SSD.
+- Con datos agrupados, IVF alcanzó 0,944 de recall revisando solo el 2,2 % de los vectores, pero **los datos reales son menos favorables**: mide con los tuyos.
+- Usa búsqueda **exacta** mientras sea suficiente; añade un índice aproximado cuando la escala lo exija y **mide su recall**.
+
+</KeyTakeaways>

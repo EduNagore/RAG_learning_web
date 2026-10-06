@@ -1,0 +1,197 @@
+---
+title: Responder «no lo sé» sin evidencia (abstención)
+description: Por qué un sistema RAG debe saber abstenerse, qué señales sirven para decidirlo, por qué un umbral de puntuación de recuperación es una señal débil y cómo diseñar la respuesta de abstención sin filtrar información.
+module: m06-generacion-contexto
+order: 3
+level: avanzado
+estimatedMinutes: 17
+objectives:
+  - Explicar por qué la abstención es una propiedad de fiabilidad y no un fallo del sistema.
+  - Distinguir los casos que exigen abstenerse (sin documento, documento aproximado, sin permiso, evidencia contradictoria).
+  - Evaluar un umbral de puntuación de recuperación y entender por qué es una señal insuficiente.
+  - Diseñar señales más fuertes (instrucción, juez de soporte, evaluación de la recuperación) y la respuesta de abstención.
+prerequisites:
+  - m06-generacion-contexto/01-prompt-citas-y-grounding
+volatility: medium
+lastReviewed: 2026-10-05
+sources:
+  - title: "Know Your Limits: A Survey of Abstention in Large Language Models"
+    url: https://arxiv.org/abs/2407.18418
+    type: paper
+    authors: Wen, Yao, Feng, Xu, Tsvetkov, Howe, Wang
+    year: 2024
+  - title: Reduce hallucinations (documentación de Claude)
+    url: https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Enabling Large Language Models to Generate Text with Citations
+    url: https://arxiv.org/abs/2305.14627
+    type: paper
+    authors: Gao, Yen, Yu, Chen
+    year: 2023
+---
+
+## Intuición: la mejor respuesta a veces es «no lo sé»
+
+Un asistente que responde con seguridad a todo es peligroso, sobre todo cuando se pregunta por cosas que **no están** en tu base de conocimiento: el nombre del director general, si hay una tienda física en cierta ciudad, el importe de un seguro que no existe. Un modelo generativo tiende a completar con lo plausible. El resultado es una respuesta fluida, segura y falsa.
+
+La **abstención** es la capacidad de negarse a responder cuando no hay base suficiente. La revisión de Wen et al. (2024) la define como «la negativa de los LLM a dar una respuesta» y la presenta como un mecanismo para reducir alucinaciones y mejorar la seguridad, que se puede analizar desde tres perspectivas: **la propia consulta** (¿es ambigua, imposible de responder?), **las capacidades del modelo** (¿sabe lo suficiente?) y **los valores humanos** (¿conviene responder?). En RAG, la primera y la segunda se concretan en una pregunta práctica: **¿la evidencia recuperada alcanza para responder?**
+
+Una abstención correcta no es un fallo del sistema, es un resultado **correcto** para las preguntas sin respuesta, y tiene un valor enorme en confianza: el usuario aprende que, cuando el sistema responde, merece la pena creerle.
+
+## Cómo funciona
+
+### Cuatro situaciones que piden abstenerse
+
+1. **No hay documento relevante.** La pregunta está fuera del dominio («¿tenéis tienda física en Valencia?» cuando no se menciona ninguna).
+2. **Hay documentos próximos, pero no la respuesta.** Es el caso más peligroso: «¿ofrecéis un seguro adicional de transporte para objetos de más de 3 000 euros?» recupera documentos de costes de envío y de facturación, y uno de bandas salariales que casa por «euros» y por las cifras. Todos **parecen** relacionados sin contener la respuesta: la recuperación «funciona» y el sistema aun así debe abstenerse.
+3. **Hay respuesta, pero el usuario no tiene permiso.** Un dato restringido (por ejemplo, el salario de un puesto) no se entrega. Aquí la respuesta debe cuidar no **confirmar la existencia** del documento (ver más abajo).
+4. **La evidencia es contradictoria o está desactualizada.** Dos documentos dicen cosas distintas. A veces la respuesta correcta es exponer el conflicto, no elegir uno.
+
+### Señal 1: la puntuación de la recuperación (y por qué es débil)
+
+La idea más tentadora: si el mejor documento tiene una puntuación baja, no hay nada relevante, así que se abstiene por debajo de un umbral. Es barata y suena razonable. Veamos qué ocurre con el corpus Nimbus: la puntuación BM25 del mejor documento para las 28 preguntas con respuesta y para las 3 preguntas sin respuesta del conjunto dorado.
+
+```python
+import math
+
+import numpy as np
+from ragkit.data import load_corpus, load_golden
+from ragkit.text import tokenize
+
+corpus = load_corpus()
+golden = load_golden()
+ids = [d["id"] for d in corpus]
+docs = {d["id"]: tokenize(d["title"] + " " + d["text"]) for d in corpus}
+avgdl = sum(map(len, docs.values())) / len(docs)
+
+
+def bm25(query, k1=1.5, b=0.75):
+    scores = {i: 0.0 for i in ids}
+    for t in set(tokenize(query)):
+        n = sum(t in d for d in docs.values())
+        if n == 0:
+            continue
+        idf = math.log(1 + (len(docs) - n + 0.5) / (n + 0.5))
+        for i, d in docs.items():
+            f = d.count(t)
+            if f:
+                scores[i] += idf * f * (k1 + 1) / (f + k1 * (1 - b + b * len(d) / avgdl))
+    return scores
+
+
+def mejor(query):
+    """Puntuación BM25 del mejor documento: ¿hay algo que se parezca a la pregunta?"""
+    return max(bm25(query).values())
+
+
+con = {q["id"]: mejor(q["question"]) for q in golden if q["answerable"]}
+sin = {q["id"]: mejor(q["question"]) for q in golden if not q["answerable"]}
+valores = list(con.values())
+print(f"con respuesta ({len(con)}): mín {min(valores):.2f}, mediana {np.median(valores):.2f}, máx {max(valores):.2f}")
+print("sin respuesta:", {i: round(s, 2) for i, s in sin.items()})
+print("umbral  falsas abstenciones  sin respuesta contestadas")
+for umbral in (0, 2, 4, 6, 8, 10):
+    falsas = sum(s < umbral for s in con.values())
+    contestadas = sum(s >= umbral for s in sin.values())
+    print(f"{umbral:>6}  {falsas:>11} de {len(con)}  {contestadas:>14} de {len(sin)}")
+```
+
+Salida (determinista):
+
+```text
+con respuesta (28): mín 1.98, mediana 7.83, máx 15.29
+sin respuesta: {'q29': 0.0, 'q30': 3.75, 'q31': 8.02}
+umbral  falsas abstenciones  sin respuesta contestadas
+     0            0 de 28               3 de 3
+     2            1 de 28               2 de 3
+     4            6 de 28               1 de 3
+     6           11 de 28               1 de 3
+     8           14 de 28               1 de 3
+    10           19 de 28               0 de 3
+```
+
+Lo que dicen los números:
+
+- Las dos primeras preguntas sin respuesta (`q29`, `q30`) puntúan bajo (0,0 y 3,75) y un umbral de 4 las rechaza. Pero **con ese umbral ya se abstienen 6 de las 28 preguntas que sí tenían respuesta**: el 21 % de los usuarios con una pregunta legítima recibiría un «no lo sé».
+- La tercera (`q31`, el seguro de transporte) puntúa **8,02, por encima de la mediana de las preguntas con respuesta**, y lo hace por coincidencias superficiales: su mejor documento es el de bandas salariales, que casa con «euros» y con las cifras. BM25 mide palabras compartidas, no relevancia. Para atraparla hay que subir el umbral hasta 10, y entonces el sistema rechaza 19 de 28 preguntas legítimas, el 68 %.
+- Es el **compromiso entre cobertura y riesgo**: cualquier umbral cambia «alucinaciones evitadas» por «respuestas útiles perdidas». Aquí no existe un umbral bueno porque la señal **no separa** los dos grupos.
+- Una advertencia de rigor: son solo **tres** preguntas sin respuesta. Es una ilustración, no una estimación fiable. Con un conjunto dorado serio necesitas decenas de preguntas sin respuesta de cada tipo.
+
+La conclusión no es «los umbrales no sirven», sino que **una puntuación de recuperación mide parecido, no suficiencia**: que un documento se parezca a la pregunta no significa que la responda. El umbral sirve como filtro grueso (descartar lo claramente irrelevante, como `q29`) y se complementa con señales que miren la respuesta.
+
+### Señal 2: pedirlo en el prompt
+
+La opción más barata y sorprendentemente eficaz es **dar permiso explícito** para no saber. La guía de Claude para reducir alucinaciones lo recomienda como primera técnica: darle al modelo permiso explícito para admitir incertidumbre, con una frase de salida concreta («si el informe no contiene la información necesaria, di "No tengo información suficiente"»). Una instrucción con una **respuesta de abstención literal** (como el `NO_LO_SE` de la lección anterior) tiene una ventaja operativa: el código puede detectarla y reaccionar sin interpretar texto libre. La misma guía añade otras dos técnicas útiles: pedir primero **citas literales** y basar el análisis solo en ellas, y **verificar cada afirmación** buscando un fragmento que la respalde, retirándola si no se encuentra. Y advierte que estas técnicas reducen las alucinaciones, no las eliminan.
+
+### Señal 3: verificar el soporte de la respuesta
+
+Después de generar, se comprueba si la respuesta está respaldada por el contexto: con un modelo de inferencia (NLI), con un LLM juez o con la técnica de «una cita por afirmación o se retira». Si una proporción relevante de afirmaciones no tiene soporte, se abstiene o se degrada. Es la señal más fuerte para el caso 2 (documentos próximos pero sin respuesta) y la que mide la fidelidad que verás en el módulo 8, a cambio de una llamada extra de modelo.
+
+### Señal 4: evaluar la recuperación antes de generar
+
+En lugar de juzgar la respuesta, se evalúa **la evidencia**: un modelo ligero o un LLM clasifica si los documentos recuperados son *suficientes*, *ambiguos* o *incorrectos*, y se actúa en consecuencia: responder, reformular y buscar de nuevo, o abstenerse. Es la idea de las arquitecturas correctivas que estudiarás en el módulo de RAG avanzado, y tema del laboratorio de CRAG simplificado.
+
+<Diagram
+  caption="La decisión de abstenerse puede apoyarse en varias señales encadenadas, de la más barata a la más cara."
+  code={`flowchart LR
+  Q[Pregunta] --> R[Recuperación]
+  R --> U{¿Puntuación mínima?}
+  U -->|no| A[Abstención]
+  U -->|sí| E{¿Evidencia suficiente?}
+  E -->|no| A
+  E -->|sí| G[Generación con citas]
+  G --> V{¿Respuesta con soporte?}
+  V -->|no| A
+  V -->|sí| O[Respuesta al usuario]`}
+/>
+
+### Cómo redactar la abstención
+
+Una buena respuesta de abstención es útil, no un portazo:
+
+- **Honesta y específica:** «No he encontrado información sobre una tienda física en Valencia en la documentación disponible», no «no puedo ayudarte».
+- **Con alternativas:** sugerir reformular, indicar el canal humano (atención al cliente, un correo) o ofrecer lo que sí se sabe de un tema cercano, **claramente separado** de lo que no se sabe.
+- **Sin filtrar lo restringido:** para el caso 3, no distingas entre «no existe» y «no tienes permiso» si esa diferencia revela información. Una respuesta común («no tengo información accesible sobre eso») evita confirmar que el documento existe. Registra el motivo real en la traza interna, no en el mensaje al usuario.
+- **Medible:** que el sistema emita un código de abstención (`NO_LO_SE`, `SIN_PERMISO`) para poder contar y analizar cuántas veces ocurre y por qué.
+
+## Trade-offs
+
+| Estrategia | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Umbral de puntuación de recuperación | Barato; filtra lo claramente irrelevante | No separa «parecido» de «suficiente»; pierde preguntas legítimas |
+| Instrucción en el prompt («di NO_LO_SE») | Casi gratis; fácil de detectar | El modelo puede ignorarla o abstenerse de más |
+| Juez de soporte (NLI / LLM) | Detecta respuestas sin respaldo | Coste y latencia extra; el juez también se equivoca |
+| Evaluar la recuperación antes de generar | Evita generar con mala evidencia | Una llamada de modelo antes de responder |
+| Abstenerse más | Menos alucinaciones | Más respuestas útiles perdidas y usuarios frustrados |
+
+## Errores comunes en producción
+
+- **Un único umbral global.** Ajustado con pocas preguntas, rechaza demasiadas legítimas o deja pasar las cercanas.
+- **No tener preguntas sin respuesta en el conjunto dorado.** Si solo evalúas preguntas contestables, la abstención es invisible y nadie la mide.
+- **Medir solo cuántas veces se abstiene.** Mide también las **abstenciones innecesarias** (preguntas con respuesta rechazadas) y las **respuestas indebidas** (sin respuesta, contestadas).
+- **Dejar que el modelo improvise la negativa.** Un mensaje distinto cada vez no se puede contar ni probar; usa un código y una plantilla.
+- **Revelar lo restringido al abstenerse.** «Ese documento es confidencial» confirma que existe; diferencia solo en la traza interna.
+- **Abstención sin salida.** Un «no lo sé» que no ofrece una alternativa deja al usuario donde estaba.
+- **Confiar en la confianza del modelo.** Las probabilidades de un modelo generativo no están calibradas como medida de que algo esté en tus documentos.
+- **Ignorar la evidencia contradictoria.** Elegir un documento en silencio cuando dos discrepan es una forma de respuesta indebida.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo haces que tu RAG diga «no lo sé»?"_ Pista: instrucción con respuesta de abstención literal, evaluar la suficiencia de la evidencia, verificar el soporte de la respuesta y un conjunto dorado con preguntas sin respuesta.
+- _"¿Basta un umbral sobre la puntuación de recuperación?"_ Pista: no; mide parecido, no suficiencia; los documentos próximos sin respuesta pasan el umbral, y subirlo rechaza preguntas legítimas.
+- _"¿Qué métricas usarías para la abstención?"_ Pista: abstenciones innecesarias, respuestas indebidas y la curva cobertura-riesgo.
+- _"¿Cómo respondes cuando el dato existe pero el usuario no tiene permiso?"_ Pista: una respuesta común que no confirme la existencia; el motivo real, solo en la traza.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Abstenerse bien** es una propiedad de fiabilidad: el usuario confía más en un sistema que sabe decir «no lo sé».
+- Hay cuatro casos: **sin documento**, **documento aproximado**, **sin permiso** y **evidencia contradictoria**.
+- Una puntuación de recuperación **no separa** bien las preguntas sin respuesta cercanas (`q31` puntuó 8,02, por encima de la mediana); subir el umbral cuesta respuestas legítimas.
+- Señales más fuertes: **permiso explícito en el prompt**, **evaluar la evidencia** antes de generar y **verificar el soporte** después.
+- Diseña la respuesta de abstención (honesta, con alternativas, sin filtrar lo restringido) y **mídela** con preguntas sin respuesta.
+
+</KeyTakeaways>

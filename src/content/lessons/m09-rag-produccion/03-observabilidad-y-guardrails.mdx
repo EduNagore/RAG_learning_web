@@ -1,0 +1,231 @@
+---
+title: Observabilidad, trazas y guardrails
+description: Qué registrar de cada consulta de RAG para poder depurar y evaluar en producción, cómo se estructuran las trazas (spans), qué herramientas existen y cómo colocar guardarraíles de entrada y de salida sin crear fugas.
+module: m09-rag-produccion
+order: 3
+level: avanzado
+estimatedMinutes: 17
+objectives:
+  - Diseñar la traza de una consulta de RAG con spans por etapa y los atributos que conviene registrar.
+  - Interpretar latencias con percentiles y conectar las trazas con la evaluación continua.
+  - Situar guardarraíles de entrada y de salida, y aplicarlos sin filtrar datos sensibles a las trazas.
+  - Comparar herramientas de observabilidad (Langfuse, Arize Phoenix, LangSmith) y el estándar OpenTelemetry para GenAI.
+prerequisites:
+  - m09-rag-produccion/02-seguridad-permisos-e-inyeccion
+volatility: high
+lastReviewed: 2026-10-05
+sources:
+  - title: OpenTelemetry Semantic Conventions for Generative AI (repositorio)
+    url: https://github.com/open-telemetry/semantic-conventions-genai
+    type: docs
+    authors: OpenTelemetry
+    year: 2026
+  - title: Langfuse, documentación
+    url: https://langfuse.com/docs
+    type: docs
+    authors: Langfuse
+    year: 2026
+  - title: Arize Phoenix, documentación
+    url: https://arize.com/docs/phoenix
+    type: docs
+    authors: Arize AI
+    year: 2026
+  - title: LangSmith, documentación
+    url: https://docs.langchain.com/langsmith/home
+    type: docs
+    authors: LangChain
+    year: 2026
+  - title: OWASP Top 10 for LLM Applications 2025
+    url: https://genai.owasp.org/llm-top-10/
+    type: docs
+    authors: OWASP GenAI Security Project
+    year: 2025
+relatedLabs:
+  - rag-18-recuperacion-con-acl
+---
+
+## Intuición: no puedes arreglar lo que no ves
+
+Un usuario dice: «el asistente me dio una respuesta mala ayer». Sin observabilidad, solo puedes encogerte de hombros: ¿qué preguntó exactamente?, ¿qué documentos se recuperaron?, ¿qué prompt se envió?, ¿qué versión del modelo respondió?, ¿cuánto tardó cada paso? Un sistema de RAG tiene muchas piezas probabilísticas encadenadas, y **un fallo puede estar en cualquiera**. La **observabilidad** es registrar lo suficiente, de forma estructurada, para reconstruir cualquier consulta después y para evaluar la calidad con tráfico real.
+
+## Cómo funciona
+
+### Trazas y spans
+
+Una **traza** (*trace*) representa una consulta de extremo a extremo y se compone de **spans**: tramos con nombre, inicio, duración y atributos, anidados según la estructura de la llamada. Es el modelo de OpenTelemetry y de las herramientas que cubrimos abajo. Para un RAG:
+
+- `consulta` (raíz): pregunta, usuario (seudonimizado), versión del sistema.
+  - `guardarrail.entrada`: reglas aplicadas y resultado.
+  - `recuperacion`: consulta efectiva, filtros, identificadores y puntuaciones de los documentos devueltos.
+  - `reranking`: orden antes y después.
+  - `generacion`: modelo y versión, parámetros, tokens de entrada y de salida, motivo de parada.
+  - `guardarrail.salida`: verificación de citas, resultado de los filtros.
+
+El experimento siguiente instrumenta esa estructura con un `span` mínimo sobre un reloj falso y determinista (cada lectura avanza 0,05 s) y un `MockLLM`, aplica un guardarraíl de entrada que **enmascara correos electrónicos** y uno de salida que **verifica las citas**, y calcula percentiles sobre latencias **inventadas** de 100 consultas para ver por qué la media engaña.
+
+```python
+import re
+from contextlib import contextmanager
+
+from ragkit.llm import Message, MockLLM
+
+
+class Reloj:
+    """Reloj falso y determinista: cada lectura avanza `paso` segundos."""
+
+    def __init__(self, paso=0.05):
+        self.t, self.paso = 0.0, paso
+
+    def __call__(self):
+        self.t += self.paso
+        return self.t
+
+
+reloj = Reloj()
+spans = []
+
+
+@contextmanager
+def span(nombre, **atributos):
+    inicio = reloj()
+    registro = {"span": nombre, "atributos": atributos}
+    try:
+        yield registro
+    finally:
+        registro["duracion_s"] = round(reloj() - inicio, 2)
+        spans.append(registro)
+
+
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
+
+
+def entrada_segura(texto):
+    """Guardarraíl de entrada: enmascara correos electrónicos antes de registrar o enviar."""
+    return EMAIL.sub("[EMAIL]", texto)
+
+
+def salida_segura(respuesta, permitidos):
+    """Guardarraíl de salida: toda cita debe existir en el contexto entregado."""
+    citas = re.findall(r"\[(doc-\d+)\]", respuesta)
+    return all(c in permitidos for c in citas) and bool(citas)
+
+
+def responder(pregunta):
+    with span("consulta") as raiz:
+        with span("guardarrail.entrada"):
+            limpia = entrada_segura(pregunta)
+        with span("recuperacion", n_resultados=2) as r:
+            r["atributos"]["doc_ids"] = ["doc-002", "doc-003"]
+        with span("generacion", modelo="mock") as g:
+            llm = MockLLM(script=["Los gastos los asume Nimbus [doc-002]. El reembolso tarda 7 días [doc-003]."])
+            texto = llm.generate([Message("user", limpia)]).text
+            g["atributos"]["tokens_entrada"] = llm.input_tokens
+            g["atributos"]["tokens_salida"] = llm.output_tokens
+        with span("guardarrail.salida"):
+            raiz["atributos"]["citas_validas"] = salida_segura(texto, {"doc-002", "doc-003"})
+    return texto
+
+
+responder("Mi correo es ana@example.com: ¿quién paga la devolución?")
+for s in spans:
+    print(f"{s['span']:<20} {s['duracion_s']:>5} s  {s['atributos']}")
+
+# Percentiles sobre muchas consultas simuladas (latencias de ejemplo, no medidas).
+latencias = sorted([1.1] * 90 + [2.4] * 6 + [9.0] * 4)
+p = lambda q: latencias[min(len(latencias) - 1, int(q * len(latencias)))]
+print("media:", round(sum(latencias) / len(latencias), 2), "| p50:", p(0.5), "| p95:", p(0.95), "| p99:", p(0.99))
+```
+
+Salida (determinista):
+
+```text
+guardarrail.entrada   0.05 s  {}
+recuperacion          0.05 s  {'n_resultados': 2, 'doc_ids': ['doc-002', 'doc-003']}
+generacion            0.05 s  {'modelo': 'mock', 'tokens_entrada': 12, 'tokens_salida': 19}
+guardarrail.salida    0.05 s  {}
+consulta              0.45 s  {'citas_validas': True}
+media: 1.49 | p50: 1.1 | p95: 2.4 | p99: 9.0
+```
+
+Qué enseña:
+
+- **Cada span cuenta una historia:** con la traza sabes qué documentos se recuperaron y cuántos tokens se consumieron. Los tiempos son de un reloj falso: en producción los medirías con el reloj real.
+- **El correo electrónico se enmascaró antes de entrar al modelo y a los registros**, de modo que la traza no almacena datos personales innecesarios: el guardarraíl de entrada protege también la observabilidad.
+- **La media engaña:** con 100 consultas inventadas (90 de 1,1 s, 6 de 2,4 s y 4 de 9 s) la media es 1,49 s, pero el **p99 es 9 s**: una de cada cien consultas es ocho veces más lenta que la mediana. Las alertas y los objetivos de nivel de servicio (SLO) se definen sobre percentiles.
+
+### Qué registrar (y qué no)
+
+**Sí:** identificadores de documentos y fragmentos recuperados con sus puntuaciones, filtros aplicados, versión del índice, del modelo de embeddings, del prompt y del modelo generativo, tokens y coste, latencia por span, veredictos de los guardarraíles, y feedback del usuario cuando exista.
+
+**Con cuidado:** el texto de la pregunta, de los documentos y de la respuesta puede contener **datos personales o confidenciales**. Decide si se guardan, enmascara lo sensible, aplica control de acceso al sistema de trazas (hereda los permisos de los documentos) y fija un periodo de retención. Una plataforma de trazas sin permisos es un **repositorio paralelo de datos sensibles**.
+
+**Para evaluar:** guarda lo necesario para reproducir la consulta (versión de todo) y, con consentimiento, ejemplos que alimenten el conjunto dorado.
+
+### El estándar y las herramientas
+
+**OpenTelemetry** mantiene convenciones semánticas para IA generativa: nombres y atributos estándar para **spans, métricas y eventos** de clientes de GenAI, con convenciones para MCP y específicas de proveedores como OpenAI. Su página en la documentación general indica que se trasladaron a un repositorio propio, y el repositorio está en desarrollo activo; **comprueba su estado antes de depender de los nombres de atributos**. Ventaja de seguir el estándar: poder cambiar de herramienta sin reinstrumentar.
+
+<Snapshot date="2026-10">
+
+Herramientas de observabilidad y evaluación de LLM, según su documentación oficial consultada el 5 de octubre de 2026: **Langfuse** se presenta como plataforma de ingeniería de IA de código abierto, con trazado de llamadas LLM y no LLM, gestión de prompts con versiones y métodos de evaluación (de LLM como juez a evaluadores propios), con opción de **autoalojamiento** y SDK para Python y JavaScript. **Arize Phoenix** es una plataforma de código abierto de observabilidad y evaluación de IA construida sobre **OpenTelemetry y OpenInference**, con trazado, evaluación, ingeniería de prompts y conjuntos de datos y experimentos. **LangSmith** es una plataforma de observabilidad independiente del framework, con inspección de trazas, paneles de rendimiento, reglas de automatización, recogida de feedback de usuarios y construcción de conjuntos de evaluación. Son productos que cambian de funciones, licencias y precios con frecuencia: verifica en la documentación vigente, y no tomes esta lista como comparativa ni como recomendación.
+
+</Snapshot>
+
+Criterios para elegir: si necesitas **autoalojar** por privacidad, si usas OpenTelemetry en el resto de tu infraestructura, cómo se integran con tu framework, si ofrecen evaluación y gestión de conjuntos de datos, y el coste a tu volumen. Para empezar, basta con registrar spans estructurados en tus propios logs: la herramienta se puede añadir después si el formato es estándar.
+
+### Guardarraíles (*guardrails*)
+
+Un **guardarraíl** es una comprobación que se ejecuta antes o después del modelo para impedir o corregir comportamientos no deseados. Colócalos en **capas**:
+
+- **Entrada:** enmascarar datos personales, rechazar contenido fuera de política, detectar intentos de inyección (como señal), limitar longitud.
+- **Recuperación:** permisos (lección anterior), filtros de contenido, cuarentena de documentos sospechosos.
+- **Salida:** validar el formato, **verificar citas**, comprobar fidelidad (muestreada si es cara), filtrar datos sensibles y respuestas fuera de alcance.
+- **Acciones:** confirmación humana para acciones irreversibles y validación de argumentos de herramientas.
+
+Principios: son **una capa, no la defensa completa** (la lista de OWASP para LLM subraya que la validación del manejo de salidas y la limitación de la agencia son controles propios); **miden su propio coste** (cada guardarraíl con un modelo añade latencia y dinero); **fallan de forma segura** (si el guardarraíl no responde, la política por defecto debe ser denegar o abstenerse, según el caso); y **se evalúan**: mide sus falsos positivos (bloquea lo legítimo) y falsos negativos (deja pasar lo malo) con ejemplos, igual que cualquier otro componente.
+
+### Del dato a la mejora: cerrar el ciclo
+
+Las trazas alimentan un ciclo de mejora continua: **muestrear** consultas reales, **evaluar** automáticamente (fidelidad, relevancia, abstención), **revisar** a mano los peores casos, **convertirlos** en preguntas del conjunto dorado, **corregir** (corpus, chunking, prompt) y **verificar** con la evaluación offline antes de desplegar. Sin observabilidad ese ciclo no existe.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Registrar todo el texto | Depuración completa | Datos personales y sensibles almacenados; coste |
+| Registrar solo ids y metadatos | Privacidad, coste bajo | Depurar exige reconstruir el texto desde el índice |
+| Muestrear trazas | Coste controlado | Puede perder casos raros |
+| Herramienta autoalojada | Control de los datos | Operarla y mantenerla |
+| Herramienta gestionada | Rapidez de puesta en marcha | Los datos salen de tu red; coste por volumen |
+| Guardarraíles con modelo | Más cobertura | Latencia y coste; falsos positivos |
+| Guardarraíles por reglas | Rápidos y deterministas | Fáciles de eludir |
+
+## Errores comunes en producción
+
+- **No registrar versiones.** Sin versión del índice, del prompt y del modelo no se puede reproducir ni comparar.
+- **Trazas con datos personales y sin permisos.** La herramienta de observabilidad acaba siendo la mayor fuga.
+- **Medir la media.** Oculta la cola de consultas lentas; usa percentiles.
+- **Guardar prompts completos sin retención.** Crece el almacén y el riesgo legal.
+- **Guardarraíles que fallan abiertos.** Si el servicio de moderación se cae y la consulta pasa sin comprobar, el control no existe.
+- **No evaluar los guardarraíles.** Un filtro que bloquea consultas legítimas deteriora el producto sin que nadie lo vea.
+- **Instrumentar a mano con nombres propios.** Dificulta cambiar de herramienta; sigue convenciones estándar cuando sea posible.
+- **No cerrar el ciclo.** Mirar paneles sin convertir los fallos en casos de prueba no mejora el sistema.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué registrarías de cada consulta de un RAG?"_ Pista: trazas con spans por etapa; ids y puntuaciones de documentos, filtros, versiones (índice, embeddings, prompt, modelo), tokens, latencias, veredictos de guardarraíles y feedback; con cuidado con los datos personales.
+- _"¿Cómo detectarías una degradación de calidad en producción?"_ Pista: muestreo de tráfico con evaluación sin referencia (fidelidad, relevancia), señales implícitas, revisión humana y alertas por percentiles y por tasa de abstención.
+- _"¿Dónde pondrías guardarraíles?"_ Pista: entrada, recuperación (permisos), salida (citas, fidelidad, datos sensibles) y acciones (confirmación); por capas, midiendo sus falsos positivos y negativos.
+- _"¿Qué es OpenTelemetry para GenAI?"_ Pista: convenciones estándar para spans, métricas y eventos de aplicaciones de IA generativa; en evolución, permite cambiar de herramienta sin reinstrumentar.
+
+</Callout>
+
+<KeyTakeaways>
+
+- La **observabilidad** permite reconstruir cada consulta: **trazas con spans** por etapa, con ids de documentos, versiones, tokens y latencias.
+- Mide **percentiles**: en el ejemplo, la media era 1,49 s pero el p99 era 9 s.
+- El sistema de trazas hereda la **sensibilidad de los datos**: enmascara, controla el acceso y define retención.
+- **OpenTelemetry** estandariza las trazas de GenAI (en evolución); Langfuse, Arize Phoenix y LangSmith son herramientas habituales, con opciones de autoalojamiento y evaluación distintas.
+- Los **guardarraíles** van por capas (entrada, recuperación, salida, acciones), fallan de forma segura y se **evalúan**; cierra el ciclo llevando los fallos reales al conjunto dorado.
+
+</KeyTakeaways>

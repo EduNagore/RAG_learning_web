@@ -1,0 +1,60 @@
+---
+title: Caché semántica
+description: Implementa una caché que reconoce preguntas parecidas por similitud de embeddings, con umbral, expulsión LRU, caducidad (TTL) y estadísticas, y entiende sus riesgos.
+part: rag
+module: m09-rag-produccion
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - caché semántica
+  - umbral de similitud
+  - LRU
+  - TTL
+packages: []
+hints:
+  - 'Normaliza el vector de cada consulta (divide por su norma, cuidando la norma 0) y la similitud coseno es un producto escalar.'
+  - 'Antes de buscar, filtra las entradas caducadas: `now - created > ttl`. Justo igual al ttl no caduca, y con `ttl=None` nada caduca.'
+  - 'Elige el mayor producto escalar y compáralo con `>= threshold`. En un acierto, saca la entrada de la lista y vuelve a añadirla al final para que sea la más reciente.'
+  - 'Guarda el índice de la mejor entrada y usa `entries.pop(indice)`: `list.remove` compara diccionarios que contienen arrays de NumPy y falla.'
+  - 'En `put`, añade al final y mientras `len(entries) > max_size`, elimina `entries.pop(0)`: la primera es la menos usada recientemente.'
+relatedLessons:
+  - m09-rag-produccion/01-latencia-coste-cache-y-actualizacion
+---
+
+## Objetivo
+
+Muchos usuarios preguntan lo mismo con palabras distintas («¿cuánto tarda el reembolso?», «¿en qué plazo me devuelven el dinero?»). Una **caché semántica** reconoce esas preguntas parecidas y devuelve la respuesta ya calculada, ahorrando una llamada al modelo (coste y latencia). El riesgo es devolver una respuesta de una pregunta que **parecía** igual y no lo era: por eso el umbral es la pieza clave.
+
+## Qué tienes que hacer
+
+Implementa la clase `SemanticCache(embed, threshold=0.9, max_size=100, ttl=None)`. `embed` es una función texto → vector. El tiempo se pasa con el argumento `now` (segundos) para que sea determinista.
+
+### `put(query, answer, now=0)`
+
+Guarda la respuesta con el vector (normalizado) de la consulta y su instante de creación. Si se supera `max_size`, expulsa la entrada **menos usada recientemente**.
+
+### `get(query, now=0)`
+
+1. Descarta las entradas **caducadas** (`now - created > ttl`; justo igual no caduca; `ttl=None` no caduca nunca).
+2. Busca la entrada con mayor similitud coseno. Si es `>= threshold`, es un **acierto**: cuenta `hits`, marca la entrada como la más reciente y devuelve su respuesta.
+3. Si no, cuenta `misses` y devuelve `None`.
+
+### `stats()`
+
+Devuelve `{"hits", "misses", "hit_rate", "size"}`; `hit_rate` es `0.0` si aún no hay consultas.
+
+## Un ejemplo para comprobar a mano
+
+```python
+from ragkit.embeddings import HashingEmbedder
+cache = SemanticCache(HashingEmbedder().embed, threshold=0.8)
+cache.put("cuánto tarda el reembolso", "7 días hábiles")
+cache.get("cuánto tarda el reembolso")   # '7 días hábiles'
+cache.get("horario del chat")            # None
+```
+
+<Callout type="nota" title="El umbral es una decisión de seguridad">
+
+Un umbral bajo sube el porcentaje de aciertos y también el riesgo de contestar con la respuesta de **otra** pregunta («plazo para empresas» frente a «plazo para particulares» se parecen mucho). Además, una caché compartida puede filtrar respuestas entre usuarios con permisos distintos: en producción, la clave de caché debe incluir el contexto de permisos.
+
+</Callout>

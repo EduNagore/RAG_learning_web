@@ -1,0 +1,65 @@
+---
+title: Recuperación con permisos (ACL)
+description: Implementa el control de acceso por nivel y departamento, aplícalo antes de puntuar para que top-k se llene con documentos permitidos, y audita el resultado antes de construir el prompt.
+part: rag
+module: m09-rag-produccion
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - control de acceso (ACL)
+  - prefiltrado por permisos
+  - defensa en profundidad
+  - fuga de información
+packages: []
+hints:
+  - 'Usa el diccionario `LEVELS` para comparar niveles: `LEVELS.get(doc["access"])` es `None` si el nivel del documento es desconocido (deniega). Un usuario sin nivel cuenta como `public` (valor 0).'
+  - 'El restringido exige las dos condiciones a la vez: `granted >= required` y `doc["department"] in user.get("departments", [])`.'
+  - 'En `acl_search`, filtra con `filter_docs` y solo después puntúa. Ordena con la clave `(-puntuación, posición)` para que el empate respete el orden de entrada.'
+  - '`audit_leaks` debe incluir también los ids que no existen en `docs_by_id` (usa `i not in docs_by_id or not can_access(...)`).'
+relatedLessons:
+  - m09-rag-produccion/02-seguridad-permisos-e-inyeccion
+---
+
+## Objetivo
+
+En un sistema con documentos de distintos niveles de confidencialidad, un fallo de permisos es una **fuga de datos**: el modelo puede citar el salario de un puesto a quien no debería saberlo. La regla de oro es **aplicar los permisos al recuperar, antes de que el modelo vea nada**. Vas a implementarla y a añadir una auditoría final como defensa en profundidad.
+
+## Modelo de permisos
+
+- Cada documento tiene `access` (`public`, `internal` o `restricted`) y `department`.
+- Cada usuario tiene `level` (`public`, `internal` o `restricted`) y una lista de `departments`.
+
+## Qué tienes que hacer
+
+### `can_access(user, doc)`
+
+- `public`: cualquiera.
+- `internal`: usuarios con nivel `internal` o `restricted`.
+- `restricted`: nivel `restricted` **y** el departamento del documento entre los del usuario.
+- Un nivel de acceso desconocido en el documento se **deniega siempre**. Un usuario sin nivel (o con uno desconocido) cuenta como `public`.
+
+### `filter_docs(user, docs)`
+
+Devuelve los documentos accesibles, en el mismo orden.
+
+### `acl_search(user, query, docs, score_fn, top_k=3)`
+
+Filtra por permisos **antes** de puntuar con `score_fn(query, doc)`, descarta las puntuaciones `<= 0`, ordena de mayor a menor (el empate lo gana el documento que aparece antes) y devuelve los ids de los `top_k` mejores.
+
+### `audit_leaks(user, result_ids, docs_by_id)`
+
+Devuelve, en orden, los ids del resultado que el usuario **no debería ver** o que no existen en `docs_by_id`. Se usa sobre el resultado final como segunda barrera.
+
+## Un ejemplo para comprobar a mano
+
+```python
+doc = {"id": "d1", "access": "restricted", "department": "Recursos Humanos"}
+can_access({"level": "internal"}, doc)                                           # False
+can_access({"level": "restricted", "departments": ["Recursos Humanos"]}, doc)    # True
+```
+
+<Callout type="nota" title="Filtrar antes, no después">
+
+Si recuperas los diez mejores y *luego* quitas los no permitidos, puedes quedarte con cero resultados (el problema del postfiltrado) y, peor, con una implementación en la que un descuido deja pasar un documento. Filtrar **antes** garantiza que `top_k` se llena con documentos permitidos, y la auditoría final atrapa los errores de otras capas.
+
+</Callout>

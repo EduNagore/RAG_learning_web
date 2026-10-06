@@ -1,0 +1,55 @@
+---
+title: Ventana de frases
+description: Expande cada frase recuperada con sus vecinas, fusiona las ventanas que se solapan y entrega bloques de contexto contiguos. Es la alternativa fina al documento padre completo.
+part: rag
+module: m05-recuperacion-avanzada
+difficulty: 2
+estimatedMinutes: 30
+concepts:
+  - sentence-window retrieval
+  - fusión de intervalos
+  - contexto local
+packages: []
+hints:
+  - 'Cada acierto en la posición `p` genera el intervalo `[max(0, p - w), min(n, p + w + 1))` (el final es exclusivo).'
+  - 'Para fusionar, ordena los intervalos por inicio y recorre: si el inicio del actual es menor o igual que el final del anterior, amplía el final (`max`); si no, empieza uno nuevo. Dos ventanas contiguas también se unen.'
+  - 'En `sentence_window_context` agrupa los aciertos por documento conservando el orden en que aparece cada documento por primera vez.'
+  - 'El texto de cada bloque es `" ".join(frases[inicio:fin])`.'
+relatedLessons:
+  - m05-recuperacion-avanzada/04-parent-document-y-raptor
+---
+
+## Objetivo
+
+Entregar el documento entero puede ser demasiado; entregar solo la frase recuperada, muy poco. La **ventana de frases** toma cada frase que casó y le añade `w` frases a cada lado **dentro del mismo documento**. Si dos ventanas se tocan o se solapan, se **fusionan** en un solo bloque para no repetir texto.
+
+## Qué tienes que hacer
+
+### `window_ranges(positions, n_sentences, w)`
+
+`positions` son las posiciones (desde 0) de las frases acertadas **en un mismo documento**, en cualquier orden y quizá repetidas; `n_sentences` es cuántas frases tiene el documento. Devuelve una lista de intervalos `(inicio, fin)` con `fin` **exclusivo**, ordenados y **fusionados**:
+
+- cada acierto en `p` produce `(max(0, p - w), min(n_sentences, p + w + 1))`,
+- los intervalos que se solapan **o son contiguos** (`inicio <= fin_anterior`) se unen en uno,
+- sin posiciones devuelve una lista vacía.
+
+### `sentence_window_context(sentences_by_doc, hits, w=1)`
+
+`sentences_by_doc` es un diccionario `id_documento → lista de frases`. `hits` es una lista de tuplas `(id_documento, posición)` en orden de relevancia. Devuelve una lista de bloques `{"doc": id, "text": texto}`:
+
+- los documentos salen en el orden de su **primer acierto** en `hits`,
+- dentro de cada documento, los bloques van en orden de posición y cada bloque une sus frases con un espacio,
+- ignora los aciertos con documento desconocido o posición fuera de rango.
+
+## Un ejemplo para comprobar a mano
+
+```python
+window_ranges([2, 4, 9], n_sentences=12, w=1)
+# [(1, 6), (8, 11)]   las ventanas de 2 y 4 se solapan: (1,4) y (3,6) → (1,6)
+```
+
+<Callout type="nota" title="Elegir w">
+
+Con `w = 0` entregas solo las frases que casaron; con `w` muy grande, el documento entero. En la lección viste que `w = 1` daba casi la cobertura del documento padre con bastante menos texto en Nimbus. Con otros documentos el valor óptimo será otro: mídelo.
+
+</Callout>

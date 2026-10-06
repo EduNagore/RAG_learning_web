@@ -1,0 +1,95 @@
+lesson: m05-recuperacion-avanzada/03-transformacion-de-consulta
+questions:
+  - id: m05-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿A qué se llama «brecha pregunta-documento»?'
+    options:
+      - 'A la diferencia de tamaño entre el índice y el corpus.'
+      - 'A que la pregunta del usuario y el texto que contiene la respuesta suelen usar vocabulario y forma distintos.'
+      - 'A la latencia entre la consulta y la respuesta.'
+      - 'A los documentos que no se han indexado.'
+    answer: [1]
+    explanation: 'Una pregunta es corta e informal y un documento es largo y formal. «Seguir» y «seguimiento» hablan de lo mismo con palabras distintas, y tanto BM25 como los embeddings lo sufren.'
+    ref: '#intuición-el-usuario-pregunta-de-una-forma-y-el-documento-responde-de-otra'
+
+  - id: m05-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué hace HyDE?'
+    options:
+      - 'Pide al LLM una respuesta hipotética y busca con el embedding de ese texto en lugar de con la pregunta.'
+      - 'Divide la pregunta en subpreguntas y las busca por separado.'
+      - 'Elimina los documentos duplicados del índice.'
+      - 'Entrena un reranker con las preguntas de los usuarios.'
+    answer: [0]
+    explanation: 'La respuesta hipotética puede contener datos falsos, pero tiene la forma y el vocabulario de una respuesta, y por eso su embedding queda cerca de los documentos reales.'
+    ref: '#hyde-documentos-hipotéticos'
+
+  - id: m05-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es el riesgo principal de la fusión multi-query señalado en la lección?'
+    options:
+      - 'Que RRF no funcione con más de una lista.'
+      - 'Que las reformulaciones se desvíen del tema y añadan a la fusión documentos irrelevantes.'
+      - 'Que la consulta original se duplique en el índice.'
+      - 'Que los embeddings dejen de ser deterministas.'
+    answer: [1]
+    explanation: 'Si las consultas generadas no son suficientemente relevantes respecto a la original, la fusión pierde relevancia. En el experimento, las variantes desviadas empeoraron q02 de la posición 5 a la 9.'
+    ref: '#multi-query-y-fusión-rag-fusion'
+
+  - id: m05-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, la pregunta q09 subió a la posición 1 incluso con reformulaciones desviadas. ¿Cómo se interpreta?'
+    options:
+      - 'Que las reformulaciones desviadas son una buena estrategia.'
+      - 'Que RRF ignora las reformulaciones.'
+      - 'Es una casualidad: una variante comparte palabras con el documento de seguimiento, y no se puede basar una estrategia en ello.'
+      - 'Que BM25 es insensible al vocabulario.'
+    answer: [2]
+    explanation: 'La variante sobre atención al cliente comparte palabras con el documento correcto, que menciona la atención al cliente. Un resultado favorable aislado no demuestra nada; hay que medir sobre un conjunto de preguntas.'
+    ref: '#un-experimento-tres-preguntas-que-bm25-no-encuentra'
+
+  - id: m05-03-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué buenas prácticas se recomiendan al transformar consultas? Marca todas las correctas.'
+    options:
+      - 'Incluir siempre la consulta original en la fusión.'
+      - 'Registrar las consultas transformadas para poder depurar los fallos de recuperación.'
+      - 'Incluir el historial relevante cuando se reescribe una pregunta en una conversación.'
+      - 'Aplicar todas las técnicas a todas las preguntas sin medir su efecto.'
+    answer: [0, 1, 2]
+    explanation: 'La consulta original protege frente a reformulaciones desviadas, la traza permite depurar y el historial hace la pregunta autocontenida. Aplicar todo siempre añade latencia y coste sin garantía de mejora.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m05-03-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'En HyDE, la respuesta hipotética generada por el LLM se puede entregar al generador final como evidencia.'
+    answer: [1]
+    explanation: 'Es falso. El texto hipotético puede inventar detalles; solo se usa su forma para buscar. Los documentos recuperados son la evidencia, nunca la respuesta hipotética.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m05-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'En RAG conversacional, una pregunta como «¿y para empresas?» necesita reescribirse con el contexto del diálogo antes de buscar.'
+    answer: [0]
+    explanation: 'Es verdadero. Sin saber de qué se hablaba antes, la consulta no tiene contenido para buscar. La reescritura la convierte en una pregunta autocontenida.'
+    ref: '#reformulación-rewrite'
+
+  - id: m05-03-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Qué plantea el step-back prompting aplicado a la recuperación?'
+    options:
+      - 'Repetir la búsqueda hasta que el reranker esté satisfecho.'
+      - 'Reducir el número de documentos a uno.'
+      - 'Formular una pregunta más general que cubra el principio o concepto detrás de la original y recuperar también para ella.'
+      - 'Traducir la pregunta a otro idioma.'
+    answer: [2]
+    explanation: 'Se pide una versión abstracta de la pregunta («¿qué leyes rigen…?») para traer contexto general que la pregunta concreta no encuentra por sí sola.'
+    ref: '#step-back-preguntar-por-el-principio'

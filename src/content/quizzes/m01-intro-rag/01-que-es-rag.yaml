@@ -1,0 +1,85 @@
+lesson: m01-intro-rag/01-que-es-rag
+questions:
+  - id: m01-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué combina un sistema **RAG** según el artículo que le dio nombre?'
+    options:
+      - 'Memoria paramétrica (el modelo) y memoria no paramétrica (un índice externo consultable).'
+      - 'Dos modelos de lenguaje que se corrigen entre sí.'
+      - 'Un modelo de lenguaje y una hoja de cálculo.'
+      - 'Un tokenizador y un sistema de caché.'
+    answer: [0]
+    explanation: 'RAG une lo que el modelo aprendió (pesos) con un índice externo al que accede un recuperador. No son dos LLM, ni una hoja de cálculo, ni piezas de tokenización o caché.'
+    ref: '#memoria-paramétrica-y-no-paramétrica'
+
+  - id: m01-01-q2
+    type: order
+    difficulty: 1
+    prompt: 'Ordena los tres pasos básicos de un sistema RAG.'
+    options:
+      - 'Indexar los documentos: trocearlos, vectorizarlos y guardarlos en un índice.'
+      - 'Recuperar los fragmentos más cercanos a la pregunta.'
+      - 'Construir el prompt con la evidencia y generar la respuesta.'
+    explanation: 'Primero se prepara el índice (offline), después se recupera con cada pregunta y por último se genera con la evidencia en el prompt. Sin indexar no hay nada que recuperar.'
+    ref: '#los-tres-pasos'
+
+  - id: m01-01-q3
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué ventajas aporta la memoria **no paramétrica** (el índice) frente a la paramétrica (los pesos)? Marca todas las correctas.'
+    options:
+      - 'Se actualiza añadiendo o cambiando documentos, sin reentrenar.'
+      - 'Cada fragmento tiene un origen que se puede citar.'
+      - 'Se puede filtrar qué documentos ve cada usuario.'
+      - 'Garantiza que el modelo nunca alucine.'
+    answer: [0, 1, 2]
+    explanation: 'Actualización barata, trazabilidad y control de acceso por usuario son ventajas reales del índice. Ninguna técnica garantiza la ausencia total de alucinaciones: RAG las reduce si la recuperación es buena.'
+    ref: '#memoria-paramétrica-y-no-paramétrica'
+
+  - id: m01-01-q4
+    type: truefalse
+    difficulty: 2
+    prompt: 'La recuperación vectorial devuelve siempre k resultados, aunque algunos no sean relevantes para la pregunta.'
+    answer: [0]
+    explanation: 'Es verdadero. Se devuelven los k más cercanos sin más; en el ejemplo de la lección el segundo resultado era ruido con una puntuación próxima. Por eso hay que medir, filtrar o usar umbrales.'
+    ref: '#un-ejemplo-mínimo-y-real'
+
+  - id: m01-01-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Qué mostró **RETRO** (Borgeaud et al.)?'
+    options:
+      - 'Que un modelo con recuperación sobre una base de 2 billones de tokens igualaba a GPT-3 en The Pile con 25 veces menos parámetros.'
+      - 'Que la recuperación no mejora a los modelos de lenguaje.'
+      - 'Que hay que reentrenar el modelo cada día.'
+      - 'Que los embeddings no sirven para buscar.'
+    answer: [0]
+    explanation: 'RETRO usó una gran base de datos de recuperación para obtener un rendimiento comparable al de modelos mucho mayores. Las otras afirmaciones contradicen su resultado o no aparecen en el trabajo.'
+    ref: '#un-poco-de-historia-de-la-investigación-a-la-práctica'
+
+  - id: m01-01-q6
+    type: single
+    difficulty: 2
+    prompt: '¿En qué se diferencia el RAG que se usa hoy en la industria de trabajos como REALM o RETRO?'
+    options:
+      - 'Se usa un LLM ya entrenado como generador, sin tocar sus pesos, y se le añade un sistema de recuperación aparte.'
+      - 'Se entrena desde cero un modelo nuevo para cada empresa.'
+      - 'Ya no se usan documentos, solo el conocimiento del modelo.'
+      - 'Se sustituye el modelo de lenguaje por un motor de búsqueda.'
+    answer: [0]
+    explanation: 'Lo habitual es reutilizar un LLM entrenado y añadir recuperación como pieza externa. Los trabajos de investigación entrenaban el recuperador y el generador de forma conjunta o especializada.'
+    ref: '#un-poco-de-historia-de-la-investigación-a-la-práctica'
+
+  - id: m01-01-q7
+    type: single
+    difficulty: 3
+    prompt: 'Quieres que el asistente responda siempre con un tono y un formato concretos. ¿Qué técnica encaja mejor?'
+    options:
+      - 'RAG, porque añade conocimiento.'
+      - 'Ajuste fino o instrucciones, porque se trata de cambiar el comportamiento, no el conocimiento.'
+      - 'Aumentar el número de fragmentos recuperados.'
+      - 'Usar una base de datos vectorial más grande.'
+    answer: [1]
+    explanation: 'RAG cambia qué sabe el modelo al responder, no cómo se expresa. El tono y el formato son comportamiento: se trabajan con instrucciones y, si hace falta, ajuste fino. Más fragmentos o un índice mayor no cambian el estilo.'
+    ref: '#trade-offs-cuándo-rag-es-una-buena-idea'

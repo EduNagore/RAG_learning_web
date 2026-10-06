@@ -1,0 +1,100 @@
+lesson: m09-rag-produccion/01-latencia-coste-cache-y-actualizacion
+questions:
+  - id: m09-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué etapa suele dominar el tiempo y el coste en un pipeline de RAG típico?'
+    options:
+      - 'La construcción del prompt.'
+      - 'La generación del modelo y las llamadas auxiliares a modelos (reescritura, reranking, juez).'
+      - 'El cálculo del embedding de la consulta.'
+      - 'La lectura del archivo de configuración.'
+    answer: [1]
+    explanation: 'La búsqueda vectorial con un buen índice tarda decenas de milisegundos; la generación y las llamadas extra a modelos suelen pesar mucho más. Por eso se mide por etapas antes de optimizar.'
+    ref: '#dónde-se-va-el-tiempo-y-el-dinero'
+
+  - id: m09-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué conviene medir percentiles (p95, p99) y no solo la media de latencia?'
+    options:
+      - 'Porque la media no se puede calcular.'
+      - 'Porque la media oculta las consultas lentas, que son las que sufre una parte de los usuarios.'
+      - 'Porque los percentiles son más baratos de calcular.'
+      - 'Porque el p99 siempre es menor que la media.'
+    answer: [1]
+    explanation: 'Una media buena puede esconder una cola de consultas muy lentas. Los percentiles altos reflejan la peor experiencia habitual.'
+    ref: '#dónde-se-va-el-tiempo-y-el-dinero'
+
+  - id: m09-01-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, la paráfrasis legítima puntuó 0,756 y la pregunta «casi igual pero distinta» (particulares frente a empresa) 0,714. ¿Qué implica para una caché semántica?'
+    options:
+      - 'Que un umbral de 0,5 es seguro.'
+      - 'Que el umbral apenas separa lo equivalente de lo parecido pero distinto: aceptar la paráfrasis casi acepta también la pregunta distinta.'
+      - 'Que la similitud no se puede calcular.'
+      - 'Que las cachés semánticas nunca funcionan.'
+    answer: [1]
+    explanation: 'Los embeddings capturan el tema y pesan poco en diferencias como un «no», un número o un tipo de cliente. El umbral hay que validarlo con parejas reales y preferir perder aciertos a servir respuestas equivocadas.'
+    ref: '#caché-semántica'
+
+  - id: m09-01-q4
+    type: code-output
+    difficulty: 2
+    prompt: 'Con costes ficticios (coste del LLM = 1,0 y de la caché = 0,02), ¿qué imprime este código?'
+    code: |-
+      def coste_medio(tasa, coste_llm=1.0, coste_cache=0.02):
+          return coste_cache + (1 - tasa) * coste_llm
+
+      print(round(coste_medio(0.5), 2))
+    options:
+      - '0.5'
+      - '0.52'
+      - '0.48'
+      - '1.02'
+    answer: [1]
+    explanation: '0,02 + (1 − 0,5) · 1,0 = 0,52. Con tasa de aciertos 0 el coste sería 1,02, mayor que no tener caché.'
+    ref: '#caché-semántica'
+
+  - id: m09-01-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué medidas hacen más segura una caché semántica? Marca todas las correctas.'
+    options:
+      - 'Incluir en la clave los permisos del usuario y la versión del corpus.'
+      - 'Invalidar las entradas que dependen de documentos modificados o usar un TTL corto.'
+      - 'Validar el umbral con parejas reales de preguntas equivalentes y casi iguales.'
+      - 'Compartir una única caché global sin distinguir usuarios, para maximizar los aciertos.'
+    answer: [0, 1, 2]
+    explanation: 'Sin permisos en la clave, una caché compartida puede filtrar respuestas construidas con documentos restringidos. Maximizar aciertos a costa de seguridad y corrección es el error típico.'
+    ref: '#diseño-seguro-de-una-caché-semántica'
+
+  - id: m09-01-q6
+    type: single
+    difficulty: 2
+    prompt: '¿Cómo detecta una actualización incremental con huellas que un documento debe reindexarse?'
+    options:
+      - 'Porque su identificador ha cambiado de longitud.'
+      - 'Porque la huella (hash) de su contenido es distinta de la guardada en el índice.'
+      - 'Porque es el más antiguo.'
+      - 'Porque el usuario lo ha consultado mucho.'
+    answer: [1]
+    explanation: 'Se compara la huella del contenido actual con la guardada: distinta significa cambio y se reindexa; id nuevo es alta; id desaparecido es baja y se borra, también de las cachés.'
+    ref: '#actualización-incremental-del-índice'
+
+  - id: m09-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Si cambias el modelo de embeddings, basta con reindexar los documentos nuevos; los vectores antiguos siguen siendo comparables.'
+    answer: [1]
+    explanation: 'Es falso. Los vectores de modelos distintos no son comparables entre sí: hay que reindexar todo y guardar la versión del modelo con cada vector.'
+    ref: '#actualización-incremental-del-índice'
+
+  - id: m09-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una caché semántica con tasa de aciertos del 0 % cuesta más que no tener caché, porque cada consulta paga además el coste de consultarla.'
+    answer: [0]
+    explanation: 'Es verdadero. Sin aciertos solo se añade coste (en el ejemplo, 1,02 frente a 1,0). Conviene medir la tasa real antes de mantener la complejidad.'
+    ref: '#caché-semántica'
