@@ -1,0 +1,191 @@
+---
+title: Depurar un RAG y un agente, del síntoma a la causa
+description: Un método para diagnosticar por qué falla un sistema de RAG o de agentes, separando recuperación, ranking, generación y abstención, leyendo trazas y priorizando arreglos, con una clasificación de fallos ejecutable.
+module: m18-system-design
+order: 2
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Separar un fallo de RAG en recuperación, ranking, generación o abstención a partir de un registro.
+  - Priorizar arreglos según la frecuencia de cada causa en lugar de la intuición.
+  - Leer la traza de un agente para localizar el paso que originó el fallo.
+  - Responder en una entrevista a una pregunta de depuración con un procedimiento ordenado.
+prerequisites:
+  - m18-system-design/01-metodo-de-system-design-rag-y-agentes
+volatility: low
+lastReviewed: 2026-10-06
+sources:
+  - title: Demystifying evals for AI agents
+    url: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+    type: blog
+    authors: Anthropic
+    year: 2026
+  - title: Lost in the Middle, How Language Models Use Long Contexts
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, Liang
+    year: 2023
+  - title: Why Do Multi-Agent LLM Systems Fail?
+    url: https://arxiv.org/abs/2503.13657
+    type: paper
+    authors: Cemri et al.
+    year: 2025
+---
+
+## Intuición: «responde mal» no es un diagnóstico
+
+La pregunta de entrevista más reveladora no es de diseño sino de depuración: «los usuarios dicen que el asistente responde mal, ¿qué haces?». Quien improvisa cambia el modelo, el prompt o el tamaño de los fragmentos al azar y observa. Quien tiene método **separa el sistema en etapas, localiza en cuál se rompe cada fallo y arregla primero la causa más frecuente**.
+
+La idea central es que un RAG es una **tubería**: si el documento correcto no llega al índice, no se recupera; si se recupera pero queda fuera del contexto, el modelo no lo ve; si lo ve y aun así responde mal, el fallo es de generación. Cada etapa tiene arreglos distintos, y aplicar el arreglo de una etapa a un fallo de otra no sirve de nada (cambiar el prompt no recupera un documento que nunca llegó).
+
+## Cómo funciona
+
+### El árbol de diagnóstico de un RAG
+
+Para cada pregunta que falla, se hacen preguntas en este orden, que coincide con el recorrido del dato:
+
+1. **¿Existe la respuesta en el corpus?** Si no existe, lo correcto era **abstenerse**; responder es un fallo de generación (alucinar) y no de recuperación.
+2. **¿El documento correcto está en los resultados de la recuperación?** Si no llega ni en un top-k amplio, es un fallo de **recuperación**: ingesta, troceado, embeddings, léxico frente a denso, filtros.
+3. **¿Llega al contexto del modelo?** Si estaba recuperado pero fuera del top-k que se pasa al modelo, es un fallo de **ranking**: reranker, tamaño del top-k, orden. Además, el orden importa: Liu et al. mostraron que los modelos aprovechan peor la información situada en mitad de un contexto largo que la del principio o el final.
+4. **Si está en el contexto, ¿responde bien?** Si el modelo recibió la evidencia y falló, es de **generación**: prompt, instrucciones de fundamentación, citas, modelo, formato. Aquí hay subcasos: respondió sin citar, citó y aun así se equivocó, o **se abstuvo teniendo la evidencia**.
+
+Esto se automatiza con un registro por pregunta que guarde lo mínimo: documentos esperados, documentos recuperados en orden, si se abstuvo, si citó y si la respuesta fue correcta. El código siguiente clasifica siete fallos de un sistema de juguete (registros **escritos a mano**, no medidos) y cuenta las causas.
+
+```python
+from collections import Counter
+
+# Registros de fallos de un RAG de juguete (ESCRITOS A MANO): qué pasó en cada pregunta mala.
+# gold = documentos que contienen la respuesta; top = lo recuperado (en orden); k = 3
+REGISTROS = [
+    {"q": "plazo devolución", "gold": {"d1"}, "top": ["d9", "d8", "d7", "d1"], "ok": False, "cita": False, "abstuvo": False},
+    {"q": "envío a Canarias", "gold": {"d2"}, "top": ["d5", "d2", "d6"], "ok": False, "cita": True, "abstuvo": False},
+    {"q": "baja del servicio", "gold": {"d3"}, "top": ["d3", "d4", "d5"], "ok": False, "cita": True, "abstuvo": False},
+    {"q": "factura en euros", "gold": {"d4"}, "top": ["d4", "d1", "d2"], "ok": False, "cita": False, "abstuvo": False},
+    {"q": "precio exprés", "gold": {"d6"}, "top": ["d6", "d2", "d3"], "ok": True, "cita": True, "abstuvo": False},
+    {"q": "política de 2019", "gold": set(), "top": ["d1", "d2", "d3"], "ok": False, "cita": False, "abstuvo": False},
+    {"q": "contacto soporte", "gold": {"d7"}, "top": ["d7", "d1", "d2"], "ok": False, "cita": True, "abstuvo": True},
+]
+K = 3
+
+
+def diagnosticar(r):
+    if r["ok"]:
+        return "correcta"
+    if not r["gold"]:
+        return "sin respuesta en el corpus: debió abstenerse" if not r["abstuvo"] else "abstención correcta"
+    posiciones = [i for i, d in enumerate(r["top"]) if d in r["gold"]]
+    if not posiciones:
+        return "recuperación: el documento no llegó"
+    if posiciones[0] >= K:
+        return "ranking: llegó, pero fuera del top-k"
+    if r["abstuvo"]:
+        return "generación: se abstuvo con evidencia disponible"
+    if not r["cita"]:
+        return "generación: respuesta sin citar la evidencia"
+    return "generación: citó la evidencia pero respondió mal"
+
+
+etiquetas = [diagnosticar(r) for r in REGISTROS]
+for r, e in zip(REGISTROS, etiquetas):
+    print(f"{r['q']:<20} {e}")
+print()
+fallos = Counter(e for e in etiquetas if e != "correcta")
+for causa, n in fallos.most_common():
+    print(f"{n} × {causa}")
+```
+
+Salida (determinista):
+
+```text
+plazo devolución     ranking: llegó, pero fuera del top-k
+envío a Canarias     generación: citó la evidencia pero respondió mal
+baja del servicio    generación: citó la evidencia pero respondió mal
+factura en euros     generación: respuesta sin citar la evidencia
+precio exprés        correcta
+política de 2019     sin respuesta en el corpus: debió abstenerse
+contacto soporte     generación: se abstuvo con evidencia disponible
+
+2 × generación: citó la evidencia pero respondió mal
+1 × ranking: llegó, pero fuera del top-k
+1 × generación: respuesta sin citar la evidencia
+1 × sin respuesta en el corpus: debió abstenerse
+1 × generación: se abstuvo con evidencia disponible
+```
+
+Cómo leer esto:
+
+- **Cuatro de seis fallos son de generación** y solo uno de ranking; ninguno es de recuperación pura. Con estos datos, cambiar el modelo de *embeddings* o el troceado no ayudaría: el documento correcto **llega**. El esfuerzo debe ir al prompt de fundamentación, a las citas y a la evaluación de la respuesta.
+- **Una causa concreta, un arreglo concreto.** El fallo de ranking pide subir el top-k o añadir un reranker; «respondió sin citar» pide exigir citas en el formato de salida; «se abstuvo con evidencia» pide revisar un umbral de abstención demasiado estricto; «debió abstenerse» pide enseñar al sistema a decir que no lo sabe.
+- **Con siete registros no se concluye nada estadístico**: en un sistema real se hace con decenas o cientos de fallos, y se reporta el tamaño de la muestra. Lo que importa es el **procedimiento**: clasificar, contar, priorizar.
+- **Pregunta sin respuesta en el corpus**: se separa porque su arreglo (abstención) es distinto al de una pregunta con respuesta.
+
+### Priorizar: frecuencia por impacto por esfuerzo
+
+No todos los fallos valen lo mismo. Ordena las causas por **cuántas preguntas afectan**, **qué coste tienen** (un error en una pregunta de facturación pesa más que en una de cortesía) y **cuánto cuesta arreglarlas**. Un arreglo que cubre el 40 % de los fallos con un cambio de prompt va antes que otro que cubre el 5 % con un rediseño del índice. Y **cada arreglo se valida con el conjunto de oro** antes y después, para comprobar que no rompe lo que funcionaba (regresión).
+
+### Depurar un agente: leer la traza
+
+En un agente el fallo suele estar en **un paso concreto** de una trayectoria larga, y la causa visible (la respuesta final mala) está lejos del origen. El procedimiento:
+
+1. **Abre la transcripción completa** del intento fallido, no solo la respuesta final. La guía de Anthropic sobre evaluación de agentes insiste en leer las transcripciones, entre otras razones para distinguir fallos del agente de fallos del evaluador.
+2. **Encuentra el primer paso donde la trayectoria se desvía** de lo razonable: una herramienta equivocada, un argumento mal formado, una observación mal interpretada, un plan que se abandona.
+3. **Clasifica la causa**: ¿descripción de herramienta ambigua?, ¿error devuelto sin información útil?, ¿contexto saturado y el modelo pierde datos?, ¿bucle?, ¿falta de verificación? La taxonomía MAST sobre fallos de sistemas multiagente agrupa los modos de fallo en problemas de diseño del sistema, desalineación entre agentes y verificación de la tarea, y es una buena lista de comprobación.
+4. **Arregla la causa, no el síntoma**: mejorar la herramienta o su error suele rendir más que añadir instrucciones al prompt.
+5. **Convierte el fallo en una tarea de evaluación** para que no vuelva sin que alguien lo note.
+
+### Fallos que parecen del modelo y son de los datos
+
+Una parte de los fallos de «generación» tiene su origen antes de que el modelo intervenga. Cuatro patrones que conviene descartar antes de tocar el prompt:
+
+- **Documentos contradictorios o duplicados.** Dos versiones de una política con plazos distintos llegan juntas al contexto y el modelo elige una al azar. El arreglo es de ingesta: versiones, fechas y eliminación de duplicados, no de prompt.
+- **Información partida entre fragmentos.** La respuesta necesita una condición que quedó en el fragmento anterior. El arreglo es de troceado o de enriquecimiento de contexto.
+- **Tablas y listas aplanadas.** Una tabla convertida en texto pierde la relación entre filas y columnas y el modelo lee mal los valores. El arreglo es de análisis del documento.
+- **Metadatos ausentes.** Sin fecha, producto o región, no se puede filtrar y se recuperan documentos de otro contexto. El arreglo es de modelado de metadatos.
+
+La regla práctica es **mirar el contexto exacto que recibió el modelo antes de culparlo**: si un humano leyendo ese contexto tampoco podría responder bien, el fallo no es de generación. Esta comprobación, que cuesta minutos, evita semanas de ajustes de prompt que no pueden funcionar.
+
+### Qué instrumentar desde el principio
+
+- Por pregunta: documentos recuperados con su puntuación y posición, contexto final enviado, respuesta, citas, tokens y latencia.
+- Por agente: trazas completas con pasos, argumentos, resultados, errores y motivo de parada.
+- Una **etiqueta de causa** que el equipo asigna a los fallos (aunque sea a mano al principio): es la que alimenta la priorización.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Clasificar fallos por etapa | Arreglos dirigidos | Requiere registros y a veces etiquetado manual |
+| Muestrear fallos para revisar | Barato | Sesgo si no es aleatorio |
+| Arreglar primero lo más frecuente | Máximo impacto | Puede dejar causas raras pero graves |
+| Cambiar de modelo para «mejorar» | Rápido de probar | Puede esconder una causa de recuperación o de datos |
+| Registrar todo | Depuración completa | Coste y privacidad |
+
+## Errores comunes en producción
+
+- **Cambiar varias cosas a la vez**, sin saber cuál mejoró o empeoró el resultado.
+- **Arreglar la etapa equivocada**: tocar el prompt cuando el documento nunca llegó.
+- **Depurar con ejemplos sueltos** en lugar de con una muestra clasificada.
+- **No guardar los documentos recuperados**, lo que impide separar recuperación de generación.
+- **Confundir «no sabe» con «no encontró»**: son causas y arreglos distintos.
+- **No volver a ejecutar el conjunto de oro** tras cada arreglo.
+- **Culpar al modelo por defecto**, sin leer la traza.
+- **No convertir los fallos en tareas de evaluación.**
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"Los usuarios dicen que el asistente responde mal, ¿qué haces?"_ Pista: recoger una muestra de fallos, clasificarlos por etapa (recuperación, ranking, generación, abstención), contar y atacar la causa más frecuente con validación en el conjunto de oro.
+- _"¿Cómo distingues un fallo de recuperación de uno de generación?"_ Pista: mirar si el documento correcto estaba en el contexto enviado al modelo.
+- _"¿Cómo depuras un agente que da una respuesta incorrecta?"_ Pista: leer la transcripción, localizar el primer paso desviado, clasificar la causa y convertirlo en una tarea de evaluación.
+- _"¿Qué registrarías para poder depurar?"_ Pista: documentos recuperados con posición, contexto final, respuesta y citas; trazas de agente con motivo de parada.
+
+</Callout>
+
+<KeyTakeaways>
+
+- «Responde mal» se descompone: **recuperación, ranking, generación o abstención**, cada una con su arreglo.
+- Clasifica una **muestra** de fallos, cuenta y prioriza por frecuencia, impacto y esfuerzo; en el ejemplo, cuatro de seis fallos eran de generación y cambiar los embeddings no habría ayudado.
+- En agentes, **lee la transcripción**, encuentra el primer paso desviado y arregla la causa.
+- Registra desde el principio lo necesario para separar etapas, y valida cada arreglo con el conjunto de oro.
+- Convierte cada fallo real en una tarea de evaluación.
+
+</KeyTakeaways>
