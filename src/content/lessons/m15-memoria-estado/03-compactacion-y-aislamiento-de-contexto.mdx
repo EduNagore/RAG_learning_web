@@ -155,7 +155,7 @@ Los canarios también se diseñan con intención. Un conjunto útil mezcla **res
 
 ### Aislar el contexto con sub-agentes
 
-La alternativa a compactar es **no acumular**: delegar una exploración en un **sub-agente** que trabaja en su propia ventana y devuelve un **resumen condensado**. Como describe la guía de Anthropic, los sub-agentes especializados gestionan tareas acotadas con **ventanas de contexto limpias** y devuelven al agente coordinador un resumen, a menudo de unos pocos miles de tokens aunque hayan usado decenas de miles en explorar. El agente principal conserva un contexto **pequeño y centrado en la síntesis**.
+La alternativa a compactar es **no acumular**: delegar una exploración en un **sub-agente** que trabaja en su propia ventana y devuelve un **resumen condensado**. Como describe la guía de Anthropic, los sub-agentes especializados gestionan tareas acotadas con **ventanas de contexto limpias** y devuelven al agente coordinador un resumen, a menudo de 1 000 a 2 000 tokens aunque hayan usado decenas de miles o más en explorar. El agente principal conserva un contexto **pequeño y centrado en la síntesis**.
 
 Cuándo encaja y cuándo no:
 

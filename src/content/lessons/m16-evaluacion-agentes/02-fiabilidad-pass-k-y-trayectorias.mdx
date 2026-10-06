@@ -59,7 +59,7 @@ Las definiciones de la guía de evaluación de agentes de Anthropic son claras:
 - **pass@k:** la probabilidad de que el agente consiga **al menos una solución correcta en k intentos**. Crece con k.
 - **pass^k:** la probabilidad de que **los k intentos** tengan éxito. Mide consistencia y **decrece** con k.
 
-pass@k viene de la evaluación de generación de código (Chen et al. 2021, el artículo de Codex): en HumanEval, el modelo obtuvo un 28,8 % con una sola muestra y un 70,2 % cuando se permitían 100 muestras por problema, una ilustración de que el muestreo repetido es una estrategia sorprendentemente eficaz **si hay un modo de reconocer la solución buena**. pass^k fue introducida por τ-bench (Yao et al. 2024) justamente para medir la **fiabilidad** de los agentes en conversaciones con herramientas y reglas de dominio.
+pass@k se popularizó en la evaluación de generación de código con el artículo de Codex (Chen et al. 2021), que además propuso el estimador sin sesgo que usamos aquí: en HumanEval, el modelo obtuvo un 28,8 % con una sola muestra y un 70,2 % cuando se permitían 100 muestras por problema, una ilustración de que el muestreo repetido es una estrategia sorprendentemente eficaz **si hay un modo de reconocer la solución buena**. pass^k fue introducida por τ-bench (Yao et al. 2024) justamente para medir la **fiabilidad** de los agentes en conversaciones con herramientas y reglas de dominio.
 
 ### Cómo se calculan
 

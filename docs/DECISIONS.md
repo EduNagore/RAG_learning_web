@@ -112,3 +112,19 @@ Desviaciones o elecciones respecto a `PLAN.md`, con fecha y motivo.
 - **Lighthouse medido en local contra `astro preview`**, no contra producción (la red y la caché de GitHub Pages añaden ruido). No se añade a CI para no hacerlo lento ni frágil; las comprobaciones que sí se automatizan son axe, el test de que Pyodide no se carga fuera de labs y el SEO.
 - **`content-freshness.yml`:** lychee solo sobre enlaces externos (`--scheme https --scheme http`) y aceptando 403 y 429 (muchos sitios bloquean a los robots); el informe de frescura sale del script con tests y nunca hace fallar el flujo. Un único issue se abre, se actualiza o se cierra solo cuando todo está al día. Versiones de acciones comprobadas por la API de GitHub el 2026-10-06 (`lychee-action` v2.9.0, `github-script` v9.0.0).
 - **Licencia:** no se ha elegido ninguna; el README lo dice en lugar de suponerla.
+
+
+## Revisión de veracidad (2026-10-06)
+
+Revisión completa del contenido tras F7: las 142 URL de fuentes (140 responden 200; Milvus redirige en bucle a `curl` pero la página existe y el PDF de Cormack responde con más tiempo), la coherencia de metadatos y años de arXiv, y las afirmaciones con cifras, citas o atribuciones de las 66 lecciones, contrastadas con las fuentes (la documentación de Claude se volvió a abrir: ventanas, sampling, caché, herramientas y salidas estructuradas; el changelog de MCP 2026-07-28; el blog de cuantización de Hugging Face; la guía de ingeniería de contexto de Anthropic). Además, las cuentas de los quizzes y la portada.
+
+Correcciones:
+- **M04 L3:** Milvus no está «en proceso de donación» a la LF AI & Data Foundation (se incorporó en 2020 y se graduó en 2021; la propia página de Milvus conserva un texto antiguo). Eliminado.
+- **M03 L2:** la retención de int8 del blog de Hugging Face es ≈97 % sin reordenar y ≈99 % reordenando (no «≈99 %» a secas), con `mxbai-embed-large-v1`.
+- **M15 L3:** los sub-agentes devuelven resúmenes de «a menudo 1 000 a 2 000 tokens» según Anthropic (no «unos pocos miles»).
+- **M16 L2:** pass@k se popularizó con el artículo de Codex, que propuso el estimador sin sesgo (no «viene de» él).
+- **Lab agents-31:** aviso de que sigue las revisiones de MCP hasta 2025-11-25; la 2026-07-28 eliminó `initialize` y `ping`.
+- **M10 L4:** aclarada una comparación ambigua («tres veces la ventana» → «tres veces lo que cuesta la ventana de 6 mensajes»).
+- **Portada:** «Todo en tu navegador, sin claves» → teoría, tests y laboratorios (los proyectos y el playground opcional usan modelos reales).
+
+Lo demás cuadró con las fuentes. Limitaciones: M14 (frameworks) y M13 (A2A, skills) se basan en páginas oficiales consultadas el mismo día y no se volvieron a abrir; las afirmaciones sobre OpenAI se aceptan de la verificación de F1 (su web bloquea las descargas automáticas); los resultados de los experimentos del curso se comprueban ejecutando los bloques (`run_lesson_snippets.py`), no contra una fuente.

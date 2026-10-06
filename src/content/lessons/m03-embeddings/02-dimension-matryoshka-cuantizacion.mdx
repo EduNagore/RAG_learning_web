@@ -88,7 +88,7 @@ La **cuantización** conserva todas las dimensiones pero guarda cada valor con m
 - **Escalar (`int8`):** cada valor `float32` se asigna a uno de 256 niveles (de −128 a 127), calculando el rango con datos de calibración. Reduce el tamaño **4 veces**.
 - **Binaria:** cada valor se reduce a **1 bit** según su signo (umbral en 0 sobre vectores normalizados), y se compara con la **distancia de Hamming** (cuántos bits difieren). Reduce el tamaño **32 veces**.
 
-Según su medición sobre la tarea de recuperación de MTEB, la cuantización binaria conserva aproximadamente un **92,5 %** del rendimiento sin más, y **hasta un 96 %** si se aplica una **reordenación** (_rescoring_); con `int8` la retención que reportan ronda el **99 %**. También informan de aceleraciones medias de unas **3,7×** (`int8`) y **24,8×** (binaria) en la búsqueda.
+Según su medición sobre la tarea de recuperación de MTEB, la cuantización binaria conserva aproximadamente un **92,5 %** del rendimiento sin más, y **hasta un 96 %** si se aplica una **reordenación** (_rescoring_); con `int8` reportan en torno al **97 %** sin reordenar y al **99 %** reordenando (recuperando de 4 a 5 veces más candidatos). Son medidas con un modelo concreto (`mxbai-embed-large-v1`). También informan de aceleraciones medias de unas **3,7×** (`int8`) y **24,8×** (binaria) en la búsqueda.
 
 La reordenación es la clave de la cuantización binaria: se recuperan primero, con vectores binarios, varias veces más candidatos de los necesarios (por ejemplo, 4 × _k_) y después se **reordenan** calculando el producto escalar entre el vector de consulta **completo** (`float32`) y los vectores cuantizados de esos candidatos. Así se gana casi toda la velocidad y memoria sin perder gran parte de la calidad.
 
