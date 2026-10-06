@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { parse } from 'yaml';
@@ -12,6 +12,24 @@ interface Q {
 
 const LESSON = 'm00-fundamentos-llm/01-tokens-y-contexto';
 const STORAGE_KEY = 'rma:progress:v1';
+
+/** Todos los ficheros bajo un directorio con la extensión dada. */
+function walk(dir: string, ext: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory()
+      ? walk(resolve(dir, e.name), ext)
+      : e.name.endsWith(ext)
+        ? [resolve(dir, e.name)]
+        : [],
+  );
+}
+
+/** Totales reales del contenido, para que los tests no dependan de cuántas lecciones haya. */
+const TOTAL_LESSONS = walk(resolve(process.cwd(), 'src/content/lessons'), '.mdx').length;
+const TOTAL_QUESTIONS = walk(resolve(process.cwd(), 'src/content/quizzes'), '.yaml').reduce(
+  (n, f) => n + (parse(readFileSync(f, 'utf8')).questions as Q[]).length,
+  0,
+);
 
 function loadQuiz(lesson: string): Q[] {
   const file = resolve(process.cwd(), 'src/content/quizzes', `${lesson}.yaml`);
@@ -196,7 +214,9 @@ test('examen: configurar, hacerlo, ver el informe por módulo y guardar el resul
   page,
 }) => {
   await page.goto('practica/examen/');
-  await expect(page.getByText('Con tu selección hay 65 preguntas disponibles')).toBeVisible();
+  await expect(
+    page.getByText(`Con tu selección hay ${TOTAL_QUESTIONS} preguntas disponibles`),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Empezar examen' }).click();
   await expect(page.getByRole('heading', { name: 'Pregunta 1 de 20' })).toBeVisible();
 
@@ -218,7 +238,7 @@ test('examen: configurar, hacerlo, ver el informe por módulo y guardar el resul
 test('el examen respeta el número de preguntas y los módulos elegidos', async ({ page }) => {
   await page.goto('practica/examen/');
   await page.getByRole('radio', { name: '40' }).check();
-  await expect(page.getByText(/el examen tendrá 40|hay 65 preguntas/)).toBeVisible();
+  await expect(page.getByText(/el examen tendrá 40|preguntas disponibles/)).toBeVisible();
   await page.getByRole('button', { name: 'Empezar examen' }).click();
   await expect(page.getByRole('heading', { name: 'Pregunta 1 de 40' })).toBeVisible();
 });
@@ -233,7 +253,7 @@ test('panel de progreso: exportar, reiniciar e importar devuelve el mismo estado
   await expect(page.getByRole('button', { name: /Lección leída/ })).toBeVisible();
 
   await page.goto('progreso/');
-  await expect(page.getByText('1 / 8')).toBeVisible();
+  await expect(page.getByText(`1 / ${TOTAL_LESSONS}`)).toBeVisible();
 
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -245,7 +265,7 @@ test('panel de progreso: exportar, reiniciar e importar devuelve el mismo estado
 
   await page.getByRole('button', { name: 'Reiniciar progreso' }).click();
   await page.getByRole('button', { name: 'Sí, borrar' }).click();
-  await expect(page.getByText('0 / 8')).toBeVisible();
+  await expect(page.getByText(`0 / ${TOTAL_LESSONS}`)).toBeVisible();
 
   await page.getByLabel('Importar progreso').setInputFiles({
     name: 'backup.json',
@@ -253,7 +273,7 @@ test('panel de progreso: exportar, reiniciar e importar devuelve el mismo estado
     buffer: Buffer.from(exported),
   });
   await expect(page.getByText('Progreso importado')).toBeVisible();
-  await expect(page.getByText('1 / 8')).toBeVisible();
+  await expect(page.getByText(`1 / ${TOTAL_LESSONS}`)).toBeVisible();
   expect((await readProgress(page)).lessonsRead[LESSON]).toBeTruthy();
   expect(questions.length).toBeGreaterThan(0);
 });

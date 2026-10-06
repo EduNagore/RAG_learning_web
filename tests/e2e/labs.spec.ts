@@ -1,10 +1,20 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { parse } from 'yaml';
 
 // Pyodide se descarga de jsDelivr la primera vez: estos tests necesitan red y son lentos.
 test.setTimeout(180_000);
 const LOAD = { timeout: 120_000 };
 const LAB = 'practica/labs/rag-01-coseno-topk/';
 const STORAGE_KEY = 'rma:progress:v1';
+
+/** Metadatos reales de los labs, para que el test no dependa de cuántos haya. */
+const LABS = readdirSync(resolve(process.cwd(), 'src/content/labs')).map((id) => {
+  const text = readFileSync(resolve(process.cwd(), 'src/content/labs', id, 'index.mdx'), 'utf8');
+  return parse(text.split('---')[1]) as { part: string; difficulty: number };
+});
+const count = (f: (l: (typeof LABS)[number]) => boolean) => LABS.filter(f).length;
 
 const readProgress = (page: Page) =>
   page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), STORAGE_KEY);
@@ -18,18 +28,21 @@ async function setCode(page: Page, code: string) {
 
 test('el listado muestra los laboratorios y los filtros funcionan', async ({ page }) => {
   await page.goto('practica/labs/');
-  const items = page.locator('#lab-list > li');
-  await expect(items).toHaveCount(3);
+  const visible = page.locator('#lab-list > li:not([hidden])');
+  await expect(page.locator('#lab-list > li')).toHaveCount(LABS.length);
 
   await page.getByLabel('Parte').selectOption('agentes');
-  await expect(page.locator('#lab-list > li:not([hidden])')).toHaveCount(1);
+  await expect(visible).toHaveCount(count((l) => l.part === 'agentes'));
   await expect(page.getByRole('link', { name: /bucle de un agente/i })).toBeVisible();
 
   await page.getByLabel('Parte').selectOption('');
   await page.getByLabel('Dificultad').selectOption('1');
-  await expect(page.locator('#lab-list > li:not([hidden])')).toHaveCount(1);
+  await expect(visible).toHaveCount(count((l) => l.difficulty === 1));
 
-  await page.getByLabel('Dificultad').selectOption('3');
+  // Una combinación sin ningún laboratorio muestra el aviso.
+  await page.getByLabel('Parte').selectOption('agentes');
+  await page.getByLabel('Dificultad').selectOption('1');
+  await expect(visible).toHaveCount(count((l) => l.part === 'agentes' && l.difficulty === 1));
   await expect(page.getByText('Ningún laboratorio coincide con los filtros.')).toBeVisible();
 });
 
