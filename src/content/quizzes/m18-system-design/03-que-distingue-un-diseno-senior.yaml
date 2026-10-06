@@ -1,0 +1,95 @@
+lesson: m18-system-design/03-que-distingue-un-diseno-senior
+questions:
+  - id: m18-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué distingue sobre todo una respuesta senior de una mid en system design?'
+    options:
+      - 'Conocer más nombres de herramientas.'
+      - 'El juicio: decide con datos y condiciones, justifica lo que no hace falta y cuantifica riesgos y costes.'
+      - 'Hablar más rápido.'
+      - 'Dibujar diagramas más grandes.'
+    answer: [1]
+    explanation: 'El salto es de juicio bajo incertidumbre más que de conocimiento: qué se pregunta, qué se mide, qué se descarta y qué se vigila.'
+    ref: '#las-señales-por-nivel'
+
+  - id: m18-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es una señal senior sobre agentes?'
+    options:
+      - 'Proponer siempre un agente.'
+      - 'Justificar el agente solo si hace falta, con guardas, presupuesto y evaluación de trayectorias.'
+      - 'Evitar hablar de agentes.'
+      - 'Usar varios agentes por defecto.'
+    answer: [1]
+    explanation: 'Un agente añade coste, latencia e imprevisibilidad; una respuesta senior lo justifica y lo acota.'
+    ref: '#las-señales-por-nivel'
+
+  - id: m18-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué conviene hacer en los primeros minutos de una entrevista de diseño?'
+    options:
+      - 'Dibujar la arquitectura final.'
+      - 'Hacer preguntas de aclaración y fijar requisitos y métricas de éxito.'
+      - 'Elegir el modelo.'
+      - 'Hablar del coste final.'
+    answer: [1]
+    explanation: 'Los requisitos y la forma de medir el éxito condicionan todas las decisiones posteriores.'
+    ref: '#un-reparto-de-45-minutos'
+
+  - id: m18-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'Te preguntan cuánto mejora un reranker la precisión y no tienes una cifra verificada. ¿Qué respuesta es mejor?'
+    options:
+      - 'Dar un porcentaje con seguridad.'
+      - 'Explicar de qué depende, cuándo ayuda más y cómo lo medirías con el conjunto de oro, valorando su latencia.'
+      - 'Decir que no se sabe y callar.'
+      - 'Cambiar de tema.'
+    answer: [1]
+    explanation: 'Reconocer lo que no sabes con precisión y proponer cómo averiguarlo demuestra criterio; inventar una cifra lo destruye.'
+    ref: '#qué-hacer-cuando-no-sabes-algo'
+
+  - id: m18-03-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué ítems de la lista de autoevaluación evalúan la comunicación y la estructura? Marca todos los correctos.'
+    options:
+      - 'Hice preguntas de aclaración antes de dibujar.'
+      - 'Justifiqué cada componente con una alternativa y un criterio.'
+      - 'Cerré con un resumen y con lo que revisaría con datos reales.'
+      - 'Usé la herramienta más popular.'
+    answer: [0, 1, 2]
+    explanation: 'La popularidad de una herramienta no es un criterio de calidad de la respuesta; preguntar, justificar y cerrar sí lo son.'
+    ref: '#autoevaluación-practica-con-esta-lista'
+
+  - id: m18-03-q6
+    type: single
+    difficulty: 3
+    prompt: 'El entrevistador aporta un dato que contradice tu decisión. ¿Qué es lo más acertado?'
+    options:
+      - 'Defender la decisión.'
+      - 'Revisar la decisión con el dato nuevo y explicar cómo cambia el diseño.'
+      - 'Ignorarlo.'
+      - 'Pedir que cambie la pregunta.'
+    answer: [1]
+    explanation: 'Dejarse corregir y adaptar el diseño demuestra criterio y colaboración; defender por orgullo es un error común.'
+    ref: '#errores-comunes-en-entrevistas'
+
+  - id: m18-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'La lección presenta una rúbrica oficial que usan todas las empresas.'
+    answer: [1]
+    explanation: 'Es falso. Es una guía de práctica con señales que se repiten; cada empresa evalúa a su manera.'
+    ref: '#intuición-el-nivel-se-ve-en-lo-que-priorizas-y-en-lo-que-dudas'
+
+  - id: m18-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Practicar en voz alta con otra persona ayuda a detectar fallos de comunicación que uno no percibe a solas.'
+    answer: [0]
+    explanation: 'Es verdadero. Lo que se oye es distinto de lo que uno cree decir; grabarse o practicar con alguien revela esos huecos.'
+    ref: '#autoevaluación-practica-con-esta-lista'

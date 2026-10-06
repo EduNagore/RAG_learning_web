@@ -1,0 +1,148 @@
+---
+title: Qué distingue una respuesta junior, mid y senior
+description: Cómo se evalúa una entrevista de system design de RAG y agentes, qué señales separan los niveles junior, mid y senior, una plantilla para estructurar la respuesta en 45 minutos y una lista de autoevaluación para practicar.
+module: m18-system-design
+order: 3
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Describir las señales que distinguen una respuesta junior, mid y senior en un diseño de RAG o agentes.
+  - Distribuir los 45 minutos de una entrevista de diseño entre las fases del método.
+  - Autoevaluar una respuesta propia con una lista de comprobación concreta.
+  - Reconocer los fallos de comunicación más frecuentes y cómo corregirlos.
+prerequisites:
+  - m18-system-design/02-depurar-un-rag-y-un-agente
+volatility: low
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: How we built our multi-agent research system
+    url: https://www.anthropic.com/engineering/multi-agent-research-system
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: Demystifying evals for AI agents
+    url: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+    type: blog
+    authors: Anthropic
+    year: 2026
+---
+
+## Intuición: el nivel se ve en lo que priorizas y en lo que dudas
+
+Dos candidatas reciben el mismo enunciado. Ambas dibujan una arquitectura razonable con ingesta, índice, recuperación y modelo. La primera describe los componentes; la segunda **elige** entre ellos y explica qué haría cambiar su elección. Con los mismos conocimientos técnicos, la segunda parece más experimentada, porque lo que distingue los niveles no es saber más nombres de herramientas sino **cómo se razona bajo incertidumbre**: qué se pregunta, qué se mide, qué se descarta y qué se vigila.
+
+Esta lección es una guía de práctica y no una rúbrica oficial de ninguna empresa: cada compañía evalúa a su manera. Recoge señales que se repiten en las lecciones anteriores y en las guías de ingeniería que hemos usado como fuente, para que sepas qué entrenar.
+
+## Cómo funciona
+
+### Las señales por nivel
+
+| Dimensión | Junior | Mid | Senior |
+| --- | --- | --- | --- |
+| **Requisitos** | Acepta el enunciado tal cual | Hace preguntas básicas (usuarios, volumen) | Pregunta por el coste del error, los permisos, la frescura y cómo se medirá el éxito; convierte lo vago en requisitos |
+| **Datos** | Asume que están limpios | Menciona formatos y troceado | Habla de calidad, versiones, propietarios, duplicados, permisos y actualización |
+| **Recuperación** | Un índice vectorial | Híbrida y reranker, con motivo | Decide con los datos y las preguntas reales y dice qué mediría para confirmarlo |
+| **Agentes** | «Un agente que lo resuelva todo» | Distingue flujo y agente | Justifica el agente solo si hace falta, con guardas, presupuesto y evaluación de trayectorias |
+| **Evaluación** | «Lo probaremos» | Conjunto de preguntas y métricas | Conjunto de oro desde el primer día, evaluación de componentes y de extremo a extremo, regresión y observabilidad |
+| **Riesgos** | Ninguno o genéricos | Alucinación, latencia | Inyección indirecta, fugas por permisos, envenenamiento, coste descontrolado, qué pasa si el proveedor cae |
+| **Trade-offs** | Presenta una solución | Compara dos | Decisión, alternativa, criterio y condición de cambio; reconoce lo que no sabe |
+| **Números** | Ninguno | Algunos sin supuestos | Órdenes de magnitud con supuestos explícitos y palancas |
+| **Comunicación** | Enumera componentes | Sigue un orden | Estructura el tiempo, resume, vuelve al hilo y se deja corregir |
+
+Dos observaciones. Primero, el salto de mid a senior casi siempre es de **juicio**, no de conocimiento: decir «no lo necesitamos todavía» con una razón vale más que añadir un componente más. Segundo, ninguna columna se evalúa por separado: una respuesta senior en riesgos pero sin evaluación sigue teniendo un hueco grande.
+
+### Un reparto de 45 minutos
+
+Una distribución práctica, para ajustar según lo que te pidan:
+
+| Minutos | Fase | Qué debes dejar claro |
+| --- | --- | --- |
+| 0–7 | Requisitos y aclaraciones | Alcance, usuarios, coste del error, volumen, permisos, métricas de éxito |
+| 7–12 | Datos y estimaciones | Fuentes, calidad, actualización; órdenes de magnitud de tráfico, tokens y coste |
+| 12–27 | Arquitectura | Ingesta, recuperación, generación, agente si procede; un diagrama sencillo |
+| 27–35 | Evaluación y operación | Conjunto de oro, métricas, observabilidad, actualización del índice, degradación |
+| 35–42 | Riesgos y costes | Seguridad, privacidad, calidad; palancas de coste; qué saldría mal primero |
+| 42–45 | Cierre | Resumen de decisiones y de lo que revisarías con datos reales |
+
+No es un guion rígido: si el entrevistador se interesa por un punto, profundiza, y retoma el hilo al terminar («volviendo al esquema, me quedan evaluación y riesgos»).
+
+### Qué hacer cuando no sabes algo
+
+Es inevitable y es una de las situaciones que mejor distinguen niveles. Qué funciona: **reconocerlo con precisión** («no sé cómo implementa exactamente X el reranker; lo que sé es que suele reordenar los N primeros y añade latencia»), **razonar desde principios** y **proponer cómo lo averiguarías** (un experimento con tu conjunto de oro). Qué no funciona: inventar una cifra o una característica de una herramienta con seguridad. Esta misma disciplina es la que se pide en este curso: no afirmar lo que no se ha verificado.
+
+Un ejemplo: te preguntan cuánto mejora un reranker la precisión. La respuesta pobre es «un 30 %». La buena es «depende del corpus y de la calidad de la primera etapa; en general ayuda más cuando el buen resultado ya está entre los primeros candidatos pero mal ordenado. Lo mediría comparando recall@50 con y sin reranker y la métrica de extremo a extremo sobre el conjunto de oro, y valoraría los 100–200 ms que añade».
+
+### Ejemplos de frases de cada nivel
+
+- Junior: «Usaría un RAG con una base vectorial y GPT para responder.»
+- Mid: «Haría búsqueda híbrida con reranker, porque el vectorial solo falla con identificadores exactos. Evaluaría con un conjunto de preguntas.»
+- Senior: «Antes de decidir la recuperación miraría las 50 preguntas reales de soporte: si la mayoría contiene códigos de producto, la híbrida se justifica. Empezaría con un flujo fijo; un agente solo si el análisis de fallos muestra que muchas preguntas necesitan varios saltos, y aun así con límite de pasos y presupuesto, porque los sistemas con agentes pueden consumir en torno a cuatro veces más tokens que un chat (y los multiagente en torno a quince, según las medidas de Anthropic en su sistema de investigación).»
+
+La tercera frase no tiene más vocabulario que la segunda: tiene **condiciones, datos y límites**.
+
+### Cómo usar el diagrama
+
+El diagrama es una ayuda para hablar, no un entregable. Dibuja pocas cajas (ingesta, índice, recuperación, generación, evaluación y observabilidad), numera el recorrido de una consulta y marca con un color lo que es específico de tu problema: los filtros de permisos, la caché, el reranker o el bucle del agente. Cuando expliques un componente, di siempre qué entra, qué sale y qué podría fallar. Un diagrama que se puede leer en treinta segundos y se corrige sobre la marcha comunica más que uno exhaustivo que nadie sigue, y te deja tiempo para lo que de verdad puntúa: justificar, estimar y evaluar.
+
+### Autoevaluación: practica con esta lista
+
+Tras practicar un caso (por ejemplo, los de la zona de entrevistas), puntúa cada ítem con sí o no y **escribe la evidencia**:
+
+1. ¿Hice al menos cinco preguntas de aclaración antes de dibujar?
+2. ¿Enuncié requisitos funcionales y no funcionales y cómo se mide el éxito?
+3. ¿Hablé de permisos y de quién puede ver qué?
+4. ¿Hice una estimación numérica con supuestos explícitos?
+5. ¿Justifiqué cada componente con una alternativa y un criterio?
+6. ¿Expliqué por qué elegí (o descarté) un agente?
+7. ¿Describí cómo evaluar antes del lanzamiento y en producción?
+8. ¿Nombré al menos tres riesgos concretos y su mitigación?
+9. ¿Dije qué haría si el proveedor del modelo falla o sube los precios?
+10. ¿Cerré con un resumen y con lo que revisaría con datos reales?
+
+Si respondes no a más de tres, repite el caso centrándote en esos huecos. **Grábate** o practica con otra persona: lo que se oye es distinto de lo que uno cree decir.
+
+## Trade-offs
+
+| Estrategia de práctica | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Memorizar arquitecturas de referencia | Rápido | Respuestas rígidas; se nota cuando cambia el enunciado |
+| Practicar el método con casos distintos | Flexible | Requiere más tiempo |
+| Practicar en voz alta con otra persona | Revela fallos de comunicación | Necesita a alguien |
+| Practicar a solas con la lista de autoevaluación | Autónomo | Sesgo al puntuarte |
+| Profundizar en un área concreta | Aporta sustancia | Puede descuidar otras dimensiones |
+
+## Errores comunes en entrevistas
+
+- **Dibujar antes de preguntar.**
+- **Enumerar componentes sin justificar ninguno.**
+- **Dar cifras de rendimiento inventadas** con aplomo.
+- **Proponer un agente por defecto**, o varios agentes sin motivo.
+- **No hablar de evaluación ni de operación** hasta que te lo piden.
+- **Ignorar la seguridad** (permisos, inyección) y el coste.
+- **Perderse en un detalle** (el algoritmo de ANN) y no llegar a cerrar.
+- **Defender una decisión por orgullo** cuando el entrevistador aporta un dato nuevo, en lugar de revisarla.
+- **No resumir al final.**
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué harías primero ante un enunciado ambiguo?"_ Pista: preguntas de aclaración sobre usuarios, coste del error, volumen, permisos y métricas, y declarar los supuestos.
+- _"¿Cómo justificas una decisión de diseño?"_ Pista: decisión, alternativa, criterio y condición que la cambiaría.
+- _"No sabes cómo funciona algo que te preguntan, ¿qué haces?"_ Pista: decirlo con precisión, razonar desde principios y proponer cómo lo verificarías.
+- _"¿Cómo demuestras experiencia sin haber trabajado con una herramienta concreta?"_ Pista: razonar sobre trade-offs y métricas, no sobre nombres.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Los niveles se distinguen por **juicio bajo incertidumbre**: qué preguntas haces, qué mides, qué descartas y qué vigilas.
+- Junior describe componentes, mid compara opciones y senior **decide con datos y condiciones**, incluidos riesgos, coste y evaluación.
+- Reparte el tiempo: requisitos, datos y números, arquitectura, evaluación y operación, riesgos y cierre.
+- Si no sabes algo, **dilo con precisión** y propón cómo averiguarlo; no inventes cifras.
+- Practica con la lista de autoevaluación y en voz alta; repite los casos con foco en los huecos.
+
+</KeyTakeaways>
