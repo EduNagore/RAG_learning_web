@@ -16,9 +16,9 @@
 | F4 Contenido Parte I (RAG, M01–M09) | ✅ hecha, en `main` y desplegada | 37 lecciones, 22 labs, 287 preguntas |
 | F5 Contenido Parte II (Agentes, M10–M17) | ✅ hecha (en `main` y desplegada) | 63 lecciones en total, 35 labs, 495 preguntas |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ✅ hecha, en `main` y desplegada | 66 lecciones, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos |
-| F7 Pulido (Lighthouse, a11y, freshness workflow, README) | 🟡 hecha en la rama `fase-7-pulido`, pendiente de fusión | |
+| F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ✅ hecha, en `main` y desplegada | axe en e2e, Lighthouse ≥92, workflow de frescura, README completo |
 
-Contadores (fin de F5: 63 lecciones, 495 preguntas, 35 labs, 92 tests unitarios, 176 tests pytest, 310 mutantes, 32 e2e). Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 preguntas, 22 labs, 76 tests unitarios, 111 tests pytest de labs, 184 mutantes de labs (todos detectados), 30 e2e, `main` = merge de `fase-4-rag` (6d54145), desplegado y verificado en producción.
+Contadores finales (F7): 66 lecciones, 519 preguntas de quiz, 35 labs, 108 tests unitarios, 176 tests pytest, 310 mutantes, 46 e2e, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos. Contadores (fin de F5: 63 lecciones, 495 preguntas, 35 labs, 92 tests unitarios, 176 tests pytest, 310 mutantes, 32 e2e). Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 preguntas, 22 labs, 76 tests unitarios, 111 tests pytest de labs, 184 mutantes de labs (todos detectados), 30 e2e, `main` = merge de `fase-4-rag` (6d54145), desplegado y verificado en producción.
 
 ## F4: HECHA (rama `fase-4-rag` fusionada en `main`)
 
@@ -46,13 +46,15 @@ Hecho: ver «F6: HECHA».
 - Contadores: 66 lecciones, 519 preguntas de quiz, 35 labs, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos.
 - Puerta pasada (2026-10-06): prettier, eslint, astro check, vitest (105), validate, build (151 páginas), ruff, pytest (176), mutación (310/310), snippets (57 bloques) y 40 e2e.
 
-## F7: HECHA salvo fusión y despliegue (rama `fase-7-pulido`)
+## F7: HECHA (rama `fase-7-pulido` fusionada en `main`, merge a06f7be; CI y despliegue en verde; a11y, calidad, entrevistas, playground y widgets verificados contra producción)
 
 - ✅ Accesibilidad: `tests/e2e/a11y.spec.ts` (axe WCAG A/AA en 18 páginas, tema claro y oscuro, y `prefers-reduced-motion`). Arreglos: contraste de los comentarios de código y del texto secundario en oscuro, números de línea y fondo del editor en oscuro, foco del teclado en el editor y enlaces subrayados dentro de texto.
 - ✅ Lighthouse en local (móvil: Performance 92–100, el resto 100; escritorio: 100 en todo).
 - ✅ `scripts/check-freshness.mjs` (con tests) y `.github/workflows/content-freshness.yml` (mensual y manual: lychee sobre enlaces externos más el informe de frescura, y un issue único que se abre, actualiza o cierra).
 - ✅ `tests/e2e/quality.spec.ts` (Pyodide solo en labs, SEO y sitemap). ✅ README completo.
-- Pendiente: puerta completa, push, CI, fusión a `main` y verificación en producción; después, el proyecto está terminado según `PLAN.md` §12.
+- Puerta final (2026-10-06): prettier, eslint, astro check, vitest (108), validate, build (151 páginas), ruff, pytest (176), mutación (310/310), snippets (57 bloques) y 46 e2e. **Todas las fases F0–F7 están hechas.**
+- Pendiente fuera de plan: elegir una licencia (`LICENSE`) y lanzar una vez `content-freshness.yml` a mano (_Actions → Run workflow_) para ver su primer informe real.
+- Una vez, tras el despliegue, `quality.spec.ts` (Pyodide) falló contra producción y no se pudo reproducir en cinco ejecuciones más; se acotó el patrón de URL del test. Si reaparece, mira qué URL imprime el fallo.
 
 ### Mantenimiento
 Cada mes llega el informe de frescura; al revisar una lección actualiza sus fuentes y `lastReviewed`. Si aparece una nueva edición de un estándar (como OWASP), mira primero si hay `<Snapshot>` que actualizar.
