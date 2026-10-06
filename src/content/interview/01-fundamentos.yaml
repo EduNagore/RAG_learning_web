@@ -52,7 +52,11 @@ questions:
   - id: fund-04
     level: mid
     kind: conceptual
-    lessons: [m00-fundamentos-llm/01-tokens-y-contexto, m06-generacion-contexto/02-posicion-compresion-y-cache]
+    lessons:
+      [
+        m00-fundamentos-llm/01-tokens-y-contexto,
+        m06-generacion-contexto/02-posicion-compresion-y-cache,
+      ]
     es:
       q: ¿Basta con una ventana de contexto enorme para no necesitar RAG?
       a: |-
@@ -132,7 +136,8 @@ questions:
   - id: fund-09
     level: senior
     kind: debug
-    lessons: [m00-fundamentos-llm/02-sampling, m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez]
+    lessons:
+      [m00-fundamentos-llm/02-sampling, m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez]
     es:
       q: La misma consulta da respuestas distintas entre ejecuciones y tus tests se vuelven inestables. ¿Qué haces?
       a: |-
@@ -180,7 +185,11 @@ questions:
   - id: fund-12
     level: senior
     kind: design
-    lessons: [m00-fundamentos-llm/07-coste-latencia-caching, m09-rag-produccion/01-latencia-coste-cache-y-actualizacion]
+    lessons:
+      [
+        m00-fundamentos-llm/07-coste-latencia-caching,
+        m09-rag-produccion/01-latencia-coste-cache-y-actualizacion,
+      ]
     es:
       q: ¿Cómo reducirías la latencia percibida de un asistente sin cambiar de modelo?
       a: |-

@@ -1,0 +1,96 @@
+---
+title: Copiloto interno con permisos por usuario
+description: Copiloto corporativo que busca y actúa sobre varias fuentes de la empresa heredando los permisos de cada persona, con auditoría y defensa frente a inyección.
+order: 6
+level: senior
+estimatedMinutes: 45
+lessons:
+  - m18-system-design/01-metodo-de-system-design-rag-y-agentes
+  - m09-rag-produccion/02-seguridad-permisos-e-inyeccion
+  - m13-protocolos/01-tool-calling-y-mcp
+  - m17-fiabilidad-seguridad/01-inyeccion-de-prompts-y-triada-letal
+lastReviewed: 2026-10-06
+---
+
+**Enunciado.** Una empresa quiere un copiloto que ayude a cada empleado a buscar en correo, calendario, documentos, el CRM y el gestor de tickets, y a realizar acciones sencillas (redactar borradores, crear tickets, programar reuniones), **con exactamente los permisos de esa persona**.
+
+## Requisitos
+
+- **Funcionales:** búsqueda unificada sobre varias fuentes, resúmenes con citas, borradores de correo y tickets, y acciones con confirmación.
+- **No funcionales:** **ningún acceso más allá de los permisos de la persona**, auditoría completa de qué se leyó y qué se hizo, latencia interactiva, cumplimiento de privacidad y de retención, y administración centralizada.
+- **Éxito (a medir):** utilidad percibida y tiempo ahorrado, cero fugas de permisos en las pruebas, exactitud de las respuestas y tasa de acciones aceptadas.
+
+## Preguntas de aclaración
+
+1. ¿Qué fuentes y con qué modelo de permisos (listas de control de acceso, roles, etiquetas de sensibilidad)? ¿Se puede consultar el permiso en tiempo real?
+2. ¿Qué acciones con efectos externos se permiten (enviar correos, crear eventos) y cuáles solo como borrador?
+3. ¿Hay datos especialmente sensibles (RR. HH., legal) que deban quedar fuera?
+4. ¿Qué autenticación y qué sistema de identidad hay (SSO)?
+5. ¿Qué requisitos de auditoría y retención aplican?
+6. ¿El copiloto puede procesar contenido de terceros (correos externos)? Esto abre la puerta a la inyección.
+
+Supuestos: SSO con tokens delegados, permisos consultables por API, acciones externas solo como borrador con confirmación, correo externo incluido como fuente.
+
+## Arquitectura
+
+<Diagram
+  caption="El copiloto actúa con la identidad delegada de la persona; los conectores aplican los permisos de cada fuente."
+  code={`flowchart LR
+  U[Empleado con SSO] --> GW[Pasarela: identidad y política]
+  GW --> AG[Agente del copiloto]
+  AG --> M1[Conector MCP: documentos]
+  AG --> M2[Conector MCP: correo y calendario]
+  AG --> M3[Conector MCP: CRM y tickets]
+  M1 --> S1[(Fuente con permisos)]
+  M2 --> S2[(Fuente con permisos)]
+  M3 --> S3[(Fuente con permisos)]
+  AG --> PG[Puerta de herramientas: lista blanca, tríada letal y aprobación]
+  PG --> AC[Acciones como borrador con confirmación]
+  GW -.-> AU[Auditoría]
+  AG -.-> AU`}
+/>
+
+**Identidad delegada.** Cada petición lleva la identidad de la persona con un **token delegado de corta vida**; los conectores consultan a cada fuente **con esos permisos** y no con una cuenta de servicio amplia. Los permisos se evalúan en la fuente (o con un filtro por listas de acceso sincronizadas) **durante la recuperación**, nunca después de generar.
+
+**Conectores.** Cada fuente se expone como un servidor de herramientas (por ejemplo con MCP), con herramientas de lectura y de escritura separadas y esquemas estrictos. Los servidores y sus descripciones se tratan como código de terceros: se revisan, se fijan versiones y se limita qué agente puede usar cada herramienta.
+
+**Agente.** Bucle con herramientas por tarea (lista blanca definida según la petición), límites de pasos y presupuesto, y gestión del contexto con lecturas bajo demanda.
+
+**Puerta de herramientas.** Implementa las defensas de la lección de seguridad: lista blanca, **bloqueo de canales hacia el exterior cuando el contexto contiene datos privados y contenido no fiable** (la tríada letal), y aprobación humana para acciones con efectos. Las acciones externas son **borradores** que la persona confirma.
+
+**Auditoría.** Registro inmutable de identidad, herramientas, argumentos, fuentes leídas y aprobaciones, con retención definida.
+
+## Decisiones y trade-offs
+
+| Decisión | Alternativa | Criterio | Qué la cambiaría |
+| --- | --- | --- | --- |
+| Identidad delegada y permisos en la fuente | Cuenta de servicio con índice propio | Es la única forma de garantizar que no se ve más de lo permitido | Fuentes sin API de permisos: se sincronizan listas de acceso con controles estrictos |
+| Índice unificado | Consultar cada fuente en el momento | El índice es rápido pero duplica permisos y se desactualiza; consultar en vivo es más preciso y lento | Latencia crítica frente a frescura de permisos |
+| Borradores y confirmación | Acciones autónomas | Reduce el daño de una inyección o un error | Acciones internas de bajo riesgo con registro |
+| Romper la tríada letal por diseño | Detectores de inyección | Los detectores no son garantía | Nada |
+| Herramientas por tarea | Todas disponibles siempre | Menor superficie de ataque | Tareas abiertas con herramientas conocidas |
+| Conectores MCP revisados | Integraciones ad hoc | Reutilización y estandarización, con control de versiones | Fuentes con requisitos propios |
+
+## Evaluación
+
+- **Seguridad primero:** pruebas de fuga con perfiles distintos (la persona A no debe obtener datos de B ni siquiera de forma indirecta), de inyección desde correos externos y de exfiltración, ejecutadas en CI.
+- **Calidad:** conjunto de preguntas reales por fuente, recall de recuperación, fidelidad con citas y abstención.
+- **Acciones:** resultado en el entorno (borradores correctos, sin envíos no confirmados) y trayectorias (herramientas permitidas), con varios intentos.
+- **Producción:** auditoría revisada por muestreo, tasa de aceptación de borradores y reportes de las personas usuarias.
+
+## Riesgos
+
+- **Fuga por permisos desactualizados:** sincronización frecuente, consulta en vivo para fuentes críticas y pruebas continuas.
+- **Inyección indirecta desde correos o documentos:** la combinación de datos privados, contenido no fiable y envío externo se bloquea por diseño; el contenido de terceros se delimita como dato.
+- **Servidores de herramientas maliciosos o comprometidos:** revisión, versiones fijas, mínimo privilegio y aislamiento de red.
+- **Exceso de agencia:** acciones solo como borrador, límites y aprobación humana.
+- **Privacidad y retención:** minimización en trazas, cifrado y retención limitada.
+- **Confianza excesiva:** citas visibles y avisos de verificación para decisiones importantes.
+
+## Coste
+
+Con **precios ilustrativos**, una consulta con varias lecturas cuesta de uno a varios céntimos; una tarea con acciones, más. Para 2 000 personas con 10 interacciones al día a 3 céntimos de media, el orden de magnitud es de unos 600 USD al día de modelos, que se reduce con caché de prompt, modelos pequeños para exploración y límites de presupuesto por persona. El coste dominante suele ser el de **integración y seguridad** (conectores, permisos, auditoría y evaluación continua).
+
+## Qué diría una persona senior
+
+Diría que el producto es, antes que un asistente, un **sistema de control de acceso con un modelo dentro**: si los permisos y la auditoría no son correctos, el resto no importa. Pediría hacer primero un modelo de amenazas con la tríada letal, lanzar con lectura y borradores, medir fugas y utilidad en un grupo piloto y añadir acciones solo con aprobación. Y avisaría de que los detectores de inyección son una capa más y no un sustituto del diseño.

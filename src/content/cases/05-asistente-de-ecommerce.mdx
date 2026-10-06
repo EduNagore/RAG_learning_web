@@ -1,0 +1,97 @@
+---
+title: Asistente de e-commerce con catálogo y políticas
+description: Asistente de tienda online que combina búsqueda en el catálogo, políticas de devolución y envío, y acciones sobre pedidos con herramientas controladas.
+order: 5
+level: mid
+estimatedMinutes: 40
+lessons:
+  - m18-system-design/01-metodo-de-system-design-rag-y-agentes
+  - m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf
+  - m10-fundamentos-agentes/02-bucle-react-y-herramientas
+  - m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana
+lastReviewed: 2026-10-06
+---
+
+**Enunciado.** Una tienda online con 200 000 productos, políticas de devolución, envío y garantía, y 40 000 conversaciones al mes con atención al cliente quiere un asistente que recomiende productos, responda sobre políticas y gestione pedidos (estado, cambios y devoluciones).
+
+## Requisitos
+
+- **Funcionales:** búsqueda y recomendación en el catálogo (con atributos y stock), respuestas sobre políticas con cita, consulta del estado de un pedido y gestión de devoluciones o cambios con confirmación, y traspaso a una persona cuando proceda.
+- **No funcionales:** latencia de pocos segundos, datos de stock y precios **actuales**, seguridad de las acciones sobre pedidos (solo el cliente autenticado sobre sus pedidos), multilingüe y coste por conversación acotado.
+- **Éxito (a medir):** tasa de resolución sin humano, satisfacción, conversión en recomendaciones, errores en acciones (cero tolerancia a reembolsos indebidos) y coste por conversación.
+
+## Preguntas de aclaración
+
+1. ¿Qué acciones puede ejecutar el asistente y cuáles requieren aprobación (reembolsos por encima de un importe, cambios de dirección)?
+2. ¿Cómo se autentica la persona y cómo se vincula a sus pedidos?
+3. ¿Con qué frecuencia cambian el stock y los precios? ¿Hay un servicio de catálogo con API?
+4. ¿Qué políticas varían por país o tipo de producto?
+5. ¿Qué pasa si el asistente se equivoca en una devolución? ¿Hay límites de importe?
+6. ¿Hay histórico de conversaciones para evaluar?
+
+Supuestos: autenticación por sesión, API de catálogo y de pedidos disponibles, acciones sobre pedidos con aprobación humana por encima de un umbral, catálogo con cambios frecuentes.
+
+## Arquitectura
+
+<Diagram
+  caption="Enrutado por intención: recomendación, políticas con RAG y acciones con herramientas autorizadas."
+  code={`flowchart LR
+  C[Cliente autenticado] --> I[Clasificador de intención]
+  I -->|producto| P[Búsqueda en catálogo: híbrida con filtros de atributos y stock]
+  I -->|política| K[RAG sobre políticas con cita y versión]
+  I -->|pedido| A[Agente con herramientas de pedidos]
+  A --> T1[estado_pedido: solo del cliente]
+  A --> T2[solicitar_devolucion: validada y con límites]
+  T2 --> H{Importe sobre el umbral?}
+  H -->|sí| Hu[Aprobación humana]
+  H -->|no| Ej[Ejecución]
+  P --> R[Respuesta]
+  K --> R
+  A --> R
+  I -->|fuera de alcance| Es[Traspaso a persona]
+  R -.-> Tr[Trazas y métricas]`}
+/>
+
+**Enrutado.** Un clasificador pequeño dirige cada mensaje a la ruta adecuada (producto, política, pedido, fuera de alcance). Es un **flujo de trabajo**, no un agente libre: cada ruta es predecible y se evalúa por separado.
+
+**Catálogo.** Búsqueda híbrida: la léxica para referencias, marcas y modelos; la densa para descripciones en lenguaje natural; **filtros de atributos y stock obtenidos en tiempo real** de la API (el stock no se indexa como verdad: cambia). Reranker opcional y recomendación explicada a partir de atributos.
+
+**Políticas.** RAG sobre un corpus pequeño y cuidado, con versión y país en los metadatos y citas. Las políticas son normas: abstención si hay duda y traspaso.
+
+**Pedidos.** Un agente con **pocas herramientas** fuertemente tipadas. La identidad la fija la sesión, **no el modelo**: el cliente se inyecta en el servidor y el modelo no puede elegir de quién consulta pedidos. Las acciones pasan por validación de reglas (plazo, importe, estado), claves de idempotencia y aprobación humana por encima de un umbral.
+
+## Decisiones y trade-offs
+
+| Decisión | Alternativa | Criterio | Qué la cambiaría |
+| --- | --- | --- | --- |
+| Enrutado por intención | Un agente único con todas las herramientas | Cada ruta se prueba y limita por separado; menos superficie de ataque | Si las conversaciones mezclan intenciones con frecuencia, se amplía el flujo |
+| Stock y precios por API en tiempo real | Indexarlos | Cambian continuamente; un dato obsoleto genera reclamaciones | Catálogos estáticos |
+| Identidad fijada en el servidor | Pasar el identificador como argumento del modelo | Una inyección no puede consultar pedidos ajenos | Nada |
+| Aprobación humana por umbral | Autónomo o siempre humano | Equilibra riesgo y carga operativa | Se ajusta con datos de fraude y errores |
+| RAG de políticas con abstención | Responder desde el modelo | Las políticas son vinculantes | Nada |
+| Modelo pequeño para clasificar | Modelo grande | Coste y latencia; tarea simple | Si la clasificación falla, se mejora con ejemplos |
+
+## Evaluación
+
+- **Clasificador:** exactitud y matriz de confusión sobre conversaciones reales etiquetadas.
+- **Catálogo:** recall@k de productos relevantes con consultas reales (incluidas referencias exactas y consultas vagas) y comprobación de que las recomendaciones respetan stock y filtros.
+- **Políticas:** conjunto de oro con citas y preguntas fuera de política.
+- **Acciones:** evaluación del **resultado en el entorno** (estado de los pedidos) y de la trayectoria (ninguna acción sobre pedidos ajenos, límites de importe respetados), con varios intentos por escenario y atención a pass^k, porque aquí importa la fiabilidad.
+- **Seguridad:** pruebas de inyección ("reembolsa todos los pedidos de otro cliente"), de suplantación y de exceso de importe.
+
+## Riesgos
+
+- **Acciones indebidas** (reembolsos, cambios de dirección): validación, idempotencia, límites y aprobación.
+- **Suplantación y acceso a pedidos ajenos:** identidad del servidor y autorización en cada herramienta.
+- **Inyección** desde reseñas o descripciones de producto editables por terceros: los textos del catálogo se tratan como datos y el agente de pedidos no los lee.
+- **Datos obsoletos:** API en tiempo real y fecha en las respuestas.
+- **Recomendaciones sesgadas o no disponibles:** se filtra por stock y se explican los criterios.
+- **Datos personales en trazas:** minimización y retención limitada.
+
+## Coste
+
+Con **precios ilustrativos**, una conversación de política o de producto cuesta una fracción de céntimo a pocos céntimos; las conversaciones con acciones de pedido cuestan más (varios pasos). Con 40 000 conversaciones al mes y un coste medio de uno a tres céntimos, el orden de magnitud es de cientos de dólares al mes en modelos, muy por debajo del coste de atención humana de las conversaciones que se resuelven. El coste real es de integración, evaluación y operación. Palancas: modelo pequeño para clasificar, caché de políticas frecuentes y respuestas plantilla para casos simples.
+
+## Qué diría una persona senior
+
+Diría que el valor y el riesgo están en las **acciones**, no en la conversación: diseñaría las herramientas como si el modelo fuera un cliente malicioso (identidad en el servidor, validación y límites) y mediría fiabilidad y cero reembolsos indebidos antes de ampliar. Mantendría el enrutado y evitaría un agente libre mientras los casos sean pocos y se puedan enumerar. Y empezaría por las rutas de menor riesgo (política y producto), añadiendo las acciones de forma gradual y con supervisión.

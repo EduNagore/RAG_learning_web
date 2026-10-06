@@ -212,7 +212,11 @@ questions:
   - id: gen-14
     level: senior
     kind: design
-    lessons: [m09-rag-produccion/03-observabilidad-y-guardrails, m06-generacion-contexto/03-abstencion-no-lo-se]
+    lessons:
+      [
+        m09-rag-produccion/03-observabilidad-y-guardrails,
+        m06-generacion-contexto/03-abstencion-no-lo-se,
+      ]
     es:
       q: ¿Qué guardarraíles pondrías y qué limitaciones tienen?
       a: |-

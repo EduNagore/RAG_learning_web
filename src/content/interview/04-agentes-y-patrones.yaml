@@ -180,7 +180,11 @@ questions:
   - id: age-12
     level: mid
     kind: debug
-    lessons: [m10-fundamentos-agentes/02-bucle-react-y-herramientas, m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad]
+    lessons:
+      [
+        m10-fundamentos-agentes/02-bucle-react-y-herramientas,
+        m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad,
+      ]
     es:
       q: Un agente repite la misma llamada a una herramienta que falla. ¿Qué haces?
       a: |-

@@ -1,0 +1,56 @@
+import { readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { expect, test } from '@playwright/test';
+
+const CASES = readdirSync(resolve(process.cwd(), 'src/content/cases')).filter((f) =>
+  f.endsWith('.mdx'),
+);
+
+test('Entrevistas: filtros, idioma y flashcards', async ({ page }) => {
+  await page.goto('entrevistas/');
+  await expect(page.locator('astro-island[ssr]')).toHaveCount(0);
+  const status = page.getByRole('status').first();
+  await expect(status).toContainText(/\d+ de \d+ preguntas/);
+  const total = Number((await status.textContent())!.match(/de (\d+) preguntas/)![1]);
+  expect(total).toBeGreaterThanOrEqual(80);
+
+  await page.getByLabel('Nivel').selectOption('senior');
+  await expect(status).not.toContainText(`${total} de ${total}`);
+  const seniors = await page.getByTestId('interview-item').count();
+  expect(seniors).toBeGreaterThan(0);
+  expect(seniors).toBeLessThan(total);
+
+  // La respuesta se muestra al abrir la pregunta, y el idioma cambia el texto.
+  const first = page.getByTestId('interview-item').first();
+  const esQuestion = await first.locator('summary').textContent();
+  await first.locator('summary').click();
+  await expect(first.locator('p').nth(1)).toBeVisible();
+  await page.getByLabel('Idioma').selectOption('en');
+  await expect(status).toContainText(/\d+ of \d+ questions/);
+  await expect(first.locator('summary')).not.toHaveText(esQuestion!);
+
+  await page.getByLabel('Level').selectOption('all');
+  await page.getByRole('button', { name: 'Flashcards' }).click();
+  await expect(page.getByText(/Card 1 of/)).toBeVisible();
+  await page.getByRole('button', { name: 'Show answer' }).click();
+  await expect(page.getByRole('button', { name: 'Hide answer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText(/Card 2 of/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show answer' })).toBeVisible();
+});
+
+test('Entrevistas: cada caso de system design se abre con sus secciones', async ({ page }) => {
+  await page.goto('entrevistas/');
+  await expect(page.getByRole('link', { name: /Chatbot de soporte/ })).toBeVisible();
+  for (const file of CASES) {
+    await page.goto(`entrevistas/system-design/${file.replace(/\.mdx$/, '')}/`);
+    for (const heading of [
+      'Requisitos',
+      'Arquitectura',
+      'Riesgos',
+      'Qué diría una persona senior',
+    ]) {
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    }
+  }
+});
