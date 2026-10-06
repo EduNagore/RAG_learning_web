@@ -1,0 +1,227 @@
+title: RAG, generación, evaluación y producción
+order: 3
+questions:
+  - id: gen-01
+    level: junior
+    kind: conceptual
+    lessons: [m06-generacion-contexto/01-prompt-citas-y-grounding]
+    es:
+      q: ¿Qué es la fundamentación (grounding) y cómo se implementa con citas?
+      a: |-
+        Fundamentar es obligar a que la respuesta se apoye en los documentos recuperados. Se implementa con instrucciones de responder solo con el contexto, pedir que cada afirmación cite el identificador de la fuente y validar después que las citas existen y respaldan la afirmación.
+
+        Las citas permiten al usuario verificar y al equipo auditar, pero un modelo puede citar mal: se comprueban automáticamente.
+    en:
+      q: What is grounding and how do you implement it with citations?
+      a: |-
+        Grounding means forcing the answer to rest on the retrieved documents. Implement it with instructions to answer only from the context, require each claim to cite a source identifier, and then validate that the citations exist and support the claim.
+
+        Citations let users verify and teams audit, but a model can cite wrongly, so check them automatically.
+  - id: gen-02
+    level: mid
+    kind: design
+    lessons: [m06-generacion-contexto/03-abstencion-no-lo-se]
+    es:
+      q: ¿Cómo haces que el sistema diga «no lo sé» cuando no hay evidencia?
+      a: |-
+        Combinando instrucción explícita de abstención, un umbral de relevancia sobre la recuperación (si lo mejor recuperado es pobre, no se genera), ejemplos de abstención en el prompt y evaluación con preguntas sin respuesta en el corpus.
+
+        Hay un compromiso: umbrales estrictos aumentan las abstenciones indebidas. Se miden las dos tasas (responder sin evidencia y abstenerse con evidencia) y se ajusta según el coste de cada error.
+    en:
+      q: How do you make the system say "I don't know" when there is no evidence?
+      a: |-
+        Combine an explicit abstention instruction, a relevance threshold on retrieval (if the best retrieved result is weak, do not generate), abstention examples in the prompt and evaluation with questions that have no answer in the corpus.
+
+        There is a trade-off: strict thresholds increase unwarranted abstentions. Measure both rates (answering without evidence and abstaining with evidence) and tune according to the cost of each error.
+  - id: gen-03
+    level: mid
+    kind: conceptual
+    lessons: [m06-generacion-contexto/02-posicion-compresion-y-cache]
+    es:
+      q: ¿Importa el orden de los fragmentos en el contexto?
+      a: |-
+        Sí. Hay evidencia de que los modelos usan peor la información situada en mitad de un contexto largo que la del principio o el final. Conviene colocar lo más relevante en los extremos, limitar el número de fragmentos y comprimir o filtrar los poco útiles.
+
+        El efecto depende del modelo y de la tarea, así que se comprueba con el conjunto de evaluación y no se da por supuesto.
+    en:
+      q: Does the order of chunks in context matter?
+      a: |-
+        Yes. There is evidence that models use information in the middle of a long context worse than information at the start or end. Place the most relevant material at the edges, limit the number of chunks and compress or filter the weak ones.
+
+        The effect depends on the model and task, so check it with your evaluation set rather than assume it.
+  - id: gen-04
+    level: senior
+    kind: conceptual
+    lessons: [m07-rag-avanzado/01-graphrag-y-lightrag]
+    es:
+      q: ¿Qué aporta GraphRAG frente al RAG vectorial y cuándo no compensa?
+      a: |-
+        GraphRAG construye un grafo de entidades y relaciones con resúmenes de comunidades, lo que ayuda con preguntas globales sobre todo el corpus («¿cuáles son los temas principales?») y con razonamiento sobre relaciones, donde el RAG vectorial recupera fragmentos aislados.
+
+        No compensa cuando las preguntas son locales y factuales: la construcción del grafo es cara (muchas llamadas al modelo), difícil de mantener al cambiar el corpus y añade complejidad.
+    en:
+      q: What does GraphRAG add over vector RAG and when is it not worth it?
+      a: |-
+        GraphRAG builds a graph of entities and relations with community summaries, which helps with global questions over the whole corpus ("what are the main themes?") and relational reasoning, where vector RAG retrieves isolated chunks.
+
+        It is not worth it when questions are local and factual: graph construction is expensive (many model calls), hard to maintain as the corpus changes and adds complexity.
+  - id: gen-05
+    level: senior
+    kind: design
+    lessons: [m07-rag-avanzado/03-agentic-rag, m07-rag-avanzado/02-self-rag-crag-y-adaptive-rag]
+    es:
+      q: ¿Cuándo pasarías de un RAG de un paso a un agentic RAG?
+      a: |-
+        Cuando el análisis de fallos muestre preguntas que necesitan varios saltos, reformulaciones o decidir si recuperar y de dónde, y el RAG de un paso no las cubra. Un agente puede reformular, recuperar iterativamente y verificar.
+
+        Cuesta más latencia, tokens e imprevisibilidad, así que se añade con límites de pasos y presupuesto. Si un flujo fijo (reformular, recuperar, verificar) resuelve el problema, es preferible.
+    en:
+      q: When would you move from one-step RAG to agentic RAG?
+      a: |-
+        When failure analysis shows questions that need multiple hops, reformulations or deciding whether and where to retrieve, and one-step RAG does not cover them. An agent can reformulate, retrieve iteratively and verify.
+
+        It costs more latency, tokens and unpredictability, so add it with step limits and a budget. If a fixed workflow (reformulate, retrieve, verify) solves the problem, prefer it.
+  - id: gen-06
+    level: junior
+    kind: conceptual
+    lessons: [m08-evaluacion-rag/01-metricas-de-recuperacion]
+    es:
+      q: ¿Qué miden recall@k, MRR y nDCG?
+      a: |-
+        Recall@k mide la fracción de documentos relevantes que aparecen entre los k primeros. MRR (Mean Reciprocal Rank) promedia la inversa de la posición del primer resultado relevante. nDCG mide la calidad del orden con relevancia graduada, premiando los relevantes en posiciones altas.
+
+        Se eligen según el uso: recall@k para saber si la evidencia llega al contexto, MRR si importa el primero y nDCG si hay grados de relevancia.
+    en:
+      q: What do recall@k, MRR and nDCG measure?
+      a: |-
+        Recall@k is the fraction of relevant documents appearing in the top k. MRR (Mean Reciprocal Rank) averages the inverse rank of the first relevant result. nDCG measures ordering quality with graded relevance, rewarding relevant items in high positions.
+
+        Choose by use: recall@k to know whether evidence reaches the context, MRR if the first result matters, nDCG if relevance has grades.
+  - id: gen-07
+    level: mid
+    kind: conceptual
+    lessons: [m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez]
+    es:
+      q: ¿Cómo evalúas la generación de un RAG? ¿Qué riesgos tiene un LLM como juez?
+      a: |-
+        Se miden por separado la fidelidad (la respuesta se apoya en el contexto), la relevancia respecto a la pregunta y la corrección frente a una respuesta de referencia, con graders de código cuando se puede y con un modelo juez para lo subjetivo.
+
+        Un juez tiene sesgos (preferencia por respuestas largas, por su propio estilo o por la posición) y es no determinista, así que se calibra con muestras revisadas por humanos, se usan rúbricas claras y se vigila su acuerdo con las personas.
+    en:
+      q: How do you evaluate RAG generation? What are the risks of an LLM judge?
+      a: |-
+        Measure faithfulness (the answer rests on the context), relevance to the question and correctness against a reference answer separately, using code graders when possible and a judge model for subjective aspects.
+
+        A judge has biases (preferring long answers, its own style or position) and is non-deterministic, so calibrate it with human-reviewed samples, use clear rubrics and monitor agreement with people.
+  - id: gen-08
+    level: mid
+    kind: design
+    lessons: [m08-evaluacion-rag/03-golden-sets-benchmarks-y-evaluacion-online]
+    es:
+      q: ¿Cómo construyes un conjunto de oro para tu RAG?
+      a: |-
+        Se parte de preguntas reales (tickets, logs, entrevistas con usuarios) y se añaden casos difíciles: multi-salto, ambiguas, sin respuesta y de permisos. Para cada una se anotan los documentos relevantes y una respuesta de referencia, con revisión de al menos dos personas en una muestra.
+
+        Se versiona, se mantiene (los fallos reales de producción se incorporan) y se avisa del tamaño: con pocas preguntas las diferencias pequeñas son ruido.
+    en:
+      q: How do you build a golden set for your RAG?
+      a: |-
+        Start from real questions (tickets, logs, user interviews) and add hard cases: multi-hop, ambiguous, unanswerable and permission cases. For each, annotate the relevant documents and a reference answer, with at least two people reviewing a sample.
+
+        Version it, maintain it (real production failures get added) and state its size: with few questions small differences are noise.
+  - id: gen-09
+    level: senior
+    kind: debug
+    lessons: [m08-evaluacion-rag/03-golden-sets-benchmarks-y-evaluacion-online]
+    es:
+      q: Una mejora en el benchmark público no se traduce en mejoras en producción. ¿Por qué puede ser?
+      a: |-
+        Los benchmarks públicos miden otra distribución de preguntas y documentos, pueden estar saturados o contaminados y no incluyen tus permisos, formatos ni idioma. Además, la métrica del benchmark puede no corresponder a lo que valoran tus usuarios.
+
+        Se usa el benchmark para elegir candidatos y el conjunto propio y la evaluación en línea (muestreo, retroalimentación, revisiones) para decidir.
+    en:
+      q: An improvement on a public benchmark does not translate to production. Why might that be?
+      a: |-
+        Public benchmarks measure a different distribution of questions and documents, may be saturated or contaminated, and do not include your permissions, formats or language. Also, the benchmark metric may not match what your users value.
+
+        Use the benchmark to shortlist candidates and your own set plus online evaluation (sampling, feedback, reviews) to decide.
+  - id: gen-10
+    level: mid
+    kind: design
+    lessons: [m09-rag-produccion/01-latencia-coste-cache-y-actualizacion]
+    es:
+      q: ¿Cómo mantienes el índice actualizado cuando cambian los documentos?
+      a: |-
+        Con ingesta incremental: detectar cambios (hashes, fechas), reindexar solo lo modificado, eliminar los borrados y versionar los fragmentos con metadatos de versión y fecha. Un trabajo periódico o eventos del origen disparan la actualización.
+
+        Hay que invalidar cachés dependientes, evitar que convivan versiones contradictorias y monitorizar el retraso entre un cambio y su disponibilidad en el índice.
+    en:
+      q: How do you keep the index up to date when documents change?
+      a: |-
+        With incremental ingestion: detect changes (hashes, dates), reindex only what changed, delete removed items and version chunks with version and date metadata. A periodic job or source events trigger updates.
+
+        Invalidate dependent caches, avoid contradictory versions coexisting and monitor the lag between a change and its availability in the index.
+  - id: gen-11
+    level: senior
+    kind: design
+    lessons: [m09-rag-produccion/02-seguridad-permisos-e-inyeccion]
+    es:
+      q: Un usuario recibe en la respuesta información de un documento al que no debería acceder. ¿Qué falló y cómo lo evitas?
+      a: |-
+        Falló el control de acceso en la recuperación: el índice devolvió un documento sin comprobar quién pregunta. Se evita filtrando por permisos durante la búsqueda (no después de generar), con metadatos de acceso fiables, aislamiento por inquilino y pruebas específicas de fugas.
+
+        Nunca se debe confiar en que el modelo «no lo cuente»: lo que entra en el contexto puede salir en la respuesta.
+    en:
+      q: A user receives information from a document they should not access. What failed and how do you prevent it?
+      a: |-
+        Access control failed at retrieval: the index returned a document without checking who is asking. Prevent it by filtering by permissions during search (not after generation), reliable access metadata, per-tenant isolation and specific leak tests.
+
+        Never rely on the model "not telling": whatever enters the context can leave in the answer.
+  - id: gen-12
+    level: senior
+    kind: conceptual
+    lessons: [m09-rag-produccion/02-seguridad-permisos-e-inyeccion]
+    es:
+      q: ¿Qué es la inyección indirecta de prompts en un RAG y cómo se mitiga?
+      a: |-
+        Es cuando un documento recuperado contiene instrucciones maliciosas que el modelo trata como órdenes. Se mitiga delimitando el contenido recuperado como datos, limitando las herramientas y los permisos del sistema, no dando acciones sensibles a un flujo que lee contenido no fiable, validando las salidas y vigilando los registros.
+
+        Ninguna defensa de prompt es garantía: se contiene el daño por diseño (mínimo privilegio, aprobación humana, bloqueo de canales de salida).
+    en:
+      q: What is indirect prompt injection in a RAG and how do you mitigate it?
+      a: |-
+        It is when a retrieved document contains malicious instructions that the model treats as commands. Mitigate by delimiting retrieved content as data, limiting the system's tools and permissions, not giving sensitive actions to a flow that reads untrusted content, validating outputs and monitoring logs.
+
+        No prompt defense is a guarantee: contain damage by design (least privilege, human approval, blocking outbound channels).
+  - id: gen-13
+    level: mid
+    kind: design
+    lessons: [m09-rag-produccion/03-observabilidad-y-guardrails]
+    es:
+      q: ¿Qué observabilidad pondrías en un RAG en producción?
+      a: |-
+        Trazas por consulta con la consulta, los documentos recuperados y su puntuación, el contexto enviado, la respuesta, las citas, tokens, latencia y coste por etapa; métricas agregadas; muestreo para revisión humana y retroalimentación del usuario; alertas por tendencias (coste, latencia, abstenciones).
+
+        Se protege la privacidad de los datos de las trazas con retención limitada y control de acceso.
+    en:
+      q: What observability would you put on a production RAG?
+      a: |-
+        Per-query traces with the query, retrieved documents and scores, the context sent, the answer, citations, tokens, latency and cost per stage; aggregated metrics; sampling for human review and user feedback; alerts on trends (cost, latency, abstentions).
+
+        Protect the privacy of trace data with limited retention and access control.
+  - id: gen-14
+    level: senior
+    kind: design
+    lessons: [m09-rag-produccion/03-observabilidad-y-guardrails, m06-generacion-contexto/03-abstencion-no-lo-se]
+    es:
+      q: ¿Qué guardarraíles pondrías y qué limitaciones tienen?
+      a: |-
+        De entrada: detección de datos personales, límites de longitud y de tasa. De salida: validación de formato y de citas, comprobación de fundamentación, filtros de contenido y abstención. A nivel de sistema: permisos y límites de herramientas.
+
+        Los filtros basados en modelos fallan en algunos casos y añaden latencia, así que son una capa de defensa en profundidad y se evalúan con conjuntos adversarios, no un control único.
+    en:
+      q: What guardrails would you put in place and what are their limits?
+      a: |-
+        On input: personal data detection, length and rate limits. On output: format and citation validation, groundedness checks, content filters and abstention. At system level: permissions and tool limits.
+
+        Model-based filters fail on some cases and add latency, so they are a defense-in-depth layer evaluated with adversarial sets, not a single control.
