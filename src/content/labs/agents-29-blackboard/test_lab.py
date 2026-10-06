@@ -7,7 +7,9 @@ def test_post_devuelve_la_secuencia_y_contributions_el_orden(student):
     expect_equal(b.post("a", "plazo", "14 días"), 1, what="primera secuencia")
     expect_equal(b.post("b", "coste", "9,95"), 2, what="segunda secuencia")
     b.post("c", "plazo", "7 días")
-    expect_equal([i["author"] for i in b.contributions("plazo")], ["a", "c"], what="autores de plazo")
+    expect_equal(
+        [i["author"] for i in b.contributions("plazo")], ["a", "c"], what="autores de plazo"
+    )
     expect_equal(b.count(), 3, what="total")
 
 

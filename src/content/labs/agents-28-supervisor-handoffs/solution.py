@@ -51,6 +51,7 @@ def run_supervisor(task, supervisor, agents, max_turns=8, max_repeats=3):
 
 # Prueba tu código: pulsa «Ejecutar» para ver esta salida.
 if __name__ == "__main__":
+
     def supervisor(state):
         if "plazo" not in state["data"]:
             return "investigador"

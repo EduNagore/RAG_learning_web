@@ -1174,7 +1174,7 @@ MUTANTS = [
     (
         "agents-28-supervisor-handoffs",
         "el handoff consulta al supervisor",
-        "forced = out.get(\"handoff\")",
+        'forced = out.get("handoff")',
         "forced = None",
     ),
     (
@@ -1198,7 +1198,7 @@ MUTANTS = [
     (
         "agents-28-supervisor-handoffs",
         "los datos no se fusionan",
-        "state[\"data\"].update(out.get(\"data\", {}))",
+        'state["data"].update(out.get("data", {}))',
         "pass",
     ),
     (
@@ -1210,8 +1210,8 @@ MUTANTS = [
     (
         "agents-28-supervisor-handoffs",
         "el error no continúa el bucle",
-        "            continue\n        state[\"history\"].append({\"agent\": name, \"message\": out.get(\"message\", \"\")})",
-        "            break\n        state[\"history\"].append({\"agent\": name, \"message\": out.get(\"message\", \"\")})",
+        '            continue\n        state["history"].append({"agent": name, "message": out.get("message", "")})',
+        '            break\n        state["history"].append({"agent": name, "message": out.get("message", "")})',
     ),
     (
         "agents-28-supervisor-handoffs",
@@ -1241,14 +1241,14 @@ MUTANTS = [
     (
         "agents-29-blackboard",
         "un autor cuenta varias veces",
-        "latest[item[\"author\"]] = item  # la última de cada autor",
-        "latest[item[\"seq\"]] = item",
+        'latest[item["author"]] = item  # la última de cada autor',
+        'latest[item["seq"]] = item',
     ),
     (
         "agents-29-blackboard",
         "el quórum es exclusivo",
-        "if len(votes[item[\"value\"]]) >= quorum:",
-        "if len(votes[item[\"value\"]]) > quorum:",
+        'if len(votes[item["value"]]) >= quorum:',
+        'if len(votes[item["value"]]) > quorum:',
     ),
     (
         "agents-29-blackboard",
@@ -1259,14 +1259,148 @@ MUTANTS = [
     (
         "agents-29-blackboard",
         "la quiescencia gana a done",
-        "        if done(board):\n            return {\"rounds\": round_number, \"stopped\": \"done\"}\n        if board.count() == before:\n            return {\"rounds\": round_number, \"stopped\": \"quiescent\"}",
-        "        if board.count() == before:\n            return {\"rounds\": round_number, \"stopped\": \"quiescent\"}\n        if done(board):\n            return {\"rounds\": round_number, \"stopped\": \"done\"}",
+        '        if done(board):\n            return {"rounds": round_number, "stopped": "done"}\n        if board.count() == before:\n            return {"rounds": round_number, "stopped": "quiescent"}',
+        '        if board.count() == before:\n            return {"rounds": round_number, "stopped": "quiescent"}\n        if done(board):\n            return {"rounds": round_number, "stopped": "done"}',
     ),
     (
         "agents-29-blackboard",
         "la secuencia empieza en 0",
         "        self._seq += 1\n",
         "",
+    ),
+    # --- agents-31-servidor-mcp ---
+    (
+        "agents-31-servidor-mcp",
+        "una notificación recibe respuesta",
+        'if "id" not in message:',
+        "if False:",
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "el id 0 se trata como notificación",
+        'if "id" not in message:',
+        'if not message.get("id"):',
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "no valida la versión de jsonrpc",
+        'or message.get("jsonrpc") != "2.0"',
+        "",
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "método sin tipo texto aceptado",
+        'or not isinstance(message.get("method"), str)',
+        "",
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "herramienta desconocida sin error",
+        "if name not in self._tools:",
+        "if False:",
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "los argumentos ausentes no se comprueban",
+        'missing = [a for a in schema.get("required", []) if a not in arguments]',
+        "missing = []",
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "el error de herramienta no marca isError",
+        'text, is_error = f"{type(e).__name__}: {e}", True',
+        'text, is_error = f"{type(e).__name__}: {e}", False',
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "tools/list pierde el esquema",
+        '{"name": n, "description": d, "inputSchema": s}',
+        '{"name": n, "description": d}',
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "initialize ignora la versión pedida",
+        '"protocolVersion": params.get("protocolVersion"),',
+        '"protocolVersion": "2025-06-18",',
+    ),
+    (
+        "agents-31-servidor-mcp",
+        "el id de la petición inválida se pierde",
+        'request_id = message.get("id") if isinstance(message, dict) else None',
+        "request_id = None",
+    ),
+    # --- agents-32-a2a-agent-cards ---
+    (
+        "agents-32-a2a-agent-cards",
+        "acepta nombres vacíos",
+        "if not isinstance(name, str) or not name.strip():",
+        "if not isinstance(name, str):",
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "acepta una lista de skills vacía",
+        "if not isinstance(skills, list) or not skills:",
+        "if not isinstance(skills, list):",
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "la numeración de skills empieza en 0",
+        "enumerate(skills, start=1)",
+        "enumerate(skills, start=0)",
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "palabras cortas cuentan",
+        "if len(w) >= 3}",
+        "if len(w) >= 1}",
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "el empate lo gana el último",
+        "if score > best_score:",
+        "if score >= best_score:",
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "sin coincidencias devuelve algo",
+        "    best, best_score = None, 0",
+        '    best, best_score = (cards[0], cards[0]["skills"][0]), 0',
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "las etiquetas no cuentan",
+        '_words(" ".join([skill["name"], skill["description"], *skill["tags"]]))',
+        '_words(" ".join([skill["name"], skill["description"]]))',
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "los estados finales admiten transiciones",
+        "if new_state not in TRANSITIONS.get(state, set()):",
+        "if False:",
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "sin agente no se rechaza",
+        '        move("rejected")\n        return task',
+        '        move("failed")\n        return task',
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "el artefacto no lleva el texto",
+        '{"name": "resultado", "parts": [{"text": outcome["text"]}]}',
+        '{"name": "resultado", "parts": []}',
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "la excepción no se captura",
+        "    except Exception as e:  # noqa: BLE001 - un agente remoto puede fallar",
+        "    except ZeroDivisionError as e:",
+    ),
+    (
+        "agents-32-a2a-agent-cards",
+        "input_required sin mensaje",
+        'task["message"] = outcome["text"]',
+        "pass",
     ),
 ]
 

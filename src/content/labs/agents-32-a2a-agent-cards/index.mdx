@@ -1,0 +1,67 @@
+---
+title: A2A, Agent Cards y delegación de tareas
+description: Implementa una versión simplificada de las ideas centrales del protocolo Agent2Agent, que son validar la tarjeta que describe a un agente, elegir al agente cuya skill encaja con una petición y delegarle una tarea con un ciclo de vida de estados.
+part: agentes
+module: m13-protocolos
+difficulty: 3
+estimatedMinutes: 45
+concepts:
+  - A2A
+  - Agent Card
+  - skills
+  - tareas y estados
+packages: []
+hints:
+  - 'Las palabras de una petición se obtienen con `re.findall(r"\w+", texto.lower())`, descartando las de menos de 3 letras. Compara el conjunto de la petición con el conjunto de palabras del nombre, la descripción y las etiquetas de cada skill (`&`).'
+  - 'Para el empate, recorre las tarjetas y skills en orden y solo sustituye al mejor cuando la puntuación sea estrictamente mayor.'
+  - '`transition` solo debe consultar `TRANSITIONS`: `new_state in TRANSITIONS.get(state, set())`. Todo cambio de estado de la tarea pasa por esa función.'
+  - 'En `delegate`, usa una función auxiliar `mover(nuevo)` que haga `tarea["state"] = transition(...)` y añada al historial; así `rejected`, `working`, `completed`, `failed` o `input_required` se registran siempre igual.'
+relatedLessons:
+  - m13-protocolos/02-a2a-y-agent-skills
+---
+
+## Objetivo
+
+**Agent2Agent (A2A)** es un protocolo abierto para que **agentes de distintos fabricantes y frameworks** se descubran y colaboren. Sus ideas centrales: cada agente publica una **Agent Card** (un documento JSON con su identidad, sus capacidades, sus *skills* y cómo autenticarse); un cliente elige al agente adecuado y le envía una petición como una **tarea** (*task*) con un **ciclo de vida** de estados; los resultados salen como **artefactos**. Este laboratorio implementa una versión **simplificada** para que practiques la lógica, sin la red ni los formatos completos de la especificación.
+
+## Qué tienes que hacer
+
+### `parse_agent_card(data)`
+
+Valida y normaliza una tarjeta `{"name", "description"?, "skills": [{"id", "name", "description"?, "tags"?}], "capabilities"?: {"streaming"?}}`. Devuelve el diccionario con los valores por defecto (`description` `""`, `tags` `[]`, `streaming` `False`). Lanza `ValueError` con estos mensajes exactos:
+
+- `la tarjeta debe ser un objeto`
+- `falta el campo obligatorio: name` (también si es texto vacío o solo espacios)
+- `skills debe ser una lista no vacía`
+- `la skill <i> necesita id y name` (`i` empieza en 1)
+
+### `find_agent(cards, request)`
+
+Devuelve `(tarjeta, skill)` con **más coincidencias**, o `None`. Las palabras son minúsculas, extraídas con `\w+` y de **3 o más letras**. La puntuación de una skill es cuántas palabras **distintas** de la petición aparecen en su nombre, descripción y etiquetas. Gana la mayor; ante un empate, la primera tarjeta y la primera skill. Con puntuación 0 en todas, `None`.
+
+### `transition(state, new_state)`
+
+Devuelve `new_state` si `TRANSITIONS` lo permite desde `state`; si no, `ValueError("transición no permitida: <estado> -> <nuevo>")`. Los estados finales (`completed`, `failed`, `canceled`, `rejected`) no admiten ninguna transición.
+
+### `delegate(cards, request, executors, task_id="task-1")`
+
+Crea una tarea `{"id", "state", "agent", "skill", "history", "artifacts", "message", "error"}` que empieza en `submitted` y avanza **siempre mediante `transition`**, anotando cada estado en `history`:
+
+- Sin agente adecuado: `rejected` (con `agent` y `skill` en `None`).
+- Con agente: `working`, y se llama a `executors[nombre](request, skill)`, que devuelve `{"state": "completed" | "input_required" | "failed", "text": ...}`.
+- `completed` → `artifacts = [{"name": "resultado", "parts": [{"text": text}]}]`; `input_required` → `message = text`; `failed` → `error = text`.
+- Sin ejecutor para el agente → `failed` con error `sin ejecutor para <nombre>`. Si el ejecutor lanza una excepción → `failed` con `<Tipo>: <mensaje>`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+tarjeta = parse_agent_card({"name": "agente-devoluciones",
+                            "skills": [{"id": "plazos", "name": "Plazos de devolución", "tags": ["reembolso"]}]})
+find_agent([tarjeta], "¿Cuánto tarda el reembolso de una devolución?")[1]["id"]   # 'plazos'
+```
+
+<Callout type="nota" title="Simplificado a propósito">
+
+La especificación real de A2A define muchos más elementos (interfaces y vinculaciones de protocolo, esquemas de seguridad, mensajes con partes, streaming, notificaciones push, estados como autenticación requerida). Aquí practicas el **núcleo conceptual**: descubrir por *skills* y gestionar un ciclo de vida de tarea con estados finales. En la lección verás las diferencias con la especificación vigente.
+
+</Callout>
