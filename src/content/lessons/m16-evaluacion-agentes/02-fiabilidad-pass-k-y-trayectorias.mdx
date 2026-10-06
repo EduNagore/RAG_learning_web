@@ -1,0 +1,199 @@
+---
+title: Fiabilidad, pass@k frente a pass^k y puntuación de trayectorias
+description: Por qué un agente no determinista exige varios intentos por tarea, cómo se calculan pass@k (capacidad) y pass^k (fiabilidad), qué enseña la brecha entre ambas y cómo puntuar una trayectoria de llamadas con precisión, recall y orden.
+module: m16-evaluacion-agentes
+order: 2
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Definir pass@k y pass^k, y explicar por qué una mide capacidad y la otra fiabilidad.
+  - Calcular ambas métricas a partir de n intentos y c éxitos, y predecir cómo cambian al aumentar k.
+  - Interpretar la brecha entre pass@1 y pass^k de un agente con las cifras de τ-bench.
+  - Puntuar una trayectoria frente a las llamadas esperadas con recall, precisión y orden, y conocer los límites de ese enfoque.
+prerequisites:
+  - m16-evaluacion-agentes/01-que-medir-en-un-agente
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains"
+    url: https://arxiv.org/abs/2406.12045
+    type: paper
+    authors: Yao, Shinn, Razavi, Narasimhan
+    year: 2024
+  - title: Evaluating Large Language Models Trained on Code
+    url: https://arxiv.org/abs/2107.03374
+    type: paper
+    authors: Chen et al. (OpenAI)
+    year: 2021
+  - title: Demystifying evals for AI agents
+    url: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+    type: blog
+    authors: Anthropic
+    year: 2026
+  - title: "τ²-Bench: Evaluating Conversational Agents in a Dual-Control Environment"
+    url: https://arxiv.org/abs/2506.07982
+    type: paper
+    authors: Barres, Dong, Ray, Si, Narasimhan
+    year: 2025
+relatedLabs:
+  - agents-35-evaluacion-de-trayectorias
+---
+
+## Intuición: acertar una vez no es lo mismo que acertar siempre
+
+Un agente es **no determinista**: la misma tarea, con la misma entrada, puede salir bien un día y mal el siguiente porque el modelo muestrea, las herramientas devuelven datos distintos o el usuario simulado reacciona de otra forma. Si ejecutas cada tarea **una vez**, tu medida mezcla la capacidad del agente con la suerte de esa ejecución.
+
+La solución es repetir: se hacen **varios intentos** por tarea y se resumen con una métrica. Pero hay dos preguntas distintas que se pueden hacer con los mismos datos, y dan respuestas muy distintas:
+
+- **«¿Puede hacerlo?»** (capacidad): si le dejo intentarlo varias veces, ¿lo consigue alguna vez?
+- **«¿Lo hace siempre?»** (fiabilidad): si lo ejecuto varias veces, ¿lo consigue todas las veces?
+
+Para un agente de programación que genera varias soluciones y un humano o un test elige la correcta, la primera pregunta es la relevante. Para un agente de soporte que atiende a clientes reales sin supervisión, es la segunda: **un error de cada diez conversaciones no es aceptable aunque el agente «pueda» hacerlo bien**.
+
+## Cómo funciona
+
+### pass@k y pass^k
+
+Las definiciones de la guía de evaluación de agentes de Anthropic son claras:
+
+- **pass@k:** la probabilidad de que el agente consiga **al menos una solución correcta en k intentos**. Crece con k.
+- **pass^k:** la probabilidad de que **los k intentos** tengan éxito. Mide consistencia y **decrece** con k.
+
+pass@k viene de la evaluación de generación de código (Chen et al. 2021, el artículo de Codex): en HumanEval, el modelo obtuvo un 28,8 % con una sola muestra y un 70,2 % cuando se permitían 100 muestras por problema, una ilustración de que el muestreo repetido es una estrategia sorprendentemente eficaz **si hay un modo de reconocer la solución buena**. pass^k fue introducida por τ-bench (Yao et al. 2024) justamente para medir la **fiabilidad** de los agentes en conversaciones con herramientas y reglas de dominio.
+
+### Cómo se calculan
+
+Con **n** intentos de una tarea, de los cuales **c** tuvieron éxito, y eligiendo **k** al azar sin reemplazo:
+
+$$
+\text{pass@}k = 1 - \frac{\binom{n-c}{k}}{\binom{n}{k}}
+\qquad\qquad
+\text{pass}^{k} = \frac{\binom{c}{k}}{\binom{n}{k}}
+$$
+
+La primera es uno menos la probabilidad de que los k elegidos sean **todos fallos**; la segunda es la probabilidad de que sean **todos éxitos**. Si los intentos fueran independientes con probabilidad de acierto $p$, las versiones teóricas serían $1-(1-p)^k$ y $p^k$. La métrica final es la **media sobre las tareas**. Con $k=1$ las dos coinciden y valen $c/n$.
+
+El experimento siguiente simula 20 tareas con probabilidades de acierto distintas por intento (6 casi seguras, 6 buenas, 4 dudosas, 2 difíciles y 2 imposibles), ejecuta 8 intentos por tarea con una semilla fija y calcula las dos métricas para varios k. Es una **simulación didáctica**: las probabilidades las hemos escogido nosotros.
+
+```python
+import random
+from math import comb
+
+
+def pass_at_k(n, c, k):
+    return 1.0 if n - c < k else 1 - comb(n - c, k) / comb(n, k)
+
+
+def pass_hat_k(n, c, k):
+    return comb(c, k) / comb(n, k)
+
+
+# 20 tareas con distinta probabilidad real de acierto por intento (agente no determinista).
+PROBS = [0.95] * 6 + [0.8] * 6 + [0.5] * 4 + [0.2] * 2 + [0.0] * 2
+rng = random.Random(7)
+N = 8  # intentos por tarea
+runs = [[rng.random() < p for _ in range(N)] for p in PROBS]
+
+print(f"{len(PROBS)} tareas, {N} intentos por tarea")
+print(f"{'k':>2}  {'pass@k':>7}  {'pass^k':>7}")
+for k in (1, 2, 4, 8):
+    a = sum(pass_at_k(N, sum(r), k) for r in runs) / len(runs)
+    h = sum(pass_hat_k(N, sum(r), k) for r in runs) / len(runs)
+    print(f"{k:>2}  {a:>7.2f}  {h:>7.2f}")
+
+# Teoría para una sola tarea con p = 0.8 por intento
+print()
+p = 0.8
+for k in (1, 2, 4, 8):
+    print(f"p={p}: k={k}  pass@k teórico={1 - (1 - p) ** k:.3f}  pass^k teórico={p**k:.3f}")
+```
+
+Salida (determinista con esa semilla):
+
+```text
+20 tareas, 8 intentos por tarea
+ k   pass@k   pass^k
+ 1     0.69     0.69
+ 2     0.81     0.57
+ 4     0.86     0.42
+ 8     0.90     0.25
+
+p=0.8: k=1  pass@k teórico=0.800  pass^k teórico=0.800
+p=0.8: k=2  pass@k teórico=0.960  pass^k teórico=0.640
+p=0.8: k=4  pass@k teórico=0.998  pass^k teórico=0.410
+p=0.8: k=8  pass@k teórico=1.000  pass^k teórico=0.168
+```
+
+Lo que enseña:
+
+- **Con k = 1 coinciden** (0,69): es la tasa de éxito por intento.
+- **Al subir k se abren las tijeras.** pass@8 llega a 0,90 (de las 20 tareas, 18 tienen alguna probabilidad de acierto y el agente casi siempre «lo consigue alguna vez»), mientras que pass^8 cae a 0,25: solo las tareas casi seguras salen **siempre**.
+- **Es el mismo agente y los mismos datos.** Según la pregunta, se puede decir «resuelve el 90 % de las tareas» o «resuelve de forma consistente el 25 %». Ambas frases son ciertas y dicen cosas muy distintas.
+- **La teoría explica la forma.** Con p = 0,8 por intento, pass^8 = 0,8⁸ ≈ 0,17: una tarea que sale bien 4 de 5 veces **no es fiable** para un flujo que debe salir bien ocho veces seguidas.
+
+### La cifra que dio a conocer pass^k
+
+El resumen de τ-bench (Yao et al. 2024) lo dice sin rodeos: agentes con llamadas a funciones de última generación, como GPT-4o, resolvían **menos del 50 % de las tareas**, y su consistencia era **mucho peor**: pass^8 por debajo del 25 % en el dominio de retail. Son resultados de **2024** con los modelos de entonces; no los tomes como el estado actual, pero la lección persiste: **la fiabilidad se degrada con rapidez cuando exiges consistencia**, y las cifras de «éxito medio» la ocultan. τ²-bench (Barres et al. 2025) extendió la idea a un dominio en el que usuario y agente actúan sobre un entorno compartido (soporte técnico de telecomunicaciones), modelado como un proceso de decisión parcialmente observable descentralizado.
+
+Qué hacer con esto en un producto:
+
+- **Elige k según el flujo real.** Si el cliente hace una tarea de la que depende su dinero, k es 1 por interacción, pero la fiabilidad que importa es la de **todas las interacciones** que verás: la pass^k con k grande se parece mucho más a lo que ocurre a escala.
+- **Ataca la varianza, no solo la media.** Menor temperatura, validaciones estructuradas, reintentos con verificación y herramientas más estrictas suben pass^k más que cambiar de modelo.
+- **Reporta las dos métricas** y el número de intentos por tarea. Una sola cifra sin k es ambigua.
+
+### Puntuar una trayectoria
+
+La segunda mitad del laboratorio implementa una puntuación sencilla de trayectorias: dada la lista de llamadas que hizo el agente (`steps`) y la lista de llamadas que se esperaban (`expected`), calcula:
+
+- **matched:** cuántas llamadas esperadas se cumplieron. Un paso cumple una esperada si la herramienta coincide y **todos los argumentos esperados están en el paso con el mismo valor** (el paso puede traer argumentos de más). Cada esperada consume **el primer paso aún no usado** que la cumple, de modo que un mismo paso no vale por dos.
+- **recall:** `matched / len(expected)`: ¿se hizo todo lo necesario?
+- **precision:** `matched / len(steps)`: ¿qué fracción de lo que se hizo era necesario? Los pasos de más la bajan.
+- **in_order:** si los pasos que cumplieron las esperadas aparecen en el **mismo orden** que en la lista esperada.
+
+Con una trayectoria `buscar_pedido(7)`, `saludar`, `reembolsar(7)` frente a `[buscar_pedido(7), reembolsar(7)]`, el recall es 1,0, la precisión es 2/3 y el orden es correcto: se hizo todo lo que había que hacer, con un paso innecesario.
+
+Límites de este enfoque, que conviene tener presentes:
+
+- **Supone que existe una trayectoria de referencia.** En tareas abiertas pueden existir muchas válidas; ahí es mejor comprobar el **resultado** y **restricciones** (nunca llamar a tal herramienta, siempre buscar antes de actuar).
+- **El orden estricto puede ser demasiado.** Dos lecturas independientes pueden hacerse en cualquier orden; exige orden solo donde haya dependencia real.
+- **Mide proceso, no calidad.** Una trayectoria perfecta con un resultado erróneo sigue siendo un fallo: la puntuación de trayectoria **complementa** al resultado, no lo sustituye.
+- **Es un diagnóstico.** Su mejor uso es explicar **por qué** falla un agente (¿no llamó a la herramienta?, ¿con el argumento equivocado?, ¿perdió pasos?), no producir un ranking.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| pass@k con k alto | Mide el techo de capacidad | Oculta la inconsistencia; exige poder reconocer la solución buena |
+| pass^k con k alto | Mide fiabilidad real a escala | Muy exigente; cae rápido incluso con tasas altas por intento |
+| Más intentos por tarea (n grande) | Estimaciones más estables | Coste en tokens y tiempo (se multiplica por n) |
+| Puntuar trayectorias | Explica el fallo y detecta pasos inútiles | Requiere trayectorias de referencia y penaliza caminos válidos |
+| Solo resultado | Robusto a caminos distintos | No dice por qué falla |
+
+## Errores comunes en producción
+
+- **Reportar una sola ejecución por tarea.** El éxito medio de un solo intento no distingue capacidad de suerte.
+- **Presentar pass@k como si fuera fiabilidad.** «Lo resuelve en 8 intentos» no es lo que vive el usuario que lo ejecuta una vez.
+- **Comparar métricas con k distintos.** Una comparación entre sistemas debe fijar n y k.
+- **Intentos no independientes.** Si el entorno conserva estado entre intentos, la métrica se contamina: reinicia el entorno en cada intento.
+- **Sobreajustar a una trayectoria.** Optimizar el agente para clavar la secuencia de referencia, en lugar del objetivo.
+- **Ignorar el coste.** Mejorar pass^k con muchos reintentos puede ser inviable si cada intento cuesta caro.
+- **Olvidar la varianza de la propia métrica.** Con pocas tareas, un par de cambios mueven mucho la media; reporta el número de tareas.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué diferencia hay entre pass@k y pass^k?"_ Pista: al menos un éxito en k intentos (capacidad, crece con k) frente a todos los intentos con éxito (fiabilidad, decrece con k).
+- _"Un agente tiene un 80 % de éxito por intento. ¿Qué fiabilidad tiene en 8 intentos seguidos?"_ Pista: 0,8⁸ ≈ 17 % si son independientes.
+- _"¿Por qué un agente puede tener buenas cifras y fallar en producción?"_ Pista: el éxito medio oculta la inconsistencia; a escala importa la fiabilidad, no la capacidad.
+- _"¿Cómo evalúas la trayectoria de un agente?"_ Pista: recall y precisión de llamadas esperadas, orden donde haya dependencia, restricciones prohibidas; siempre junto al resultado.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un agente es no determinista: evalúa **varios intentos por tarea** y reporta n y k.
+- **pass@k** mide capacidad (al menos un éxito en k) y crece con k; **pass^k** mide fiabilidad (todos los k) y decrece.
+- En la simulación, el mismo agente tenía pass@8 = 0,90 y pass^8 = 0,25; con p = 0,8 por intento, pass^8 ≈ 0,17.
+- τ-bench (2024) mostró agentes con éxito medio por debajo del 50 % y pass^8 < 25 % en retail: la fiabilidad se degrada rápido.
+- La **trayectoria** se puntúa con recall, precisión y orden, siempre **junto** al resultado, y es sobre todo un diagnóstico.
+
+</KeyTakeaways>

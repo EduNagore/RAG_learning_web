@@ -1,0 +1,228 @@
+---
+title: Benchmarks de agentes, trazas y harness de evaluación
+description: Qué mide cada benchmark de agentes (SWE-bench Verified, GAIA, τ-bench y τ²-bench, WebArena, OSWorld, BFCL, Terminal-Bench), cómo leerlos con espíritu crítico y cómo construir un harness propio con trazas y entornos aislados por intento.
+module: m16-evaluacion-agentes
+order: 3
+level: avanzado
+estimatedMinutes: 21
+objectives:
+  - Describir qué evalúa cada benchmark de agentes citado y qué tipo de agente o decisión informa.
+  - Aplicar un marco crítico para leer resultados de benchmarks (versión, arnés, saturación, contaminación, coste).
+  - Diseñar un harness de evaluación propio con entornos aislados por intento, graders y trazas.
+  - Explicar para qué sirve el tracing y qué convenciones existen para estandarizarlo.
+prerequisites:
+  - m16-evaluacion-agentes/02-fiabilidad-pass-k-y-trayectorias
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: "SWE-bench: Can Language Models Resolve Real-World GitHub Issues?"
+    url: https://arxiv.org/abs/2310.06770
+    type: paper
+    authors: Jimenez, Yang, Wettig, Yao, Pei, Press, Narasimhan
+    year: 2023
+  - title: SWE-bench Verified
+    url: https://www.swebench.com/verified.html
+    type: docs
+    authors: SWE-bench team, in collaboration with OpenAI
+    year: 2024
+  - title: "GAIA: a benchmark for General AI Assistants"
+    url: https://arxiv.org/abs/2311.12983
+    type: paper
+    authors: Mialon, Fourrier, Swift, Wolf, LeCun, Scialom
+    year: 2023
+  - title: "WebArena: A Realistic Web Environment for Building Autonomous Agents"
+    url: https://arxiv.org/abs/2307.13854
+    type: paper
+    authors: Zhou, Xu, Zhu et al.
+    year: 2023
+  - title: "OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments"
+    url: https://arxiv.org/abs/2404.07972
+    type: paper
+    authors: Xie et al.
+    year: 2024
+  - title: "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains"
+    url: https://arxiv.org/abs/2406.12045
+    type: paper
+    authors: Yao, Shinn, Razavi, Narasimhan
+    year: 2024
+  - title: "τ²-Bench: Evaluating Conversational Agents in a Dual-Control Environment"
+    url: https://arxiv.org/abs/2506.07982
+    type: paper
+    authors: Barres, Dong, Ray, Si, Narasimhan
+    year: 2025
+  - title: Berkeley Function Calling Leaderboard (BFCL)
+    url: https://gorilla.cs.berkeley.edu/leaderboard.html
+    type: docs
+    authors: Patil et al. (UC Berkeley)
+    year: 2025
+  - title: Terminal-Bench
+    url: https://www.tbench.ai/
+    type: docs
+    authors: Stanford University, Laude Institute
+    year: 2025
+  - title: Demystifying evals for AI agents
+    url: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+    type: blog
+    authors: Anthropic
+    year: 2026
+  - title: OpenTelemetry GenAI semantic conventions
+    url: https://github.com/open-telemetry/semantic-conventions-genai
+    type: docs
+    authors: OpenTelemetry project
+    year: 2026
+relatedLabs:
+  - agents-35-evaluacion-de-trayectorias
+---
+
+## Intuición: un benchmark es un instrumento, no un veredicto
+
+Cada pocas semanas aparece un titular con un número: «el modelo X resuelve el Y % de SWE-bench». Para un ingeniero, el número importa menos que **qué mide el instrumento, bajo qué condiciones y si se parece a su problema**. Un benchmark de agentes es una colección de tareas con un entorno y un grader. Lo que dice depende de esas tres cosas, y cada una puede engañar.
+
+Esta lección hace dos cosas: un **mapa** de los benchmarks de agentes más citados (qué es cada uno, con las cifras de su artículo original) y una guía para construir un **harness propio**, porque al final la evaluación que más te importa es la de **tus** tareas.
+
+## Cómo funciona
+
+### Mapa de benchmarks
+
+Las cifras siguientes son las **del artículo de presentación** de cada benchmark. Marcan el punto de partida y son un buen recordatorio de lo difícil que eran estas tareas; **no** son el estado actual (ver el cuadro de vigencia más abajo).
+
+| Benchmark | Qué evalúa | Datos del artículo original |
+| --- | --- | --- |
+| **SWE-bench** y **SWE-bench Verified** | Resolver *issues* reales de GitHub modificando una base de código; se comprueba con los tests del repositorio | 2 294 tareas de 12 repositorios Python; el mejor modelo del artículo (Claude 2) resolvió un 1,96 %. *Verified* es un subconjunto de 500 instancias filtradas por humanos, con OpenAI, para asegurar que el enunciado es claro, los tests son correctos y la tarea es resoluble |
+| **GAIA** | Preguntas «sencillas para humanos» que exigen razonamiento, navegación web, multimodalidad y uso de herramientas | 466 preguntas; humanos 92 % frente a GPT-4 con plugins 15 % |
+| **τ-bench** | Conversaciones agente-usuario simulado con herramientas de dominio y reglas de política (retail, aerolínea) | GPT-4o por debajo del 50 % de las tareas; pass^8 < 25 % en retail |
+| **τ²-bench** | Extiende τ-bench a un entorno en el que **usuario y agente** actúan sobre el mismo mundo (soporte técnico de telecomunicaciones) | Introduce el control dual modelado como Dec-POMDP |
+| **WebArena** | Tareas en sitios web funcionales (comercio, foros, desarrollo, gestión de contenidos) | Agente basado en GPT-4: 14,41 % frente a 78,24 % de humanos |
+| **OSWorld** | Tareas de uso de un ordenador real (Ubuntu, Windows, macOS) con agentes multimodales | 369 tareas; humanos 72,36 % frente a 12,24 % del mejor modelo |
+| **BFCL** | Precisión al **llamar a funciones**; ha evolucionado de AST a multi-turno y a evaluación agéntica (V4) | Artículo en ICML 2025 |
+| **Terminal-Bench** | Tareas de agentes en una **terminal** (Stanford y Laude Institute); incluye métricas de coste y tokens | Versión en curso; consulta el sitio |
+
+Cómo se relaciona con lo que has aprendido: SWE-bench y Terminal-Bench informan sobre **agentes de programación y de terminal** (el resultado se comprueba con tests); GAIA sobre **asistentes generales con herramientas**; τ-bench y τ²-bench sobre **agentes conversacionales con política** y fiabilidad (pass^k); WebArena y OSWorld sobre **agentes que usan interfaces** (web y escritorio); BFCL sobre la **base**, que es llamar bien a las funciones.
+
+<Snapshot date="2026-10">
+
+Los benchmarks de agentes **envejecen rápido**: se saturan, cambian de versión (BFCL va por su V4; la página de Terminal-Bench mostraba en la consulta su versión 4.0 y ofrece ejecutar el benchmark y consultar clasificaciones), y las clasificaciones se actualizan continuamente. Por eso esta lección **no** reproduce tablas de resultados actuales: las cifras de la tabla son las de los artículos originales, de 2021 a 2025, y los modelos de hoy las superan con claridad en varios casos. Antes de citar un resultado, comprueba en la tabla oficial **qué versión** del benchmark se usó, **qué arnés** (el código que envuelve al modelo con herramientas, prompts y reintentos) y **con cuántos intentos**. Consultado el 6 de octubre de 2026.
+
+</Snapshot>
+
+### Cómo leer un resultado de benchmark
+
+Una lista de comprobación antes de fiarte de una cifra:
+
+1. **¿Qué versión?** SWE-bench y SWE-bench Verified no son comparables; tampoco τ-bench y τ²-bench. Una cifra sin versión no vale.
+2. **¿Qué arnés?** El mismo modelo con otro arnés (otras herramientas, más reintentos, otro prompt) da resultados distintos. Se compara **modelo + arnés**.
+3. **¿Cuántos intentos?** ¿pass@1, pass@k, pass^k? (lección anterior). Un «resuelve el 70 %» con varios intentos y selección no es lo mismo que con uno.
+4. **¿Está saturado?** Cuando los mejores sistemas se acercan al techo, las diferencias entre ellos se vuelven ruido y dejan de informar.
+5. **¿Hay contaminación?** Si las tareas o sus soluciones están en los datos de entrenamiento, el modelo recita en lugar de resolver. Los benchmarks que cuidan este riesgo lo señalan (Terminal-Bench indica explícitamente que sus datos no deben aparecer en corpus de entrenamiento).
+6. **¿Mide lo que tú necesitas?** Un agente de reservas no se parece a uno que arregla repositorios. El benchmark orienta, **no** sustituye tu evaluación.
+7. **¿Y el coste?** Una puntuación con diez veces más tokens no es comparable. Algunos benchmarks publican ya coste y tokens junto al porcentaje.
+
+### Un harness propio: entornos aislados y trazas
+
+Un harness es el código que ejecuta tus tareas contra el agente, aplica los graders y guarda los resultados. Tiene cuatro piezas: **tareas** (entrada y criterio de éxito), **entorno** (el mundo con el que interactúa el agente), **graders** y **registro** de cada intento (la traza).
+
+El detalle del que más depende la validez es el **aislamiento**: cada intento debe empezar en un **entorno limpio**. El experimento siguiente lo demuestra con un agente de juguete que reembolsa con probabilidad 0,5 en cada intento. Se ejecutan 10 intentos de dos formas: con un entorno nuevo por intento y con un entorno compartido que conserva el estado de los intentos anteriores. El resultado se considera correcto si el pedido 7 figura entre los reembolsos.
+
+```python
+import random
+from math import comb
+
+
+def agente(rng, entorno, traza):
+    """Agente de juguete: busca el pedido y reembolsa con probabilidad 0.5 (no determinista)."""
+    traza.append({"tool": "buscar_pedido", "args": {"id": 7}})
+    if rng.random() < 0.5:
+        traza.append({"tool": "reembolsar", "args": {"id": 7}})
+        entorno["reembolsos"].append(7)
+
+
+def resultado_ok(entorno):
+    return 7 in entorno["reembolsos"]
+
+
+def evaluar(n, entorno_limpio_por_intento, semilla=3):
+    rng = random.Random(semilla)
+    compartido = {"reembolsos": []}
+    resultados, trazas = [], []
+    for _ in range(n):
+        entorno = {"reembolsos": []} if entorno_limpio_por_intento else compartido
+        traza = []
+        agente(rng, entorno, traza)
+        trazas.append({"pasos": traza})
+        resultados.append(resultado_ok(entorno))
+    c = sum(resultados)
+    return resultados, comb(c, 4) / comb(n, 4) if c >= 4 else 0.0, trazas
+
+
+for limpio in (True, False):
+    res, pass4, trazas = evaluar(10, limpio)
+    marca = "".join("1" if r else "0" for r in res)
+    print(f"entorno limpio por intento: {str(limpio):<5} intentos: {marca}  éxitos: {sum(res)}/10  pass^4: {pass4:.2f}")
+print("pasos de la traza 0:", [p["tool"] for p in trazas[0]["pasos"]])
+```
+
+Salida (determinista con esa semilla):
+
+```text
+entorno limpio por intento: True  intentos: 1010011011  éxitos: 6/10  pass^4: 0.07
+entorno limpio por intento: False intentos: 1111111111  éxitos: 10/10  pass^4: 1.00
+pasos de la traza 0: ['buscar_pedido', 'reembolsar']
+```
+
+- **Con un entorno limpio** el agente acierta 6 de 10 y su fiabilidad (pass^4) es de 0,07.
+- **Con el entorno compartido** parece perfecto: 10 de 10 y pass^4 = 1,00. Es un espejismo: el primer éxito dejó el reembolso en el entorno y todos los intentos siguientes «pasan» sin hacer nada. **El mismo agente, la misma semilla** y una conclusión opuesta por una sola decisión de diseño del harness.
+- La **traza** de cada intento (aquí, la lista de pasos) permite comprobar después **qué hizo** el agente y descubrir justo este tipo de fallos del evaluador. La guía de Anthropic insiste en leer las transcripciones por esta razón.
+
+### Qué registrar en una traza
+
+Para poder depurar, comparar versiones y puntuar trayectorias, cada intento debería dejar: la **entrada**, la **lista de pasos** (llamadas a herramientas con argumentos y resultados), las **salidas del modelo**, el **uso de tokens y la latencia** por paso, los **errores** y el **estado final** del entorno. Conviene guardarlas en un formato estructurado para poder consultarlas y repetir el cálculo de las métricas sin volver a ejecutar el agente.
+
+El mundo de la observabilidad trabaja en estandarizar esta información: el proyecto OpenTelemetry mantiene **convenciones semánticas para IA generativa** (spans, métricas y eventos para clientes de modelos, MCP y proveedores concretos) en un repositorio propio. La madurez de estas convenciones **cambia**: al consultarlas, el repositorio no declaraba un estado de estabilidad concreto y mostraba actividad intensa, así que antes de adoptarlas en producción comprueba su estado. Aprovechar un estándar abierto evita atarse al formato de un proveedor de observabilidad.
+
+### Del benchmark al sistema: una rutina práctica
+
+1. **Define 20–50 tareas reales** con criterios comprobables (lección 1).
+2. **Ejecuta n intentos por tarea** en entornos limpios y calcula pass@1, pass@k y pass^k (lección 2).
+3. **Guarda trazas** y lee una muestra, sobre todo las de los fallos.
+4. **Conecta con CI:** el conjunto de regresión se ejecuta en cada cambio de prompt, herramientas o modelo.
+5. **Usa benchmarks públicos** para elegir candidatos y **tu conjunto** para decidir.
+6. **Revisa el conjunto cada trimestre:** retira las tareas saturadas, añade los fallos nuevos de producción y vuelve a calibrar los graders de modelo con una muestra revisada por humanos. Un harness que nadie actualiza deja de medir tu sistema real.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Benchmark público | Comparable y gratuito | Saturación, contaminación y poca relación con tu dominio |
+| Conjunto propio | Mide lo que te importa | Hay que construirlo y mantenerlo |
+| Entorno limpio por intento | Resultados válidos | Más coste de preparación (contenedores o copias del estado) |
+| Entorno compartido | Rápido | Resultados contaminados |
+| Trazas completas | Depuración y reevaluación | Almacenamiento y privacidad (contienen datos de usuarios) |
+
+## Errores comunes en producción
+
+- **Citar un porcentaje sin versión, arnés ni número de intentos.**
+- **Escoger el modelo por la tabla de un benchmark** sin evaluar tus tareas.
+- **Entornos que conservan estado entre intentos**, como en el experimento.
+- **No guardar trazas**: sin ellas un fallo no se puede reproducir ni diagnosticar.
+- **Trazas con datos personales sin protección.** Aplican las mismas obligaciones que cualquier registro de usuarios.
+- **Optimizar contra el benchmark** (sobreajuste al arnés) y sorprenderse en producción.
+- **Evaluaciones que no se ejecutan en CI**: terminan desfasadas.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es SWE-bench Verified y por qué existe?"_ Pista: subconjunto de 500 tareas de SWE-bench filtradas por humanos para garantizar enunciados claros, tests correctos y tareas resolubles.
+- _"¿Qué mide τ-bench que no miden otros?"_ Pista: conversaciones con un usuario simulado y reglas de política, y la fiabilidad con pass^k.
+- _"¿Cómo leerías la cifra de un benchmark en una nota de prensa?"_ Pista: versión, arnés, intentos, saturación, contaminación, coste y relación con tu problema.
+- _"¿Cómo montarías un harness de evaluación?"_ Pista: tareas con criterios comprobables, entorno limpio por intento, graders de código, n intentos, trazas y CI.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un benchmark es un **instrumento**: importa la versión, el arnés, los intentos, la saturación y la contaminación.
+- SWE-bench/Terminal-Bench (código y terminal), GAIA (asistentes), τ/τ² (conversación con política y fiabilidad), WebArena/OSWorld (interfaces) y BFCL (llamadas a funciones) miden cosas distintas.
+- Las cifras de los artículos originales son un punto de partida histórico, no el estado actual.
+- En un harness, **el aislamiento del entorno por intento** decide la validez: en el experimento, un entorno compartido convirtió 6/10 en 10/10.
+- Guarda **trazas estructuradas** y léelas; los benchmarks públicos eligen candidatos, **tu conjunto** decide.
+
+</KeyTakeaways>

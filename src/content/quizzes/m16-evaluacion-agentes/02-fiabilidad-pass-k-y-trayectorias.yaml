@@ -1,0 +1,95 @@
+lesson: m16-evaluacion-agentes/02-fiabilidad-pass-k-y-trayectorias
+questions:
+  - id: m16-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué mide pass^k?'
+    options:
+      - 'La probabilidad de que al menos un intento de k tenga éxito.'
+      - 'La probabilidad de que los k intentos tengan éxito, es decir, la consistencia o fiabilidad.'
+      - 'El coste en tokens de k intentos.'
+      - 'La latencia media de k intentos.'
+    answer: [1]
+    explanation: 'pass^k exige que todos los intentos acierten, por eso decrece al aumentar k. La capacidad (al menos un éxito) es pass@k.'
+    ref: '#passk-y-passk'
+
+  - id: m16-02-q2
+    type: single
+    difficulty: 2
+    prompt: 'Una tarea tiene n = 5 intentos y c = 2 éxitos. ¿Cuánto vale pass@3?'
+    options:
+      - '0,4.'
+      - '0,9.'
+      - '0,1.'
+      - '1,0.'
+    answer: [1]
+    explanation: 'pass@3 = 1 − C(3,3)/C(5,3) = 1 − 1/10 = 0,9: la única forma de no acertar es elegir los tres fallos.'
+    ref: '#cómo-se-calculan'
+
+  - id: m16-02-q3
+    type: single
+    difficulty: 2
+    prompt: 'Con la misma tarea (n = 5, c = 2), ¿cuánto vale pass^2?'
+    options:
+      - '0,1.'
+      - '0,4.'
+      - '0,9.'
+      - '0,5.'
+    answer: [0]
+    explanation: 'pass^2 = C(2,2)/C(5,2) = 1/10 = 0,1: solo hay una pareja formada por los dos éxitos entre las diez parejas posibles.'
+    ref: '#cómo-se-calculan'
+
+  - id: m16-02-q4
+    type: single
+    difficulty: 3
+    prompt: 'Un agente acierta el 80 % de las veces por intento y los intentos son independientes. ¿Qué fiabilidad aproximada tiene en 8 intentos seguidos?'
+    options:
+      - 'El 80 %.'
+      - 'El 64 %.'
+      - 'El 17 % aproximadamente (0,8 elevado a 8).'
+      - 'El 100 %.'
+    answer: [2]
+    explanation: 'pass^k = p^k: 0,8^8 ≈ 0,168. Una tasa alta por intento no basta para un flujo que debe salir bien muchas veces seguidas.'
+    ref: '#cómo-se-calculan'
+
+  - id: m16-02-q5
+    type: single
+    difficulty: 3
+    prompt: 'En la simulación, el mismo agente tenía pass@8 = 0,90 y pass^8 = 0,25. ¿Qué conclusión es correcta?'
+    options:
+      - 'Hay un error de cálculo, las dos deberían coincidir.'
+      - 'Responden a preguntas distintas: casi siempre lo consigue alguna vez, pero solo lo hace siempre en una cuarta parte de las tareas.'
+      - 'El agente es perfecto.'
+      - 'pass^k siempre es mayor que pass@k.'
+    answer: [1]
+    explanation: 'Capacidad y fiabilidad divergen al subir k. Las dos cifras son ciertas, por eso se reportan ambas con n y k.'
+    ref: '#cómo-se-calculan'
+
+  - id: m16-02-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué calcula la puntuación de trayectoria del laboratorio? Marca todo lo correcto.'
+    options:
+      - 'Recall: fracción de las llamadas esperadas que se cumplieron.'
+      - 'Precisión: fracción de los pasos del agente que cumplían una esperada.'
+      - 'Orden: si las esperadas se cumplieron en el orden previsto.'
+      - 'La temperatura óptima del modelo.'
+    answer: [0, 1, 2]
+    explanation: 'Un paso cumple una esperada si coincide la herramienta y los argumentos esperados; los pasos de más bajan la precisión y no el recall.'
+    ref: '#puntuar-una-trayectoria'
+
+  - id: m16-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una trayectoria con recall y precisión perfectos garantiza que el resultado de la tarea es correcto.'
+    answer: [1]
+    explanation: 'Es falso. La puntuación de trayectoria mide el proceso y complementa al resultado en el entorno, no lo sustituye.'
+    ref: '#puntuar-una-trayectoria'
+
+  - id: m16-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Si el entorno conserva estado entre intentos, las métricas de varios intentos pueden quedar contaminadas.'
+    answer: [0]
+    explanation: 'Es verdadero. Cada intento debe empezar desde un entorno limpio; de lo contrario los intentos no son independientes y pass@k y pass^k pierden sentido.'
+    ref: '#errores-comunes-en-producción'

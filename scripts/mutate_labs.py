@@ -1469,6 +1469,91 @@ MUTANTS = [
         'self._save(thread_id, step, node, state, "interrupted")',
         'self._save(thread_id, step + 1, node, state, "interrupted")',
     ),
+    # --- agents-35-evaluacion-de-trayectorias ---
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "pass@k es la probabilidad de fallar",
+        "return 1 - comb(n - c, k) / comb(n, k)",
+        "return comb(n - c, k) / comb(n, k)",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "pass^k usa n en vez de c",
+        "return comb(c, k) / comb(n, k)",
+        "return comb(n, k) / comb(n, k)",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "pass^k como potencia de la tasa de éxito",
+        "return comb(c, k) / comb(n, k)",
+        "return (c / n) ** k",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "no valida k > n",
+        "if not 1 <= k <= n or not 0 <= c <= n:",
+        "if not 1 <= k or not 0 <= c <= n:",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "no valida c > n",
+        "if not 1 <= k <= n or not 0 <= c <= n:",
+        "if not 1 <= k <= n or not 0 <= c:",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "aggregate no promedia",
+        "return {nombre: valor / total for nombre, valor in resumen.items()}",
+        "return resumen",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "aggregate usa k en pass@1",
+        'resumen["pass_at_1"] += pass_at_k(n, c, 1)',
+        'resumen["pass_at_1"] += pass_at_k(n, c, k)',
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "los argumentos deben ser idénticos",
+        "all(\n        paso.get",
+        'paso.get("args", {}) == esperado.get("args", {}) and all(\n        paso.get',
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "un paso puede cumplir varias esperadas",
+        "if i not in usados and _coincide(paso, esperado):",
+        "if _coincide(paso, esperado):",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "ignora los argumentos esperados",
+        'paso["tool"] == esperado["tool"] and all(',
+        'paso["tool"] == esperado["tool"] or all(',
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "precision dividida entre las esperadas",
+        '"precision": matched / len(steps) if steps else 1.0,',
+        '"precision": matched / len(expected) if steps else 1.0,',
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "recall sin esperadas es 0",
+        "matched / len(expected) if expected else 1.0",
+        "matched / len(expected) if expected else 0.0",
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "precision sin pasos es 0",
+        '"precision": matched / len(steps) if steps else 1.0,',
+        '"precision": matched / len(steps) if steps else 0.0,',
+    ),
+    (
+        "agents-35-evaluacion-de-trayectorias",
+        "el orden siempre es correcto",
+        '"in_order": indices == sorted(indices),',
+        '"in_order": True,',
+    ),
 ]
 
 survivors = []
