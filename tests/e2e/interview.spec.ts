@@ -100,3 +100,16 @@ test('Proyectos: lista cinco guías y cada una se abre con sus secciones', async
     );
   }
 });
+
+test('Hojas de resumen: cada parte lista las ideas clave de sus lecciones', async ({ page }) => {
+  await page.goto('hojas/');
+  await expect(page.getByRole('link', { name: /Parte II · Agentes/ })).toBeVisible();
+  await page.goto('hojas/agentes/');
+  await expect(page.getByRole('heading', { name: /Hoja de resumen/ })).toBeVisible();
+  expect(await page.getByTestId('sheet-points').count()).toBeGreaterThan(20);
+  await expect(page.getByRole('button', { name: /Imprimir/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Glosario de esta parte' })).toBeVisible();
+  // Sin marcas de Markdown sin resolver en las ideas clave.
+  const text = await page.getByTestId('sheet-points').first().innerText();
+  expect(text).not.toMatch(/\*\*|`/);
+});

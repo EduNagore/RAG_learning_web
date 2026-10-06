@@ -1,0 +1,30 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { PART_LABELS } from '../../lib/content';
+import { url } from '../../lib/url';
+
+const parts = Object.keys(PART_LABELS) as (keyof typeof PART_LABELS)[];
+---
+
+<BaseLayout
+  title="Hojas de resumen"
+  description="Hojas de resumen imprimibles por parte del curso, con las ideas clave de cada lección."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Hojas de resumen</h1>
+  <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">
+    Una hoja por parte del curso con las ideas clave de cada lección, pensada para repasar antes de
+    una entrevista. Cada una tiene un botón para imprimirla o guardarla como PDF desde el navegador.
+  </p>
+  <ul class="mt-8 grid gap-4 md:grid-cols-2">
+    {parts.map((part) => (
+      <li>
+        <a
+          href={url(`/hojas/${part}/`)}
+          class="block h-full rounded-lg border border-slate-200 p-5 hover:border-indigo-400 dark:border-slate-800"
+        >
+          <h2 class="text-lg font-semibold">{PART_LABELS[part]}</h2>
+        </a>
+      </li>
+    ))}
+  </ul>
+</BaseLayout>

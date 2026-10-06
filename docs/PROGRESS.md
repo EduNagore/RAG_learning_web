@@ -40,11 +40,14 @@ Hecho: ver «F5: HECHA».
 ### Siguiente paso
 F6 (rama `fase-6-profesional`): M18 system design (3–4 lecciones, casos de §7.5), `/entrevistas/` (≥80 preguntas ES/EN y ≥6 casos de system design), glosario ES/EN, `/fuentes/`, 5 proyectos en `projects/` + `/proyectos/`, playground opcional «LLM real» (clave solo en `localStorage`), hojas de resumen imprimibles. Después F7 (Lighthouse ≥90, a11y, `content-freshness.yml`, README completo, checklist PLAN §11).
 
-## F6: avance (rama `fase-6-profesional`)
+## F6: HECHA salvo fusión y despliegue (rama `fase-6-profesional`)
 
-- ✅ M18 (3 lecciones: método, depurar RAG/agente, señales por nivel). ✅ Zona de entrevistas: colecciones `interview` (`src/content/interview/*.yaml`, 80 preguntas ES/EN) y `cases` (`src/content/cases/*.mdx`, 6 casos), página `/entrevistas/` con navegador (filtros, idioma, flashcards) y `/entrevistas/system-design/<caso>/`; el validador exige ≥80 preguntas, ≥6 casos y secciones fijas. e2e en `tests/e2e/interview.spec.ts`.
-- ⬜ **Falta, en este orden:** glosario ES/EN (`/glosario/`), página `/fuentes/` generada de los `sources` de las lecciones, 5 proyectos (`projects/<id>/` + `/proyectos/`), playground «LLM real» opcional (clave solo en `localStorage`; verificar la API vigente en la documentación), hojas de resumen imprimibles por parte, y cierre de F6 (docs, puerta completa, CI, merge a `main`).
-- Notas: al escribir preguntas/casos, citar solo hechos ya verificados en las lecciones; los precios y latencias de los casos son ilustrativos y se rotulan así.
+- ✅ M18 (3 lecciones). ✅ `/entrevistas/` (80 preguntas ES/EN, navegador con filtros, idioma y flashcards; 6 casos en `/entrevistas/system-design/<caso>/`). ✅ `/glosario/` (69 términos). ✅ `/fuentes/` (agregada de las lecciones). ✅ `/hojas/<parte>/` (hojas imprimibles). ✅ 5 proyectos (`projects/<id>/` + `/proyectos/<id>/`). ✅ Playground opcional `/practica/playground/`.
+- Contadores: 66 lecciones, 519 preguntas de quiz, 35 labs, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos.
+- Pendiente de F6: puerta completa, push, CI, fusión a `main` y verificación en producción (ver el final de este bloque cuando se haga).
+
+### Siguiente paso
+F7 (rama `fase-7-pulido`): Lighthouse ≥90 (móvil y escritorio) y accesibilidad (axe en e2e), workflow `content-freshness.yml` (avisa de lecciones con `lastReviewed` antiguo según `volatility`), README completo (cómo desarrollar, añadir lecciones y labs, desplegar), revisión del checklist final de `PLAN.md` §11, enlaces rotos y sitemap.
 
 ## F3: HECHA (referencia histórica)
 

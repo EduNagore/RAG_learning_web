@@ -1,0 +1,99 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { PART_LABELS, getLessonsByModule, getModules } from '../../lib/content';
+import { extractTakeaways, plainInline } from '../../lib/cheatsheet';
+import { url } from '../../lib/url';
+
+export function getStaticPaths() {
+  return Object.keys(PART_LABELS).map((part) => ({ params: { part } }));
+}
+
+const { part } = Astro.params;
+const modules = (await getModules()).filter((m) => m.data.part === part);
+const byModule = await getLessonsByModule();
+const glossary = (await getCollection('glossary')).flatMap((f) => f.data.terms);
+
+const sections = modules.map((m) => ({
+  module: m,
+  lessons: (byModule.get(m.id) ?? []).map((l) => ({
+    id: l.id,
+    title: l.data.title,
+    points: extractTakeaways(l.body ?? '').map(plainInline),
+  })),
+}));
+const lessonIds = new Set(sections.flatMap((s) => s.lessons.map((l) => l.id)));
+const terms = glossary
+  .filter((t) => t.lessons.some((id) => lessonIds.has(id)))
+  .sort((a, b) => a.es.localeCompare(b.es, 'es'));
+const title = PART_LABELS[part as keyof typeof PART_LABELS];
+---
+
+<BaseLayout
+  title={`Hoja de resumen: ${title}`}
+  description={`Ideas clave de cada lección de la parte «${title}», imprimibles.`}
+>
+  <div class="print:hidden">
+    <a class="text-sm hover:underline" href={url('/hojas/')}>
+      ← Todas las hojas
+    </a>
+  </div>
+  <article class="mt-2 max-w-4xl print:max-w-none">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h1 class="text-3xl font-bold tracking-tight">Hoja de resumen · {title}</h1>
+      <button
+        type="button"
+        id="print-sheet"
+        class="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 print:hidden dark:border-slate-700 dark:hover:bg-slate-800"
+      >
+        Imprimir o guardar como PDF
+      </button>
+    </div>
+    <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">
+      Resumen de repaso: para el detalle, las fuentes y las limitaciones, lee la lección.
+    </p>
+
+    {sections.map((s) => (
+      <section class="mt-6 break-inside-avoid-page">
+        <h2 class="text-xl font-semibold">{s.module.data.title}</h2>
+        {s.lessons.map((l) => (
+          <div class="mt-3 break-inside-avoid">
+            <h3 class="font-medium">
+              <a class="hover:underline" href={url(`/teoria/${l.id}/`)}>
+                {l.title}
+              </a>
+            </h3>
+            <ul class="mt-1 list-disc space-y-1 pl-5 text-sm" data-testid="sheet-points">
+              {l.points.map((p) => (
+                <li>{p}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </section>
+    ))}
+
+    {terms.length > 0 && (
+      <section class="mt-8">
+        <h2 class="text-xl font-semibold">Glosario de esta parte</h2>
+        <dl class="mt-2 grid gap-x-6 gap-y-2 text-sm md:grid-cols-2 print:grid-cols-2">
+          {terms.map((t) => (
+            <div class="break-inside-avoid">
+              <dt class="font-medium">
+                {t.es}
+                {t.en.toLowerCase() !== t.es.toLowerCase() && (
+                  <span class="font-normal text-slate-500"> · {t.en}</span>
+                )}
+              </dt>
+              <dd>{t.def}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    )}
+  </article>
+</BaseLayout>
+
+<script>
+  document.getElementById('print-sheet')?.addEventListener('click', () => window.print());
+</script>

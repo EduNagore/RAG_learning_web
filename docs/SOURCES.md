@@ -189,3 +189,19 @@ Fuentes de las lecciones de agentes. Se abrió cada una al redactar la lección 
 | [OWASP’s 2026 LLM Top 10: Incident Data Meets Judgment](https://labs.cloudsecurityalliance.org/research/csa-research-note-owasp-llm-top10-2026-incident-weighted-202/) (Cloud Security Alliance) | N2 | blog | 2026 | M17 L1, M17 L3 | 2026-10 |
 | [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) (OWASP GenAI Security Project) | N1 | docs | 2025 | M17 L1, M17 L2 | 2026-10 |
 | [Beyond permission prompts: making Claude Code more secure and autonomous](https://www.anthropic.com/engineering/claude-code-sandboxing) (Anthropic) | N2 | blog | 2025 | M17 L2 | 2026-10 |
+
+
+## Verificadas en F6 (M18, proyectos y playground)
+
+Las fuentes de las lecciones de M18 ya constan en las secciones anteriores (guía de agentes de Anthropic, Contextual Retrieval, evaluación de agentes, Lost in the Middle y MAST). Para los proyectos y el playground se abrió la documentación vigente el 2026-10-06 y se comprobaron las versiones en PyPI.
+
+| Fuente | Nivel | Tipo | Usada en | Qué se comprobó |
+| ------ | ----- | ---- | -------- | --------------- |
+| [PyPI JSON API](https://pypi.org/) (qdrant-client 1.19.1, docling 2.134.0, ragas 0.4.3, langfuse 4.17.0, langgraph 1.2.13, mcp 2.3.0, sentence-transformers 6.1.0, anthropic 1.11.0, python-dotenv 1.2.4) | N1 | registro | `projects/*/pyproject.toml` | Versiones vigentes y `requires-python` (2026-10-06) |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) | N1 | docs | Proyecto 4 | v2: `from mcp.server import MCPServer`, `@mcp.tool()`, `from mcp import Client`, `call_tool`, `structured_content`; arranque con `uv run mcp dev` |
+| [Qdrant quickstart](https://qdrant.tech/documentation/quickstart/) | N1 | docs | Proyecto 1 | `QdrantClient`, `create_collection(vectors_config=VectorParams)`, `upsert` con `PointStruct`, `query_points` |
+| [LangGraph quickstart](https://docs.langchain.com/oss/python/langgraph/quickstart) | N1 | docs | Proyecto 2 | `StateGraph`, `add_node`, `add_edge`, `add_conditional_edges`, `START`/`END`, `compile`, `invoke` |
+| [Docling](https://github.com/docling-project/docling) | N1 | docs | Proyecto 1 | `DocumentConverter().convert(...)` y `result.document.export_to_markdown()`; Python ≥ 3.10 |
+| [Claude API overview](https://platform.claude.com/docs/en/api/overview) | N1 | docs | Playground | Endpoint `POST /v1/messages`, cabeceras `x-api-key`, `anthropic-version: 2023-06-01`, `content-type` |
+| [anthropic-sdk-typescript](https://github.com/anthropics/anthropic-sdk-typescript) | N1 | docs | Playground | Uso en navegador desactivado por defecto; `dangerouslyAllowBrowser` y aviso sobre credenciales |
+| [Claude's API now supports CORS requests](https://simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access) (Willison) | N2 | blog | Playground | Cabecera `anthropic-dangerous-direct-browser-access: true` (fuente secundaria de 2024; el playground gestiona el fallo de CORS con un mensaje) |
