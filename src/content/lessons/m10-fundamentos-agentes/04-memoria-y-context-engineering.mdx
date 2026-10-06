@@ -1,0 +1,191 @@
+---
+title: Memoria de un agente y context engineering
+description: Qué es el contexto de un agente y por qué hay que administrarlo como un recurso escaso (context rot), con las técnicas de recuperación just-in-time, compactación, notas externas y sub-agentes, y una simulación que compara políticas de memoria.
+module: m10-fundamentos-agentes
+order: 4
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Diferenciar memoria de corto plazo (contexto) y de largo plazo (almacenamiento externo) en un agente.
+  - Explicar el concepto de presupuesto de atención y de context rot, y su efecto en agentes de larga duración.
+  - Aplicar cuatro técnicas (recuperación just-in-time, compactación, notas estructuradas y sub-agentes).
+  - Comparar políticas de gestión del historial en términos de coste y de información conservada.
+prerequisites:
+  - m10-fundamentos-agentes/03-planificacion-y-reflexion
+  - m06-generacion-contexto/02-posicion-compresion-y-cache
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+  - title: Lost in the Middle, How Language Models Use Long Contexts
+    url: https://arxiv.org/abs/2307.03172
+    type: paper
+    authors: Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, Liang
+    year: 2023
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Erik S., Barry Zhang (Anthropic)
+    year: 2024
+relatedLabs:
+  - agents-23-react
+---
+
+## Intuición: el contexto es memoria de trabajo, no un disco
+
+Un agente que trabaja durante decenas de pasos acumula en su historial peticiones, resultados de herramientas, razonamientos y datos intermedios. Todo eso es **contexto**: lo único que el modelo «ve» en cada llamada. Es memoria de trabajo, y como la humana, tiene un límite que no es solo de tamaño. Anthropic, en su guía de *context engineering* para agentes, lo formula así: a medida que aumenta el número de tokens en la ventana, **la capacidad del modelo de recordar con precisión información de ese contexto disminuye** (lo llaman *context rot*), y propone pensar en un **presupuesto de atención** finito que cada token nuevo agota un poco. Es coherente con lo que viste en la lección de *lost in the middle*: más contexto no es siempre mejor.
+
+De ahí la definición de **context engineering**: las estrategias para **curar y mantener el conjunto óptimo de tokens** durante la inferencia, frente a la *prompt engineering*, que son los métodos para escribir y organizar las instrucciones. En RAG decidías qué fragmentos meter; en agentes se decide **en cada vuelta** qué conservar, qué resumir, qué descartar y qué recuperar.
+
+## Cómo funciona
+
+### Dos tipos de memoria
+
+- **Corto plazo:** lo que hay en la ventana de contexto en esta llamada. Rápido y directamente utilizable, pero finito y caro, y desaparece si no se guarda.
+- **Largo plazo:** información **fuera** del contexto (ficheros, bases de datos, almacenes vectoriales, notas) que el agente escribe y lee mediante herramientas. Persiste entre sesiones y no cuesta tokens hasta que se carga. Su gestión formal (memoria episódica, semántica, sistemas como MemGPT) se estudia en el módulo de memoria y estado.
+
+La regla de diseño es: **el contexto debe contener lo necesario ahora**; todo lo demás va a memoria externa, de donde se recupera cuando hace falta.
+
+### Cuatro técnicas
+
+La guía de Anthropic describe técnicas para tareas de **horizonte largo** y para ahorrar contexto:
+
+1. **Recuperación *just-in-time*.** En lugar de cargar de antemano todos los datos que podrían hacer falta, el agente mantiene **identificadores ligeros** (rutas de archivo, consultas guardadas, enlaces) y **carga los datos en tiempo de ejecución** mediante herramientas. Es la forma en que una persona consulta un archivo cuando lo necesita en lugar de memorizarlo. Mantiene el contexto pequeño y fresco, a cambio de más llamadas.
+2. **Compactación.** Cuando el contexto se acerca a su límite, se **resume el contenido de la conversación** y se reinicia con el resumen, conservando lo crítico (decisiones, problemas sin resolver, detalles de implementación) y descartando lo redundante (salidas antiguas de herramientas). Acierta o falla según **qué conserva el resumen**: un resumen que pierde un detalle crítico hace que el agente lo ignore.
+3. **Notas estructuradas (*structured note-taking*).** El agente escribe notas con regularidad en **memoria persistente fuera del contexto** (una lista de tareas, un fichero de progreso) y las recupera más tarde. Da continuidad entre ventanas de contexto y entre sesiones, con muy poco coste de tokens.
+4. **Arquitecturas de sub-agentes.** Agentes especializados trabajan en tareas acotadas con **su propia ventana limpia** y devuelven al agente principal un **resumen condensado** de su trabajo (a menudo unos pocos miles de tokens, aunque hayan usado muchos más). Aísla el ruido de la exploración; es una de las motivaciones del diseño multiagente.
+
+### Un experimento: cuatro políticas de memoria
+
+Simulamos un agente de 20 pasos. En cada paso, la herramienta devuelve un resultado de 800 tokens y el asistente escribe una decisión de 100; las instrucciones y las herramientas ocupan 1 000 tokens por llamada. Los datos de los **pasos 1 a 3** son los que hacen falta al final (por ejemplo, una restricción que dio el usuario al principio). El dato vive en el **resultado de la herramienta** de su paso y, cuando existe, en una **nota** de 20 tokens. Comparamos cuatro políticas por los **tokens de entrada acumulados** en las 20 llamadas y los **datos clave que siguen disponibles** al final. Son números de una simulación con supuestos explícitos, no una medición de un agente real.
+
+```python
+PASOS = 20
+TOKENS_RESULTADO = 800  # lo que devuelve una herramienta en cada paso
+TOKENS_DECISION = 100  # el mensaje del asistente en cada paso
+TOKENS_NOTA = 20  # una nota breve con un dato importante
+BASE = 1000  # instrucciones y herramientas
+DATOS_CLAVE = {1, 2, 3}  # los datos de los pasos 1 a 3 se necesitan al final
+
+
+def mensajes_hasta(paso):
+    """Historial completo tras `paso` pasos: (tipo, paso, tokens)."""
+    historial = []
+    for i in range(1, paso + 1):
+        historial += [("decision", i, TOKENS_DECISION), ("resultado", i, TOKENS_RESULTADO)]
+    return historial
+
+
+def politica_todo(historial, notas):
+    return historial
+
+
+def politica_ventana(historial, notas, n=6):
+    return historial[-n:]
+
+
+def politica_limpiar_resultados(historial, notas, n=6):
+    """Conserva las decisiones y solo los resultados recientes (como limpiar llamadas antiguas)."""
+    recientes = {paso for _, paso, _ in historial[-n:]}
+    return [m for m in historial if m[0] == "decision" or m[1] in recientes]
+
+
+def politica_notas(historial, notas, n=6):
+    """Ventana reciente más un cuaderno de notas que el agente va escribiendo fuera del historial."""
+    return historial[-n:] + [("nota", paso, TOKENS_NOTA) for paso in notas]
+
+
+def simular(politica):
+    total_entrada, notas = 0, []
+    for paso in range(1, PASOS + 1):
+        if paso in DATOS_CLAVE:
+            notas.append(paso)  # el agente apunta el dato antes de que salga de la ventana
+        visible = politica(mensajes_hasta(paso - 1), notas)
+        total_entrada += BASE + sum(t for _, _, t in visible)
+    final = politica(mensajes_hasta(PASOS), notas)
+    conservados = {p for tipo, p, _ in final if tipo in ("resultado", "nota")} & DATOS_CLAVE
+    return total_entrada, len(conservados)
+
+
+print("política                      tokens de entrada (20 pasos)  datos clave conservados")
+for nombre, politica in (
+    ("conservar todo", politica_todo),
+    ("ventana de 6 mensajes", politica_ventana),
+    ("limpiar resultados antiguos", politica_limpiar_resultados),
+    ("ventana + notas externas", politica_notas),
+):
+    tokens, datos = simular(politica)
+    print(f"{nombre:<29} {tokens:>26,}  {datos} de {len(DATOS_CLAVE)}")
+```
+
+Salida (determinista):
+
+```text
+política                      tokens de entrada (20 pasos)  datos clave conservados
+conservar todo                                   191,000  3 de 3
+ventana de 6 mensajes                             68,600  0 de 3
+limpiar resultados antiguos                       82,200  0 de 3
+ventana + notas externas                          69,740  3 de 3
+```
+
+- **Conservar todo** guarda los 3 datos pero cuesta **191 000 tokens** de entrada, casi tres veces más que la ventana, y en la práctica se enfrentaría a *context rot* y al límite de la ventana.
+- **Ventana de 6 mensajes** es barata (68 600) pero **olvida los tres datos clave**: el agente tendrá que volver a pedirlos o, peor, inventarlos.
+- **Limpiar resultados antiguos** (conservando las decisiones) cuesta algo más y también pierde los datos, porque en la simulación **el dato vive en el resultado**. Limpiar resultados es seguro solo si el dato importante ya se ha trasladado a otro sitio (una nota, una decisión que lo cite).
+- **Ventana más notas externas** cuesta **69 740 tokens** (1 140 más que la ventana sola, es decir, unos 1,7 % de coste adicional) y conserva **3 de 3**. Es la idea de las notas estructuradas: **pagar poco por no perder lo importante**.
+
+El hallazgo general: la gestión del contexto no es «recortar», es **decidir qué información merece persistir y dónde**. El riesgo central de cualquier política de recorte es perder un dato crítico sin que nadie lo note.
+
+### Principios de diseño
+
+- **Mantén el contexto pequeño y de alta señal:** busca el menor conjunto posible de tokens que maximice la probabilidad del resultado deseado.
+- **Resultados de herramientas compactos y paginados:** devuelve lo que se pide, con un resumen y un identificador para cargar más.
+- **Escribe antes de olvidar:** antes de descartar contexto (compactar, limpiar), vuelca lo crítico a notas o a la memoria externa.
+- **Estructura el resumen de compactación:** decisiones, restricciones del usuario, estado actual, pendientes, y las rutas o identificadores para volver a cargar detalles.
+- **Evalúa la compactación:** pruébala con tareas largas y comprueba que el agente no pierde restricciones ni repite trabajo.
+- **Prioriza los extremos:** lo más importante al principio (instrucciones, objetivo) y lo más reciente al final; el centro de un contexto largo es la zona débil.
+
+## Trade-offs
+
+| Estrategia | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Conservar todo el historial | No pierde nada | Coste cuadrático, *context rot*, límite de ventana |
+| Ventana deslizante | Barata y simple | Olvida lo antiguo, aunque sea crítico |
+| Limpiar resultados antiguos | Elimina lo más voluminoso | Pierde datos que solo estaban ahí |
+| Compactación con resumen | Reinicia con contexto limpio | El resumen puede omitir un detalle crítico |
+| Notas externas | Continuidad barata | El agente debe decidir qué apuntar |
+| Recuperación *just-in-time* | Contexto pequeño y fresco | Más llamadas; depende de buenos identificadores |
+| Sub-agentes | Aísla el ruido de la exploración | Coste total mayor; coordinación |
+
+## Errores comunes en producción
+
+- **Dejar crecer el historial sin política.** Primero sube el coste, luego se degrada la calidad y por fin se alcanza el límite.
+- **Compactar sin guardar lo crítico.** El resumen pierde una restricción del usuario y el agente la incumple veinte pasos después.
+- **Borrar resultados que contenían la única copia de un dato.** Antes de limpiar, extrae lo importante.
+- **Resultados de herramientas enormes.** Un volcado de miles de líneas contamina el contexto en todas las vueltas siguientes.
+- **Notas sin estructura ni dueño.** Un cuaderno desordenado que crece sin control se convierte en otro problema de contexto.
+- **No evaluar la memoria.** Se comprueba que el agente «funciona» en tareas cortas y se descubre en producción que olvida en las largas.
+- **Confundir contexto y almacenamiento.** Meter en el prompt todo lo que «podría hacer falta» es la versión agéntica de rellenar la ventana «porque cabe».
+- **Memoria compartida sin permisos.** Notas y memorias persistentes pueden mezclar datos de usuarios distintos.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es context engineering y en qué se diferencia de prompt engineering?"_ Pista: curar y mantener el conjunto óptimo de tokens durante la inferencia, de forma continua en el bucle, frente a escribir y organizar las instrucciones.
+- _"¿Qué es el context rot?"_ Pista: la capacidad del modelo de recordar con precisión disminuye al crecer el contexto; se habla de un presupuesto de atención finito.
+- _"¿Qué técnicas usarías para un agente que trabaja durante horas?"_ Pista: recuperación just-in-time, compactación, notas estructuradas en memoria externa y sub-agentes con contexto limpio.
+- _"¿Qué riesgo tiene compactar el historial?"_ Pista: que el resumen pierda un detalle crítico; se mitiga volcando lo importante a notas antes y evaluando con tareas largas.
+
+</Callout>
+
+<KeyTakeaways>
+
+- El contexto es **memoria de trabajo con presupuesto de atención**: más tokens no es mejor (*context rot*).
+- **Corto plazo** = ventana; **largo plazo** = almacenamiento externo accesible con herramientas.
+- Cuatro técnicas: **recuperación just-in-time**, **compactación**, **notas estructuradas** y **sub-agentes**.
+- En la simulación, conservar todo costó 191 000 tokens, la ventana perdió los 3 datos clave y **ventana + notas** conservó los 3 por 69 740 tokens.
+- Antes de descartar contexto, **escribe lo crítico fuera**; evalúa la memoria con tareas largas.
+
+</KeyTakeaways>

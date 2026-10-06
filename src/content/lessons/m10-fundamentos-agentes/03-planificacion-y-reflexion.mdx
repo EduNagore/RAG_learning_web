@@ -1,0 +1,206 @@
+---
+title: Planificación y reflexión en agentes
+description: Cómo un agente descompone una tarea y corrige su rumbo, qué aporta la reflexión con feedback externo (Reflexion), por qué la autocorrección sin señal externa es poco fiable y cómo la calidad del verificador decide si el bucle ayuda o engaña.
+module: m10-fundamentos-agentes
+order: 3
+level: avanzado
+estimatedMinutes: 17
+objectives:
+  - Distinguir entre planificar por adelantado, planificar sobre la marcha y replanificar.
+  - Explicar el mecanismo de Reflexion (reflexión verbal y memoria episódica) y sus resultados reportados.
+  - Justificar por qué la reflexión necesita feedback externo y qué evidencia hay de la autocorrección intrínseca.
+  - Construir un bucle intento, verificación, reflexión con presupuesto y medir el riesgo de un verificador débil.
+prerequisites:
+  - m10-fundamentos-agentes/02-bucle-react-y-herramientas
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: "Reflexion: Language Agents with Verbal Reinforcement Learning"
+    url: https://arxiv.org/abs/2303.11366
+    type: paper
+    authors: Shinn, Cassano, Berman, Gopinath, Narasimhan, Yao
+    year: 2023
+  - title: Large Language Models Cannot Self-Correct Reasoning Yet
+    url: https://arxiv.org/abs/2310.01798
+    type: paper
+    authors: Huang, Chen, Mishra, Zheng, Yu, Song, Zhou
+    year: 2023
+  - title: "ReAct: Synergizing Reasoning and Acting in Language Models"
+    url: https://arxiv.org/abs/2210.03629
+    type: paper
+    authors: Yao, Zhao, Yu, Du, Shafran, Narasimhan, Cao
+    year: 2022
+  - title: Chain-of-Thought Prompting Elicits Reasoning in Large Language Models
+    url: https://arxiv.org/abs/2201.11903
+    type: paper
+    authors: Wei et al.
+    year: 2022
+---
+
+## Intuición: pensar antes de actuar y aprender de los fallos
+
+Un buen ingeniero no empieza a teclear al azar ante una tarea grande: la descompone, hace un plan, lo ejecuta, comprueba el resultado y, si algo falla, **entiende por qué** antes de reintentar. Un agente puede hacer lo mismo en dos niveles:
+
+- **Planificación:** decidir qué pasos dar antes (o mientras) se ejecutan.
+- **Reflexión:** examinar lo que ha ocurrido (un fallo, un resultado dudoso) y **extraer una lección** que cambie el siguiente intento.
+
+Ambas añaden llamadas al modelo, así que, como todo en agentes, valen lo que cuestan solo si mejoran el resultado. Y la reflexión tiene una condición que se olvida con frecuencia: **necesita algo contra lo que contrastar**.
+
+## Cómo funciona
+
+### Planificación
+
+Hay tres estilos, de menos a más reactivo:
+
+1. **Plan previo explícito:** el modelo escribe una lista de pasos antes de actuar y el programa los ejecuta uno a uno. Es previsible y auditable (puedes revisar o aprobar el plan), pero frágil si el mundo no se comporta como se esperaba.
+2. **Planificación sobre la marcha (ReAct):** el modelo decide solo la siguiente acción en cada vuelta, a la luz de lo observado. Es flexible y barata de arrancar, pero sin plan global puede **dar vueltas** o perder el objetivo en tareas largas.
+3. **Plan con replanificación:** hay un plan, pero tras cada paso (o cuando algo falla) el agente decide si **sigue, ajusta o rehace** el plan. Es lo habitual en agentes largos. Los patrones concretos (plan-and-execute, ReWOO, LLMCompiler) se estudian en el módulo de patrones de workflows.
+
+Pautas prácticas: **pide el plan como texto estructurado** (lista numerada) y guárdalo en el estado para poder inspeccionarlo; **mantén el plan visible** en el contexto de las vueltas siguientes (si no, el modelo lo olvida); y **marca pasos completados** para que el agente no repita trabajo. La técnica de pedir al modelo que razone paso a paso antes de responder (*chain-of-thought*, Wei et al., 2022) es el antecedente: el razonamiento intermedio mejora la resolución de problemas de varios pasos.
+
+### El plan como punto de control humano
+
+Un plan escrito es también un **punto de control**. En tareas de alto impacto (modificar sistemas, enviar comunicaciones, gastar dinero) es habitual mostrar el plan a una persona antes de ejecutarlo, y pedir aprobación para los pasos irreversibles. Esto convierte parte de la supervisión en algo barato: revisar diez líneas de plan es mucho más rápido que revisar diez acciones ya ejecutadas. Para que funcione, el plan debe ser **concreto** (qué herramienta, con qué datos), **ordenado** y **completo en sus efectos secundarios** («este paso enviará un correo»). Un plan vago («analizar y resolver el problema») no da nada que aprobar. Y cuando el agente replanifica, conviene volver a mostrar solo lo que ha cambiado.
+
+### Reflexión: Reflexion
+
+**Reflexion** (Shinn et al., 2023) propone que los agentes mejoren mediante **retroalimentación lingüística en lugar de actualizar pesos**: tras un intento fallido, el agente «reflexiona verbalmente» sobre la señal de retorno del entorno y guarda su texto reflexivo en un **búfer de memoria episódica**, que usa en los intentos siguientes para decidir mejor. Los autores reportan, entre otros resultados, un **91 % de pass@1 en HumanEval** (benchmark de programación), frente al 80 % de GPT-4 que citan como estado del arte anterior, y mejoras en tareas de decisión secuencial y de razonamiento con distintos tipos de señal de retorno (valores numéricos, texto libre, resultados de tests).
+
+El ciclo es: **intentar → evaluar → reflexionar → intentar de nuevo con la lección en el prompt**. Tres piezas:
+
+- **Actor:** el agente que produce el intento.
+- **Evaluador:** la señal que dice si el intento fue bueno (tests, un validador, una regla, un humano).
+- **Reflexión:** un texto breve y concreto («falla con 1900: ese año es divisible entre 100 y no entre 400») que se añade a la memoria.
+
+<Diagram
+  caption="El ciclo de Reflexion: la lección verbal del intento anterior viaja en el prompt del siguiente."
+  code={`flowchart LR
+  A[Actor: intento] --> E{Evaluador}
+  E -->|pasa| F[Resultado final]
+  E -->|falla| R[Reflexión: lección en texto]
+  R --> M[(Memoria episódica)]
+  M --> A`}
+/>
+
+### ¿Puede el modelo corregirse solo?
+
+Aquí hay una trampa. Es tentador pedir al modelo «revisa tu respuesta y mejórala» sin ninguna señal externa. Huang et al. (2023) estudiaron esa **autocorrección intrínseca** en razonamiento y concluyen que los LLM «tienen dificultades para autocorregir sus respuestas sin retroalimentación externa y, a veces, su rendimiento incluso empeora tras la autocorrección». La lectura práctica es que **la reflexión útil se apoya en una señal fiable del mundo**: resultados de tests, salida de una herramienta, comprobación de reglas, comparación con una fuente, o una persona. Sin esa señal, el «segundo pensamiento» del modelo puede cambiar una respuesta correcta por otra equivocada.
+
+### Un experimento: el verificador decide si la reflexión ayuda
+
+El código implementa un bucle de Reflexion para escribir `es_bisiesto(año)`. El «modelo» es un `MockLLM` guionizado que produce tres intentos (el primero ignora la regla de los siglos, el segundo la de los 400 años, el tercero es correcto). El evaluador ejecuta el código contra unos tests y la primera línea de fallo se convierte en una **lección** que viaja en el prompt siguiente. Se ejecuta dos veces: con tests **fuertes** y con tests **débiles** (solo dos casos). *Aviso:* usar `exec` sobre código generado por un modelo real exige un sandbox; aquí es código escrito por nosotros.
+
+```python
+from ragkit.llm import Message, MockLLM
+
+TESTS_FUERTES = [(2024, True), (2023, False), (1900, False), (2000, True)]
+TESTS_DEBILES = TESTS_FUERTES[:2]
+
+
+def verificar(codigo, tests):
+    """Ejecuta el código candidato y devuelve la lista de fallos legibles (vacía si pasa)."""
+    entorno = {}
+    exec(codigo, entorno)  # SOLO para el ejemplo: el código de un modelo real va en un sandbox
+    fallos = []
+    for entrada, esperado in tests:
+        obtenido = entorno["es_bisiesto"](entrada)
+        if obtenido != esperado:
+            fallos.append(f"es_bisiesto({entrada}) devolvió {obtenido}, se esperaba {esperado}")
+    return fallos
+
+
+INTENTOS = [
+    "def es_bisiesto(a):\n    return a % 4 == 0",
+    "def es_bisiesto(a):\n    return a % 4 == 0 and a % 100 != 0",
+    "def es_bisiesto(a):\n    return a % 4 == 0 and (a % 100 != 0 or a % 400 == 0)",
+]
+
+
+def reflexion(tests, max_intentos=4):
+    llm = MockLLM(script=list(INTENTOS))
+    reflexiones = []  # memoria episódica: lo aprendido en intentos anteriores
+    for n in range(1, max_intentos + 1):
+        prompt = "Escribe es_bisiesto(año)." + "".join(f"\nLección: {r}" for r in reflexiones)
+        codigo = llm.generate([Message("user", prompt)]).text
+        fallos = verificar(codigo, tests)
+        print(f"  intento {n}: {len(fallos)} fallos, {len(reflexiones)} lecciones en el prompt")
+        if not fallos:
+            return n, codigo
+        reflexiones.append(fallos[0])
+    return None, None
+
+
+print("con tests fuertes:")
+n, codigo = reflexion(TESTS_FUERTES)
+print("  resultado tras", n, "intentos; correcto de verdad:", not verificar(codigo, TESTS_FUERTES))
+print("con tests débiles:")
+n, codigo = reflexion(TESTS_DEBILES)
+print("  resultado tras", n, "intentos; correcto de verdad:", not verificar(codigo, TESTS_FUERTES))
+```
+
+Salida (determinista):
+
+```text
+con tests fuertes:
+  intento 1: 1 fallos, 0 lecciones en el prompt
+  intento 2: 1 fallos, 1 lecciones en el prompt
+  intento 3: 0 fallos, 2 lecciones en el prompt
+  resultado tras 3 intentos; correcto de verdad: True
+con tests débiles:
+  intento 1: 0 fallos, 0 lecciones en el prompt
+  resultado tras 1 intentos; correcto de verdad: False
+```
+
+- Con **tests fuertes** el bucle itera tres veces, acumulando una lección por fallo, y termina con código realmente correcto. Cada lección es **concreta** (el caso que falla), no un genérico «mejora el código».
+- Con **tests débiles** el bucle **termina al primer intento con código incorrecto** y se declara éxito. El agente es tan bueno como su verificador: un evaluador incompleto convierte la reflexión en una **falsa sensación de seguridad**.
+- El modelo está guionizado: en la realidad, una lección puede no llevar al siguiente intento a la solución, y el modelo puede repetir el fallo. Por eso hay **máximo de intentos** (`max_intentos`) y, si se agota, el agente debe **escalar** (a una persona) en lugar de devolver el último intento como si fuera bueno.
+
+### Cuándo compensa reflexionar
+
+| Condición | Reflexión útil | Reflexión dudosa |
+| --- | --- | --- |
+| Señal de retorno | Tests, validadores, resultados de herramientas | Solo la opinión del propio modelo |
+| Coste de un intento | Bajo o moderado | Muy alto (cada intento es caro) |
+| Tipo de error | Concreto y localizable | Difuso o subjetivo |
+| Valor de acertar | Alto | Bajo |
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Plan previo | Auditable, aprobable por una persona | Frágil si el entorno cambia |
+| Solo ReAct | Flexible y simple | Puede divagar en tareas largas |
+| Plan con replanificación | Equilibrio entre ambos | Más llamadas y lógica de control |
+| Reflexión con feedback externo | Corrige errores reales | Cada reintento cuesta; depende del verificador |
+| Autorrevisión sin señal externa | Barata | Puede empeorar respuestas correctas |
+| Más intentos | Más probabilidad de acertar | Coste y latencia; riesgo de bucles |
+
+## Errores comunes en producción
+
+- **Verificador débil.** El bucle declara éxito con una solución incorrecta: invierte en buenos tests y validadores.
+- **Autocorrección sin señal externa.** Pedir «revisa tu respuesta» a ciegas puede degradarla.
+- **Reintentos sin límite.** Fija máximo de intentos y de coste; al agotarlos, escala.
+- **Lecciones vagas.** «Hazlo mejor» no aporta; la reflexión debe citar el fallo concreto.
+- **No guardar el plan o las lecciones en el estado.** Sin ellas el agente repite errores y no hay nada que auditar.
+- **Ejecutar código generado sin sandbox.** Verificar con `exec` en tu proceso es un riesgo de seguridad.
+- **Premiar al agente por el verificador.** Un agente puede encontrar atajos que pasan los tests sin resolver el problema (*reward hacking*): revisa muestras a mano.
+- **Plan oculto.** Si el plan no se muestra ni se registra, nadie puede aprobarlo ni depurarlo.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es Reflexion?"_ Pista: intentar, evaluar, reflexionar con texto sobre el fallo y guardar la lección en memoria episódica para el siguiente intento; mejora sin actualizar pesos.
+- _"¿Puede un LLM corregirse solo?"_ Pista: sin feedback externo suele no mejorar e incluso empeorar (Huang et al., 2023); la reflexión útil se apoya en tests, herramientas, reglas o personas.
+- _"¿Qué riesgo tiene un bucle de verificación con tests incompletos?"_ Pista: da por buena una solución errónea; el agente es tan bueno como su verificador.
+- _"¿Plan previo o ReAct?"_ Pista: plan previo para auditar y aprobar; ReAct para flexibilidad; en tareas largas, plan con replanificación.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Planificar** puede ser previo, sobre la marcha o con replanificación; guarda el plan en el estado y mantenlo visible.
+- **Reflexion** convierte un fallo en una lección verbal en memoria episódica (91 % pass@1 en HumanEval según sus autores, frente al 80 % de GPT-4).
+- Sin **señal externa** la autocorrección es poco fiable e incluso puede empeorar la respuesta.
+- **El verificador decide:** con tests débiles, el bucle terminó en un intento con código incorrecto.
+- Pon límites de intentos y coste, y **escala a una persona** cuando se agoten.
+
+</KeyTakeaways>

@@ -982,6 +982,67 @@ MUTANTS = [
         "i not in docs_by_id or ",
         "",
     ),
+    # --- agents-22-registro-de-tools ---
+    (
+        "agents-22-registro-de-tools",
+        "permite nombres duplicados",
+        "if name in self._tools:",
+        "if False:",
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "herramienta desconocida sin controlar",
+        "if name not in self._tools:",
+        "if False:",
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "no exige los obligatorios",
+        'for required in schema.get("required", []):',
+        "for required in []:",
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "acepta argumentos no declarados",
+        'errors.append(f"argumento no esperado: {key}")',
+        "pass",
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "un booleano vale como entero",
+        '"integer": lambda v: isinstance(v, int) and not isinstance(v, bool),',
+        '"integer": lambda v: isinstance(v, int),',
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "un booleano vale como número",
+        '"number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),',
+        '"number": lambda v: isinstance(v, (int, float)),',
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "ignora el enum",
+        'elif "enum" in prop and value not in prop["enum"]:',
+        "elif False:",
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "separador de errores distinto",
+        '"; ".join(errors)',
+        '", ".join(errors)',
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "mensaje de excepción sin tipo",
+        'f"{type(e).__name__}: {e}"',
+        "str(e)",
+    ),
+    (
+        "agents-22-registro-de-tools",
+        "ejecuta aunque haya errores",
+        "if errors:\n            return",
+        "if False:\n            return",
+    ),
 ]
 
 survivors = []

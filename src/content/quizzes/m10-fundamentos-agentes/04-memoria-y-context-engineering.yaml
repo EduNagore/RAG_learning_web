@@ -1,0 +1,95 @@
+lesson: m10-fundamentos-agentes/04-memoria-y-context-engineering
+questions:
+  - id: m10-04-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es el context engineering según la guía de Anthropic?'
+    options:
+      - 'Escribir instrucciones largas y detalladas.'
+      - 'Las estrategias para curar y mantener el conjunto óptimo de tokens durante la inferencia.'
+      - 'Entrenar un modelo con más contexto.'
+      - 'Comprimir los pesos del modelo.'
+    answer: [1]
+    explanation: 'El prompt engineering son los métodos para escribir y organizar instrucciones; el context engineering gestiona de forma continua qué información hay en la ventana en cada llamada.'
+    ref: '#intuición-el-contexto-es-memoria-de-trabajo-no-un-disco'
+
+  - id: m10-04-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué describe el context rot?'
+    options:
+      - 'Que los archivos de contexto se corrompen en disco.'
+      - 'Que al aumentar los tokens de la ventana disminuye la capacidad del modelo de recordar con precisión la información del contexto.'
+      - 'Que el modelo olvida el idioma.'
+      - 'Que las herramientas dejan de funcionar con el tiempo.'
+    answer: [1]
+    explanation: 'Es la degradación de la recuperación de información dentro del contexto a medida que crece; por eso se habla de un presupuesto de atención finito.'
+    ref: '#intuición-el-contexto-es-memoria-de-trabajo-no-un-disco'
+
+  - id: m10-04-q3
+    type: single
+    difficulty: 2
+    prompt: '¿En qué consiste la recuperación just-in-time de contexto?'
+    options:
+      - 'En cargar de antemano todos los datos posibles.'
+      - 'En mantener identificadores ligeros (rutas, consultas, enlaces) y cargar los datos en tiempo de ejecución con herramientas cuando hacen falta.'
+      - 'En cachear las respuestas del modelo.'
+      - 'En reducir la temperatura.'
+    answer: [1]
+    explanation: 'Mantiene el contexto pequeño y fresco, a cambio de más llamadas a herramientas y de depender de buenos identificadores.'
+    ref: '#cuatro-técnicas'
+
+  - id: m10-04-q4
+    type: single
+    difficulty: 3
+    prompt: 'En la simulación, la ventana de 6 mensajes costaba 68 600 tokens y no conservaba ningún dato clave, mientras ventana + notas costaba 69 740 y conservaba los tres. ¿Qué conclusión es correcta?'
+    options:
+      - 'Las notas no aportan nada.'
+      - 'Por un coste adicional pequeño (alrededor del 1,7 %), las notas externas evitan perder los datos importantes que salen de la ventana.'
+      - 'Conservar todo el historial es siempre la mejor política.'
+      - 'La ventana es mejor porque cuesta menos.'
+    answer: [1]
+    explanation: 'Apuntar lo importante en notas de pocos tokens permite recortar el historial sin perder información crítica. Conservar todo conserva los datos pero cuesta casi tres veces más y degrada la atención.'
+    ref: '#un-experimento-cuatro-políticas-de-memoria'
+
+  - id: m10-04-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué técnicas ayudan a un agente que trabaja durante mucho tiempo? Marca todas las correctas.'
+    options:
+      - 'Compactación: resumir la conversación al acercarse al límite y reiniciar con el resumen.'
+      - 'Notas estructuradas escritas en memoria persistente fuera del contexto.'
+      - 'Sub-agentes con su propia ventana limpia que devuelven un resumen condensado.'
+      - 'Meter en el prompt todo lo que podría hacer falta por si acaso.'
+    answer: [0, 1, 2]
+    explanation: 'La compactación, las notas estructuradas y los sub-agentes son las técnicas de horizonte largo. Cargar todo por si acaso es la versión agéntica de llenar la ventana porque cabe.'
+    ref: '#cuatro-técnicas'
+
+  - id: m10-04-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Cuál es el principal riesgo de la compactación?'
+    options:
+      - 'Que el resumen omita un detalle crítico y el agente lo ignore después.'
+      - 'Que el modelo deje de generar texto.'
+      - 'Que aumente la latencia de red.'
+      - 'Que las herramientas se desinstalen.'
+    answer: [0]
+    explanation: 'La compactación acierta o falla según qué conserva. Por eso se estructura el resumen, se vuelcan antes las restricciones a notas y se evalúa con tareas largas.'
+    ref: '#cuatro-técnicas'
+
+  - id: m10-04-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Limpiar los resultados antiguos de herramientas es seguro aunque el único registro de un dato importante esté en esos resultados.'
+    answer: [1]
+    explanation: 'Es falso. Si el dato solo estaba en el resultado, se pierde. Antes de limpiar hay que trasladar lo importante a una nota o a una decisión que lo cite.'
+    ref: '#un-experimento-cuatro-políticas-de-memoria'
+
+  - id: m10-04-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una memoria persistente compartida entre usuarios puede mezclar datos de personas distintas si no se aplican permisos.'
+    answer: [0]
+    explanation: 'Es verdadero. Notas y memorias a largo plazo deben aislarse por usuario o inquilino, igual que los documentos y las cachés.'
+    ref: '#errores-comunes-en-producción'

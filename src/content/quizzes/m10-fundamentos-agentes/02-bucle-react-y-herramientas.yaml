@@ -1,0 +1,102 @@
+lesson: m10-fundamentos-agentes/02-bucle-react-y-herramientas
+questions:
+  - id: m10-02-q1
+    type: single
+    difficulty: 1
+    prompt: 'Cuando un modelo «llama a una herramienta», ¿qué ocurre realmente?'
+    options:
+      - 'El modelo ejecuta la función por sí mismo.'
+      - 'El modelo propone un nombre y unos argumentos, y es tu programa quien ejecuta la función y devuelve el resultado.'
+      - 'El proveedor ejecuta siempre cualquier código del usuario.'
+      - 'La herramienta se entrena dentro del modelo.'
+    answer: [1]
+    explanation: 'El modelo solo produce una petición estructurada. Ejecutarla y devolver el resultado como observación es responsabilidad del programa que contiene el bucle.'
+    ref: '#intuición-un-modelo-que-pide-un-programa-que-ejecuta'
+
+  - id: m10-02-q2
+    type: single
+    difficulty: 2
+    prompt: 'Tras recibir una respuesta del modelo con peticiones de herramientas, ¿qué debe añadirse al historial?'
+    options:
+      - 'Solo el resultado de las herramientas.'
+      - 'El mensaje del asistente con las peticiones y un mensaje de resultado por cada herramienta ejecutada.'
+      - 'Nada: el modelo recuerda lo que pidió.'
+      - 'Únicamente la pregunta original de nuevo.'
+    answer: [1]
+    explanation: 'El modelo no tiene memoria entre llamadas: necesita ver tanto lo que pidió como los resultados, vinculados por identificador, para continuar.'
+    ref: '#anatomía-de-una-vuelta'
+
+  - id: m10-02-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Por qué conviene devolver el error de una herramienta al modelo como observación de texto?'
+    options:
+      - 'Para ocultar los fallos al usuario.'
+      - 'Porque el modelo puede leer el error y corregirse, en lugar de que una excepción rompa el bucle.'
+      - 'Porque las excepciones no existen en Python.'
+      - 'Para evitar tener que validar argumentos.'
+    answer: [1]
+    explanation: 'Un mensaje concreto («kilos debe ser numérico») permite que el agente se autocorrija. Una excepción sin capturar mata el agente donde podría haberse recuperado.'
+    ref: '#los-errores-son-observaciones'
+
+  - id: m10-02-q4
+    type: multiple
+    difficulty: 3
+    prompt: '¿Cuáles son condiciones de parada que debe tener un bucle de agente? Marca todas las correctas.'
+    options:
+      - 'El modelo responde sin pedir herramientas.'
+      - 'Se alcanza un máximo de pasos.'
+      - 'Se agota un presupuesto de tokens o de tiempo.'
+      - 'Interviene una persona (confirmación o cancelación).'
+    answer: [0, 1, 2, 3]
+    explanation: 'Las cuatro son condiciones de parada legítimas. Sin ellas, un agente que no converge consume sin límite.'
+    ref: '#anatomía-de-una-vuelta'
+
+  - id: m10-02-q5
+    type: code-output
+    difficulty: 2
+    prompt: 'Con la herramienta del ejemplo (precio exprés 9,95 y 0,50 por kilo por encima de 5), ¿qué devuelve coste_envio("expres", 8)?'
+    code: |-
+      PRECIOS = {"estandar": 4.95, "expres": 9.95}
+
+      def coste_envio(modo, kilos):
+          return round(PRECIOS[modo] + 0.5 * max(0, kilos - 5), 2)
+
+      print(coste_envio("expres", 8))
+    options:
+      - '9.95'
+      - '11.45'
+      - '13.95'
+      - '8.0'
+    answer: [1]
+    explanation: '9,95 + 0,5 · (8 − 5) = 9,95 + 1,5 = 11,45.'
+    ref: '#los-errores-son-observaciones'
+
+  - id: m10-02-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué significa aplicar poka-yoke al diseñar una herramienta para un agente?'
+    options:
+      - 'Hacer la herramienta lo más flexible posible, aceptando cualquier formato.'
+      - 'Diseñar los argumentos para que sea difícil usarlos mal (por ejemplo, enumeraciones en lugar de texto libre o rutas absolutas).'
+      - 'Añadir más herramientas con funciones parecidas.'
+      - 'Quitar las descripciones.'
+    answer: [1]
+    explanation: 'La idea es prevenir el error por diseño: acotar los valores posibles y evitar ambigüedades en los argumentos.'
+    ref: '#diseñar-herramientas-la-interfaz-agente-ordenador'
+
+  - id: m10-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un conjunto grande de herramientas con funciones solapadas hace que el modelo elija mejor, porque tiene más opciones.'
+    answer: [1]
+    explanation: 'Es falso. Los conjuntos inflados con funciones solapadas o puntos de decisión ambiguos confunden al modelo: si una persona no sabe cuál usar, el modelo tampoco.'
+    ref: '#diseñar-herramientas-la-interfaz-agente-ordenador'
+
+  - id: m10-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Los permisos de una herramienta deben aplicarse en el código de la herramienta con la identidad del usuario, no pidiéndoselo al modelo en el prompt.'
+    answer: [0]
+    explanation: 'Es verdadero. Un prompt no es un control de acceso; la herramienta debe comprobar los permisos del usuario en cada llamada.'
+    ref: '#errores-comunes-en-producción'
