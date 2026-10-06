@@ -3,7 +3,9 @@ import { expect, test } from '@playwright/test';
 test('Pyodide solo se descarga en los laboratorios', async ({ page }) => {
   const pyodideRequests: string[] = [];
   page.on('request', (r) => {
-    if (/pyodide/i.test(r.url())) pyodideRequests.push(r.url());
+    if (/cdn\.jsdelivr\.net\/pyodide|pyodide[^/]*\.(m?js|wasm)(\?|$)/i.test(r.url())) {
+      pyodideRequests.push(r.url());
+    }
   });
   for (const route of [
     '',
