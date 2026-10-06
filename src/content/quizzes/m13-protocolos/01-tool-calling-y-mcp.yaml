@@ -1,0 +1,95 @@
+lesson: m13-protocolos/01-tool-calling-y-mcp
+questions:
+  - id: m13-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué problema de integración resuelve MCP?'
+    options:
+      - 'Que cada aplicación LLM necesita una integración distinta con cada herramienta o fuente de datos; un protocolo común convierte N×M piezas en N+M.'
+      - 'Que los modelos no pueden generar JSON.'
+      - 'Que los embeddings ocupan mucho espacio.'
+      - 'Que los agentes no pueden tener memoria.'
+    answer: [0]
+    explanation: 'MCP estandariza cómo conectar aplicaciones LLM con herramientas y datos, de modo que un servidor sirve a muchos clientes y un cliente usa muchos servidores.'
+    ref: '#intuición-el-problema-de-n-por-m'
+
+  - id: m13-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué formato de mensajes usa MCP?'
+    options:
+      - 'XML-RPC.'
+      - 'JSON-RPC 2.0.'
+      - 'GraphQL.'
+      - 'Protocol Buffers exclusivamente.'
+    answer: [1]
+    explanation: 'La especificación usa mensajes JSON-RPC 2.0 entre hosts, clientes y servidores.'
+    ref: '#arquitectura-hosts-clientes-y-servidores'
+
+  - id: m13-01-q3
+    type: single
+    difficulty: 2
+    prompt: 'Una herramienta MCP falla porque el modelo pasó una fecha en el pasado. ¿Cómo debe informarse?'
+    options:
+      - 'Con un error JSON-RPC de método no encontrado.'
+      - 'Dentro de un resultado normal con isError: true y un texto que explique el problema, para que el modelo se corrija.'
+      - 'Cerrando la conexión.'
+      - 'No debe informarse.'
+    answer: [1]
+    explanation: 'Los errores de ejecución (validación de entradas, fallos de API, lógica de negocio) se devuelven en el resultado con isError y deberían entregarse al modelo para que se autocorrija.'
+    ref: '#mensajes-de-herramientas'
+
+  - id: m13-01-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es el código y el significado del error JSON-RPC que se usa en el ejemplo para una herramienta desconocida?'
+    options:
+      - '-32700, error de análisis.'
+      - '-32601, método no encontrado.'
+      - '-32602, parámetros inválidos (Unknown tool).'
+      - '-32600, petición inválida.'
+    answer: [2]
+    explanation: 'La especificación muestra el error -32602 con el mensaje «Unknown tool» para una herramienta inexistente. Es un error de protocolo: el modelo no puede arreglarlo.'
+    ref: '#mensajes-de-herramientas'
+
+  - id: m13-01-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué transportes estándar define MCP? Marca todos los correctos.'
+    options:
+      - 'stdio: mensajes delimitados por saltos de línea a través de los flujos estándar de un subproceso lanzado por el cliente.'
+      - 'Streamable HTTP: cada mensaje es un POST HTTP a un único endpoint, con respuesta JSON o flujo SSE.'
+      - 'Bluetooth.'
+      - 'FTP.'
+    answer: [0, 1]
+    explanation: 'Los dos transportes estándar son stdio y Streamable HTTP. La semántica del protocolo es idéntica en todos; también se permiten transportes personalizados.'
+    ref: '#transportes'
+
+  - id: m13-01-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Cómo se trata la autorización según la especificación de MCP?'
+    options:
+      - 'Es obligatoria en todos los transportes.'
+      - 'Es opcional; en HTTP se basa en OAuth 2.1 y en stdio se obtienen las credenciales del entorno.'
+      - 'Está prohibida.'
+      - 'Solo existe con gRPC.'
+    answer: [1]
+    explanation: 'La autorización es opcional. Con transportes HTTP se recomienda seguir la especificación (OAuth 2.1); con stdio, las credenciales vienen del entorno.'
+    ref: '#autorización'
+
+  - id: m13-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Según la especificación, las descripciones y anotaciones de las herramientas deben considerarse no fiables salvo que vengan de un servidor de confianza.'
+    answer: [0]
+    explanation: 'Es verdadero. Una descripción puede contener instrucciones dirigidas al modelo (inyección indirecta); por eso se tratan como no fiables.'
+    ref: '#seguridad-lo-que-el-protocolo-no-puede-garantizar'
+
+  - id: m13-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'El protocolo MCP garantiza por sí mismo el consentimiento del usuario y la seguridad de las herramientas.'
+    answer: [1]
+    explanation: 'Es falso. La propia especificación indica que MCP no puede imponer estos principios a nivel de protocolo: recaen en quien lo implementa (consentimiento, humano en el bucle, validación).'
+    ref: '#seguridad-lo-que-el-protocolo-no-puede-garantizar'

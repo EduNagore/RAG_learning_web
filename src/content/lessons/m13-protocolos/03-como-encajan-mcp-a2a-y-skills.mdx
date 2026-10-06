@@ -1,0 +1,197 @@
+---
+title: Cómo encajan MCP, A2A y las Agent Skills
+description: Un mapa para decidir qué protocolo o mecanismo usar en cada necesidad (herramientas y datos, colaboración entre agentes, conocimiento procedimental), cómo se combinan en una arquitectura y cuáles son los límites de confianza y los riesgos de componer estándares.
+module: m13-protocolos
+order: 3
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Situar MCP, A2A y las Agent Skills en capas distintas y explicar qué problema resuelve cada una.
+  - Aplicar una regla de decisión para elegir mecanismo, incluido el caso en que no hace falta ningún protocolo.
+  - Diseñar una arquitectura que combine los tres y señalar sus fronteras de confianza.
+  - Evaluar el coste y los riesgos de añadir capas de interoperabilidad prematuramente.
+prerequisites:
+  - m13-protocolos/02-a2a-y-agent-skills
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: Model Context Protocol, Specification
+    url: https://modelcontextprotocol.io/specification/latest
+    type: docs
+    authors: Model Context Protocol
+    year: 2026
+  - title: Agent2Agent (A2A) Protocol, Specification
+    url: https://a2a-protocol.org/latest/specification/
+    type: docs
+    authors: A2A Protocol
+    year: 2026
+  - title: Agent Skills (documentación de Claude)
+    url: https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Erik S., Barry Zhang (Anthropic)
+    year: 2024
+relatedLabs:
+  - agents-31-servidor-mcp
+  - agents-32-a2a-agent-cards
+---
+
+## Intuición: tres capas, no tres competidores
+
+Cuando aparecen varios estándares a la vez, es habitual preguntarse cuál «ganará». En este caso la pregunta está mal planteada, porque resuelven problemas **de capas distintas**:
+
+- **MCP** conecta un agente (o una aplicación con un LLM) con **herramientas, datos y plantillas**. Es la capa de **acceso al mundo**.
+- **A2A** conecta **agentes con agentes**: descubrimiento por tarjetas, tareas con estados, artefactos. Es la capa de **colaboración**.
+- Las **Agent Skills** empaquetan **conocimiento procedimental** (instrucciones, scripts, plantillas) que el agente carga bajo demanda. Es la capa del **saber hacer**.
+
+Una analogía útil con una oficina: MCP son los **enchufes y herramientas** que hay en el despacho (el agente se conecta a ellos); A2A es el **teléfono y el directorio** para pedir ayuda a otro departamento; y las skills son los **manuales de procedimiento** de la casa que consultas cuando toca. Y, como en una oficina, lo más importante es **no montar un teléfono interdepartamental para algo que se resuelve con una grapadora**.
+
+## Cómo funciona
+
+### Qué resuelve cada capa y qué no
+
+| | MCP | A2A | Agent Skills |
+| --- | --- | --- | --- |
+| Relación | Agente ↔ herramienta o dato | Agente ↔ agente | Agente ↔ procedimiento |
+| Unidad | Tool, resource, prompt | Task, message, artifact | Directorio con SKILL.md |
+| Descubrimiento | `tools/list` del servidor | Agent Card | Metadatos (nombre y descripción) |
+| Quién decide | El modelo elige herramientas (con consentimiento) | El cliente elige al agente por sus skills | El agente activa la skill según su descripción |
+| Opacidad | La herramienta es una función | El agente remoto es una caja negra autónoma | Instrucciones y código visibles y auditables |
+| Coste de contexto | Descripciones de herramientas en cada llamada | Mensajes y artefactos intercambiados | ≈ 100 tokens por skill + el cuerpo al activarse |
+
+Una diferencia conceptual importante: una **herramienta** MCP es una función que el modelo invoca y que devuelve un resultado; un **agente A2A** es un sistema **autónomo** que recibe una tarea, puede tardar, pedir más información (`input-required`) y devolver artefactos, y cuyo funcionamiento interno **no ves**. Por eso A2A habla de **tareas con ciclo de vida** y MCP de **llamadas**.
+
+### Cómo se combinan
+
+Una arquitectura plausible para un asistente de operaciones logísticas:
+
+1. El **agente principal** (host) tiene **skills** para sus procedimientos propios («formato de informe de incidencias», «cómo calcular penalizaciones»), cargadas bajo demanda.
+2. Accede a los sistemas de la empresa mediante **servidores MCP**: pedidos, inventario, políticas. Cada servidor aplica los permisos del usuario.
+3. Cuando necesita algo que sabe hacer **otro agente** (el agente del transportista que gestiona una reclamación), lo descubre por su **Agent Card** y le **delega una tarea** por A2A; recibe un artefacto.
+4. Ese agente remoto, a su vez, usa sus propias herramientas por MCP, que tú no ves.
+
+<Diagram
+  caption="Las tres capas combinadas: el agente usa skills para saber hacer, MCP para tocar el mundo y A2A para pedir ayuda a otros agentes."
+  code={`flowchart LR
+  U[Usuario] --> A[Agente principal]
+  A --- SK[Skills: procedimientos bajo demanda]
+  A -->|MCP| T1[Servidor: pedidos]
+  A -->|MCP| T2[Servidor: políticas]
+  A -->|A2A: tarea| B[Agente del transportista]
+  B -->|MCP| T3[Herramientas del transportista]`}
+/>
+
+### Una regla de decisión, y la opción «ninguna»
+
+El código calcula primero la ventaja del protocolo común frente a las integraciones a medida (N×M frente a N+M), y después aplica una regla de decisión muy simple a cuatro escenarios. Es una simplificación pedagógica de un criterio que en la práctica admite combinaciones.
+
+```python
+print("aplicaciones  servicios  integraciones a medida (N×M)  con un protocolo (N+M)")
+for aplicaciones, servicios in ((3, 10), (5, 20), (10, 50)):
+    print(f"{aplicaciones:>12}  {servicios:>9}  {aplicaciones * servicios:>27}  {aplicaciones + servicios:>22}")
+
+
+def recomendar(necesidad):
+    """Regla de decisión sencilla: ¿qué mecanismo encaja con cada necesidad?"""
+    if necesidad["otro_agente_autonomo"]:
+        return "A2A: delegar una tarea en un agente de otro equipo o fabricante"
+    if necesidad["acciones_o_datos_externos"]:
+        return "MCP: exponer la herramienta o el dato como servidor"
+    if necesidad["procedimiento_reutilizable"]:
+        return "Skill: empaquetar instrucciones y scripts que se cargan bajo demanda"
+    return "Una función local o un prompt: no hace falta ningún protocolo"
+
+
+ESCENARIOS = {
+    "consultar la base de datos de pedidos": dict(otro_agente_autonomo=False, acciones_o_datos_externos=True, procedimiento_reutilizable=False),
+    "pedir a un agente de proveedores que gestione una devolución": dict(otro_agente_autonomo=True, acciones_o_datos_externos=False, procedimiento_reutilizable=False),
+    "seguir siempre el formato de informe de la empresa": dict(otro_agente_autonomo=False, acciones_o_datos_externos=False, procedimiento_reutilizable=True),
+    "convertir kilos a libras dentro de mi app": dict(otro_agente_autonomo=False, acciones_o_datos_externos=False, procedimiento_reutilizable=False),
+}
+print()
+for escenario, necesidad in ESCENARIOS.items():
+    print(f"{escenario}\n   -> {recomendar(necesidad)}")
+```
+
+Salida (determinista):
+
+```text
+aplicaciones  servicios  integraciones a medida (N×M)  con un protocolo (N+M)
+           3         10                           30                      13
+           5         20                          100                      25
+          10         50                          500                      60
+
+consultar la base de datos de pedidos
+   -> MCP: exponer la herramienta o el dato como servidor
+pedir a un agente de proveedores que gestione una devolución
+   -> A2A: delegar una tarea en un agente de otro equipo o fabricante
+seguir siempre el formato de informe de la empresa
+   -> Skill: empaquetar instrucciones y scripts que se cargan bajo demanda
+convertir kilos a libras dentro de mi app
+   -> Una función local o un prompt: no hace falta ningún protocolo
+```
+
+- **La ventaja de un estándar crece con la escala:** con 3 aplicaciones y 10 servicios el ahorro es de 30 a 13 piezas; con 10 y 50, de 500 a 60. Con una sola aplicación y un solo servicio, el protocolo es **solo una capa más**.
+- **El último escenario es el más importante:** convertir kilos en libras dentro de tu aplicación es una **función**. Poner un servidor MCP delante de ella añade un proceso, un protocolo, una superficie de seguridad y latencia sin beneficio. Lo mismo ocurre con un agente A2A para algo que otro módulo de tu mismo programa puede hacer.
+- La regla del código **ordena por preferencia** (primero si hay otro agente autónomo, después datos o acciones externas, luego procedimientos), pero en un sistema real combinas: el procedimiento es una skill que, al ejecutarse, usa herramientas MCP y delega parte en un agente A2A.
+
+<Snapshot date="2026-10">
+
+El ecosistema de protocolos de agentes es muy joven y cambia con rapidez: MCP revisa su especificación por fechas e incorpora extensiones (entre ellas una para transportar skills), A2A ha llegado a la versión 1.0 de su especificación y las Agent Skills evolucionan por producto y por superficie. Además aparecen propuestas nuevas, pasarelas que traducen entre protocolos y servicios gestionados. Esta lección explica la **separación de capas**, que es estable; los detalles (campos, versiones, transportes, qué proveedores soportan qué) debes verificarlos en la documentación vigente antes de decidir una arquitectura.
+
+</Snapshot>
+
+### Fronteras de confianza
+
+Componer protocolos multiplica los **límites de confianza**, y cada uno es un sitio donde puede entrar una inyección o una fuga:
+
+- **Servidor MCP ↔ agente:** las descripciones de herramientas y los resultados son **datos no fiables** (la especificación lo dice de forma expresa); el servidor debe validar entradas, aplicar permisos del usuario y limitar la tasa.
+- **Agente ↔ agente remoto (A2A):** el otro agente es un **tercero**: lo que devuelve es contenido externo, y lo que le envías sale de tu perímetro. Decide qué contexto compartes, autentica y registra.
+- **Skill ↔ agente:** una skill es **código e instrucciones** con los permisos del agente; se instala solo de fuentes de confianza y se audita.
+- **Identidad del usuario:** debe viajar de forma **explícita y limitada** (tokens con el destinatario correcto, sin reenviar tokens ajenos) para que cada capa aplique los permisos del usuario, no los del agente.
+
+Y una regla de oro para todo: **mínimo privilegio y humano en el bucle** en las acciones sensibles, con **trazas** que unan una acción con la cadena de decisiones que la produjo, incluso cuando cruza varios agentes.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Adoptar MCP para tus herramientas | Reutilización entre aplicaciones y ecosistema | Un proceso más, superficie de seguridad, cambios de versión |
+| Adoptar A2A con agentes de terceros | Interoperabilidad entre fabricantes | Latencia, confianza limitada y datos que salen del perímetro |
+| Skills para procedimientos | Poco contexto y reutilización | Requiere gobierno (auditoría, versionado) |
+| Llamada local directa | Simple, rápida y segura | No es reutilizable por otros sistemas |
+| Combinar los tres | Cubre acceso, colaboración y procedimiento | Más piezas que evaluar y depurar |
+
+## Errores comunes en producción
+
+- **Adoptar un protocolo por moda.** Montar un servidor MCP o un agente A2A para algo que es una función local multiplica la complejidad sin beneficio.
+- **Confundir una herramienta con un agente.** Tratar un agente autónomo como una llamada síncrona ignora los estados `input-required`, los tiempos largos y los fallos.
+- **Dar a un agente remoto el contexto completo.** Comparte solo lo necesario: sale de tu perímetro.
+- **Confiar en descripciones de herramientas o en tarjetas de agentes sin validar.** Son texto controlado por un tercero.
+- **Reenviar el token del usuario a todas partes.** Cada servicio debe recibir un token emitido para él, con los permisos mínimos.
+- **Ignorar la evolución de las especificaciones.** Un cliente que no negocia versiones se rompe con la siguiente revisión.
+- **No trazar a través de las capas.** Cuando una acción cruza MCP y A2A, necesitas una traza que las una.
+- **Suponer que un estándar elimina la necesidad de evaluar.** El protocolo asegura que las piezas se hablen, no que el resultado sea correcto.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo se relacionan MCP y A2A?"_ Pista: MCP conecta un agente con herramientas y datos; A2A conecta agentes entre sí con tareas; son complementarios y el agente remoto usará a su vez sus propias herramientas.
+- _"¿Cuándo usarías una Agent Skill en lugar de una herramienta MCP?"_ Pista: la skill es conocimiento procedimental (instrucciones, scripts) que se carga bajo demanda; la herramienta MCP es una función que accede a un sistema externo.
+- _"¿Cuándo no usarías ninguno?"_ Pista: cuando la capacidad es una función local de una sola aplicación; un protocolo añadiría una capa sin beneficio.
+- _"¿Qué riesgos de seguridad aparecen al componer estándares?"_ Pista: más fronteras de confianza (descripciones y resultados no fiables, agentes remotos, skills de terceros), tokens y permisos entre capas, inyección indirecta y trazabilidad.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Tres capas distintas:** MCP (agente ↔ herramientas y datos), A2A (agente ↔ agente, con tareas y estados) y Agent Skills (conocimiento procedimental bajo demanda).
+- Un estándar compensa por **escala** (N×M frente a N+M: 500 frente a 60 con 10 aplicaciones y 50 servicios); con una aplicación y un servicio es solo una capa más.
+- **No hace falta ningún protocolo** para una función local: añadirlo es complejidad y superficie de ataque sin beneficio.
+- Componer protocolos multiplica las **fronteras de confianza**: descripciones y resultados no fiables, agentes remotos, skills de terceros y tokens entre capas.
+- Verifica siempre las especificaciones vigentes: el ecosistema cambia rápido.
+
+</KeyTakeaways>

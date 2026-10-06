@@ -1,0 +1,98 @@
+lesson: m13-protocolos/02-a2a-y-agent-skills
+questions:
+  - id: m13-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es una Agent Card en A2A?'
+    options:
+      - 'Un documento JSON de metadatos publicado por un agente con su identidad, capacidades, skills, esquemas de seguridad e interfaces.'
+      - 'Una tarjeta de crédito para pagar tokens.'
+      - 'Un tipo de herramienta MCP.'
+      - 'Un archivo de pesos del modelo.'
+    answer: [0]
+    explanation: 'Es la tarjeta de visita del agente: permite descubrirlo y decidir si es el adecuado para una petición.'
+    ref: '#a2a-conceptos-centrales'
+
+  - id: m13-02-q2
+    type: multiple
+    difficulty: 2
+    prompt: '¿Cuáles de estos son estados finales de una tarea A2A? Marca todos los correctos.'
+    options:
+      - 'completed.'
+      - 'failed.'
+      - 'canceled.'
+      - 'input-required.'
+    answer: [0, 1, 2]
+    explanation: 'Completed, failed, canceled (y rejected) son finales. Input-required es un estado interrumpido: la tarea espera datos del cliente.'
+    ref: '#a2a-conceptos-centrales'
+
+  - id: m13-02-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué mecanismos ofrece A2A para recibir actualizaciones de una tarea larga?'
+    options:
+      - 'Solo consulta periódica.'
+      - 'Consulta periódica (polling), streaming y notificaciones push mediante webhooks.'
+      - 'Solo correo electrónico.'
+      - 'Ninguno: hay que esperar a que termine.'
+    answer: [1]
+    explanation: 'Son tres mecanismos complementarios; el streaming y el push requieren que el agente declare esas capacidades.'
+    ref: '#cómo-se-reciben-los-resultados'
+
+  - id: m13-02-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué es la divulgación progresiva (progressive disclosure) en las Agent Skills?'
+    options:
+      - 'Cargar todas las instrucciones de todas las skills al arrancar.'
+      - 'Cargar el contenido por niveles: metadatos siempre, instrucciones al activarse y recursos solo cuando hacen falta.'
+      - 'Mostrar la skill al usuario poco a poco.'
+      - 'Comprimir los scripts.'
+    answer: [1]
+    explanation: 'Así se pueden instalar muchas skills sin penalización de contexto: hasta que se usan, solo ocupan su nombre y descripción.'
+    ref: '#agent-skills-conocimiento-bajo-demanda'
+
+  - id: m13-02-q5
+    type: code-output
+    difficulty: 2
+    prompt: 'Con unos 100 tokens de metadatos por skill y 40 skills instaladas, ¿cuántos tokens de contexto ocupan permanentemente las skills?'
+    code: |-
+      N, METADATOS = 40, 100
+      print(N * METADATOS)
+    options:
+      - '400'
+      - '4000'
+      - '40000'
+      - '100'
+    answer: [1]
+    explanation: '40 · 100 = 4 000 tokens. Las instrucciones de cada skill solo se cargan al activarla.'
+    ref: '#un-cálculo-y-una-validación'
+
+  - id: m13-02-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué requisitos tiene el campo name del frontmatter de una skill según la documentación de Claude?'
+    options:
+      - 'Hasta 64 caracteres, solo minúsculas, números y guiones, sin etiquetas XML ni las palabras reservadas «anthropic» y «claude».'
+      - 'Cualquier texto de cualquier longitud.'
+      - 'Hasta 10 caracteres y con mayúsculas.'
+      - 'Debe empezar por «claude-».'
+    answer: [0]
+    explanation: 'La descripción, además, debe ser no vacía, de hasta 1 024 caracteres y sin etiquetas XML, y decir qué hace la skill y cuándo usarla.'
+    ref: '#agent-skills-conocimiento-bajo-demanda'
+
+  - id: m13-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una skill subida a claude.ai queda disponible automáticamente en la API y en Claude Code.'
+    answer: [1]
+    explanation: 'Es falso. Las skills personalizadas no se sincronizan entre superficies: hay que subirlas o crearlas por separado en cada una.'
+    ref: '#un-cálculo-y-una-validación'
+
+  - id: m13-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Las skills deben tratarse como software instalado: conviene usar solo las de fuentes de confianza y auditar sus scripts y recursos.'
+    answer: [0]
+    explanation: 'Es verdadero. Una skill maliciosa puede dirigir al agente a invocar herramientas o ejecutar código de formas que no corresponden a su propósito declarado.'
+    ref: '#seguridad'
