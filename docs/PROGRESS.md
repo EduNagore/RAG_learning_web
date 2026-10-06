@@ -14,7 +14,7 @@
 | F3 Laboratorios | ✅ hecha, en `main` y desplegada (verificada en producción) | 3 labs, Pyodide, CodeMirror, e2e en navegador real |
 | **Pausa de revisión tras F3** | ✅ superada | El usuario aprobó (2026-10-05, "haz todo lo que queda"): hacer F4–F7 completas |
 | F4 Contenido Parte I (RAG, M01–M09) | ✅ hecha, en `main` y desplegada | 37 lecciones, 22 labs, 287 preguntas |
-| F5 Contenido Parte II (Agentes, M10–M17) | ⬜ | |
+| F5 Contenido Parte II (Agentes, M10–M17) | 🟡 en curso (rama `fase-5-agentes`) | Ver "F5: avance" |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
@@ -28,7 +28,16 @@ Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 pre
 - Resultados medidos (no repetir experimentos): ver `docs/DECISIONS.md` (F4) y las propias lecciones.
 
 ### Siguiente paso
-**Empezar F5** (Contenido Parte II, agentes, M10–M17) en una rama `fase-5-agentes` desde `main`: ≈25 lecciones (fundamentos de agentes, patrones de workflow, arquitecturas multiagente, protocolos MCP/A2A/Agent Skills, frameworks —volatilidad alta, con `<Snapshot>`—, memoria/estado/HITL, evaluación de agentes, fiabilidad y seguridad), labs 22 y 24–35 (agents-NN-…; el 23 ya existe) y widgets AgentLoopStepper y TopologyExplorer (PLAN §7 y §12). Mismas reglas: fuentes abiertas y verificadas, código ejecutado, `pnpm validate` en verde, mutantes por lab. Después F6 y F7. Pendiente menor de F4: si quedara margen, ampliar el corpus de Nimbus (hoy 42 documentos / 31 preguntas; el plan decía 80–120 / ~50) para reducir el margen de error de las mediciones.
+Seguir con F5 (ver «F5: avance»).
+
+## F5: avance (rama `fase-5-agentes`, commits locales; push pendiente)
+
+- ✅ M10 (4 lecciones; lab agents-22), M11 (3; labs 24–27), M12 (4; labs 28–29), M13 (3; labs 31–32), M14 (3; sin lab; volatilidad alta con Snapshot y fuentes de 9 frameworks abiertas el 2026-10-06). Lab agents-23 ya existía.
+- ⬜ **Falta:** M15 memoria, estado y control (3 lecciones; lab 30 mini grafo con checkpoint y reanudación/HITL; fuentes a verificar: MemGPT 2310.08560, Mem0, LangGraph persistence docs), M16 evaluación de agentes (3; lab 35 trayectorias; fuentes: SWE-bench Verified, GAIA, τ-bench, BFCL, Terminal-Bench, pass^k), M17 fiabilidad y seguridad (3; labs 33 guardas de bucles/coste y 34 defensa ante inyección indirecta; fuentes: Willison «lethal trifecta», OWASP LLM 2025 ya verificado, OWASP agentic), widgets AgentLoopStepper y TopologyExplorer, `docs/SOURCES.md` y `docs/DECISIONS.md`, puerta completa, push, CI, merge `--no-ff`, despliegue.
+- Hechos relevantes verificados en F5: MCP vigente 2026-07-28 (peticiones autocontenidas, `initialize` en revisiones previas), A2A 1.0, Agent Skills (≈100 tokens de metadatos por skill, <5k al activarse), MAST (14 modos en 3 categorías, 1 600+ trazas), Anthropic multiagente (+90,2 %, 4×/15× tokens), Cognition (agente lineal), RankGPT/ReWOO/LLMCompiler (cifras en lecciones).
+- Notas de trabajo: lecciones ≥1500 palabras sin código (apuntar a ≈1800 desde el principio); `description`/`objectives` sin «: » sin comillas; mutantes añadidos con Edit anclando en `]
+
+survivors = []`; `uv` no está en el PATH.
 
 ## F3: HECHA (referencia histórica)
 
