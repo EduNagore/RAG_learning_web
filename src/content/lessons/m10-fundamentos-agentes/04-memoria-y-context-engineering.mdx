@@ -132,7 +132,7 @@ limpiar resultados antiguos                       82,200  0 de 3
 ventana + notas externas                          69,740  3 de 3
 ```
 
-- **Conservar todo** guarda los 3 datos pero cuesta **191 000 tokens** de entrada, casi tres veces más que la ventana, y en la práctica se enfrentaría a *context rot* y al límite de la ventana.
+- **Conservar todo** guarda los 3 datos pero cuesta **191 000 tokens** de entrada, casi tres veces lo que cuesta la ventana de 6 mensajes, y en la práctica se enfrentaría a *context rot* y al límite de la ventana.
 - **Ventana de 6 mensajes** es barata (68 600) pero **olvida los tres datos clave**: el agente tendrá que volver a pedirlos o, peor, inventarlos.
 - **Limpiar resultados antiguos** (conservando las decisiones) cuesta algo más y también pierde los datos, porque en la simulación **el dato vive en el resultado**. Limpiar resultados es seguro solo si el dato importante ya se ha trasladado a otro sitio (una nota, una decisión que lo cite).
 - **Ventana más notas externas** cuesta **69 740 tokens** (1 140 más que la ventana sola, es decir, unos 1,7 % de coste adicional) y conserva **3 de 3**. Es la idea de las notas estructuradas: **pagar poco por no perder lo importante**.

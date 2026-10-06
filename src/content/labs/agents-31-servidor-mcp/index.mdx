@@ -24,6 +24,12 @@ relatedLessons:
 
 El **Model Context Protocol (MCP)** estandariza cómo una aplicación con un LLM (el *host*) se conecta a servicios que le ofrecen contexto y herramientas (los *servidores*). Por debajo es **JSON-RPC 2.0**: mensajes JSON con `method`, `params` e `id`. Vas a implementar el núcleo de un servidor: recibir una línea de texto con un mensaje, y devolver la respuesta correcta, incluidos los errores. Es lo que hay detrás de cualquier servidor MCP real, sin el transporte (stdio o HTTP), que solo mueve estas mismas líneas.
 
+<Callout type="aviso" title="Qué revisión de MCP sigue este laboratorio">
+
+El laboratorio sigue el esquema de las revisiones de la especificación **hasta la 2025-11-25**, que abrían la sesión con `initialize` y tenían `ping`. La revisión **2026-07-28** eliminó ese saludo y `ping`: cada petición lleva su versión y las capacidades del cliente en `_meta`, existe `server/discover` y los resultados incluyen un campo `resultType`. Lo que practicas aquí sigue vigente: JSON-RPC 2.0, `tools/list`, `tools/call` y la distinción entre errores de protocolo y errores de ejecución con `isError`. Si implementas un servidor real, sigue la especificación vigente y sus reglas de compatibilidad.
+
+</Callout>
+
 ## Qué tienes que hacer
 
 Completa `MCPServer.handle_line(line)`, que recibe **una línea de texto** y devuelve la respuesta como **texto JSON** (o `None` si era una notificación). El registro de herramientas (`add_tool`) ya está resuelto.
