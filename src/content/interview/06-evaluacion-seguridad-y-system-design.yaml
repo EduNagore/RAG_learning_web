@@ -1,0 +1,195 @@
+title: Evaluación de agentes, seguridad y system design
+order: 6
+questions:
+  - id: ses-01
+    level: junior
+    kind: conceptual
+    lessons: [m16-evaluacion-agentes/01-que-medir-en-un-agente]
+    es:
+      q: ¿Por qué no basta con mirar la respuesta final para evaluar un agente?
+      a: |-
+        Porque el agente actúa en un entorno y puede afirmar algo que no hizo, o conseguir el objetivo con una acción indeseada (por ejemplo, borrar algo por el camino). Lo que importa es el resultado en el entorno (el estado final), no lo que dice, y además la trayectoria: qué herramientas llamó, con qué argumentos y a qué coste.
+
+        Por eso se combinan comprobaciones de resultado con restricciones de trayectoria y se leen las transcripciones.
+    en:
+      q: Why is looking at the final answer not enough to evaluate an agent?
+      a: |-
+        Because the agent acts in an environment and may claim something it did not do, or reach the goal with an unwanted action (for example, deleting something along the way). What matters is the outcome in the environment (the final state), not what it says, plus the trajectory: which tools it called, with which arguments and at what cost.
+
+        So combine outcome checks with trajectory constraints and read the transcripts.
+  - id: ses-02
+    level: mid
+    kind: conceptual
+    lessons: [m16-evaluacion-agentes/02-fiabilidad-pass-k-y-trayectorias]
+    es:
+      q: Explica la diferencia entre pass@k y pass^k.
+      a: |-
+        pass@k es la probabilidad de que al menos uno de k intentos tenga éxito: mide capacidad y crece con k. pass^k es la probabilidad de que los k intentos tengan éxito: mide fiabilidad y decrece con k. Si un agente acierta el 80 % por intento y los intentos son independientes, su pass^8 es de unos 17 %.
+
+        Para un producto que atiende muchas conversaciones sin supervisión, importa más la fiabilidad que la capacidad.
+    en:
+      q: Explain the difference between pass@k and pass^k.
+      a: |-
+        pass@k is the probability that at least one of k attempts succeeds: it measures capability and grows with k. pass^k is the probability that all k attempts succeed: it measures reliability and falls with k. If an agent succeeds 80% per attempt and attempts are independent, its pass^8 is about 17%.
+
+        For a product handling many unsupervised conversations, reliability matters more than capability.
+  - id: ses-03
+    level: mid
+    kind: design
+    lessons: [m16-evaluacion-agentes/03-benchmarks-trazas-y-harness]
+    es:
+      q: Diseña un harness de evaluación para un agente de soporte.
+      a: |-
+        Tareas con criterios de éxito comprobables (30–50 casos reales, incluidos los que exigen abstenerse o escalar), un entorno que se reinicia en cada intento, varios intentos por tarea, graders de código sobre el estado final y restricciones de trayectoria, y un juez calibrado solo para aspectos subjetivos.
+
+        Se guardan trazas estructuradas, se calculan pass@1, pass@k y pass^k, se leen los fallos, se ejecuta en CI ante cambios de prompt, herramientas o modelo y se añaden los fallos de producción como tareas nuevas.
+    en:
+      q: Design an evaluation harness for a support agent.
+      a: |-
+        Tasks with checkable success criteria (30-50 real cases, including ones requiring abstention or escalation), an environment reset on every attempt, multiple attempts per task, code graders on the final state and trajectory constraints, and a calibrated judge only for subjective aspects.
+
+        Store structured traces, compute pass@1, pass@k and pass^k, read the failures, run it in CI on prompt, tool or model changes and add production failures as new tasks.
+  - id: ses-04
+    level: senior
+    kind: conceptual
+    lessons: [m16-evaluacion-agentes/03-benchmarks-trazas-y-harness]
+    es:
+      q: ¿Cómo interpretas el porcentaje que publica un modelo en SWE-bench u otro benchmark de agentes?
+      a: |-
+        Con cautela: hay que mirar la versión del benchmark (SWE-bench y SWE-bench Verified no son comparables), el arnés usado (herramientas, prompts, reintentos), el número de intentos y la selección, si el benchmark está saturado o contaminado y el coste. La cifra mide modelo más arnés, no solo modelo.
+
+        Sirve para preseleccionar candidatos; la decisión se toma con tus propias tareas.
+    en:
+      q: How do you interpret the percentage a model publishes on SWE-bench or another agent benchmark?
+      a: |-
+        Cautiously: check the benchmark version (SWE-bench and SWE-bench Verified are not comparable), the harness used (tools, prompts, retries), the number of attempts and selection, whether the benchmark is saturated or contaminated, and cost. The figure measures model plus harness, not just the model.
+
+        It is useful for shortlisting; decide with your own tasks.
+  - id: ses-05
+    level: junior
+    kind: conceptual
+    lessons: [m17-fiabilidad-seguridad/01-inyeccion-de-prompts-y-triada-letal]
+    es:
+      q: ¿Qué es la tríada letal de los agentes?
+      a: |-
+        Es la combinación de tres capacidades que hace a un agente explotable para robar datos: acceso a datos privados, exposición a contenido no fiable y capacidad de comunicar hacia fuera. Con las tres, un atacante puede inyectar instrucciones en el contenido, hacer que el agente lea datos privados y los envíe fuera.
+
+        Quitar cualquiera de las tres rompe el ataque, por lo que el diseño busca evitar la combinación en el mismo contexto.
+    en:
+      q: What is the lethal trifecta for agents?
+      a: |-
+        It is the combination of three capabilities that makes an agent exploitable for data theft: access to private data, exposure to untrusted content and the ability to communicate externally. With all three, an attacker can inject instructions in content, make the agent read private data and send it out.
+
+        Removing any one of them breaks the attack, so design aims to avoid the combination in the same context.
+  - id: ses-06
+    level: senior
+    kind: design
+    lessons: [m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana]
+    es:
+      q: Diseñas un asistente que lee el correo y navega por la web. ¿Cómo lo haces seguro?
+      a: |-
+        Separas permisos: el componente que lee contenido de terceros no comparte contexto ni herramientas con el que accede a datos sensibles. Lista blanca de herramientas por tarea, sin canal externo cuando el contexto tiene a la vez datos privados y contenido no fiable, aprobación humana de acciones irreversibles y sandbox con aislamiento de archivos y de red.
+
+        Credenciales de corta vida y por usuario, registro de acciones y pruebas con ataques conocidos y nuevos. Ningún detector de inyecciones es el control principal.
+    en:
+      q: You design an assistant that reads email and browses the web. How do you make it safe?
+      a: |-
+        Separate permissions: the component that reads third-party content shares neither context nor tools with the one that accesses sensitive data. Per-task tool allow-list, no external channel when the context holds both private data and untrusted content, human approval of irreversible actions and a sandbox with file and network isolation.
+
+        Short-lived per-user credentials, action logs and tests with known and new attacks. No injection detector is the main control.
+  - id: ses-07
+    level: mid
+    kind: conceptual
+    lessons: [m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana]
+    es:
+      q: ¿Por qué un sandbox necesita aislar tanto la red como el sistema de archivos?
+      a: |-
+        Sin aislamiento de red, un agente comprometido podría exfiltrar archivos sensibles (por ejemplo, claves); sin aislamiento del sistema de archivos, podría escapar del sandbox y recuperar acceso a la red. Cada frontera protege a la otra.
+
+        Además se usan listas de destinos permitidos, sistema de archivos de solo lectura salvo un directorio efímero y secretos fuera del entorno que ejecuta el código del agente.
+    en:
+      q: Why does a sandbox need to isolate both network and filesystem?
+      a: |-
+        Without network isolation, a compromised agent could exfiltrate sensitive files (such as keys); without filesystem isolation, it could escape the sandbox and regain network access. Each boundary protects the other.
+
+        Also use allow-lists of destinations, a read-only filesystem except an ephemeral directory, and secrets kept outside the environment that runs the agent's code.
+  - id: ses-08
+    level: mid
+    kind: design
+    lessons: [m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad]
+    es:
+      q: ¿Qué guardas pones para evitar que un agente gaste de forma descontrolada?
+      a: |-
+        Límite de pasos, presupuestos de tokens y de coste por tarea, timeout, detección de la misma acción repetida, cuotas por usuario y por día y un interruptor general. Al parar, el agente debe dejar un estado útil y el motivo, y la tasa de paradas por guarda se monitoriza.
+
+        Se combinan porque cada una cubre fallos distintos: la detección de bucle es la más barata para el caso típico y el presupuesto pone el techo del resto.
+    en:
+      q: What guards do you put in place to stop an agent from spending out of control?
+      a: |-
+        Step limit, token and cost budgets per task, timeout, detection of the same repeated action, per-user and daily quotas and a global kill switch. When stopping, the agent should leave a useful state and the reason, and the rate of guard stops is monitored.
+
+        They are combined because each covers different failures: loop detection is cheapest for the typical case and the budget sets the ceiling for the rest.
+  - id: ses-09
+    level: senior
+    kind: design
+    lessons: [m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad]
+    es:
+      q: ¿Cómo haces reintentos seguros en un agente que ejecuta acciones con efectos?
+      a: |-
+        Solo se reintentan errores transitorios (límites de tasa, red) con retroceso exponencial, aleatoriedad y un máximo de intentos; los errores de validación vuelven al modelo como observación. Las acciones con efectos llevan claves de idempotencia para que un reintento o una reanudación no las duplique, y un circuit breaker evita insistir en una herramienta caída.
+
+        Con ejecución duradera hay que asumir que un paso puede ejecutarse otra vez tras reanudar.
+    en:
+      q: How do you make retries safe in an agent that executes actions with side effects?
+      a: |-
+        Retry only transient errors (rate limits, network) with exponential backoff, jitter and a maximum number of attempts; validation errors go back to the model as observations. Side-effecting actions carry idempotency keys so a retry or a resume does not duplicate them, and a circuit breaker prevents hammering a failing tool.
+
+        With durable execution, assume a step may run again after resuming.
+  - id: ses-10
+    level: mid
+    kind: design
+    lessons: [m18-system-design/01-metodo-de-system-design-rag-y-agentes]
+    es:
+      q: Te piden diseñar un asistente sobre documentación interna. ¿Por dónde empiezas?
+      a: |-
+        Por los requisitos: quién lo usa, qué coste tiene un error, quién puede ver qué, volumen y picos, latencia, frescura de los documentos y cómo se medirá el éxito. Después datos, recuperación, generación, evaluación, operación y coste y riesgos, con estimaciones de orden de magnitud.
+
+        Empiezo con la solución más simple que cumpla (RAG con búsqueda híbrida, filtros por permisos, citas y abstención) y justifico cuándo añadiría un agente.
+    en:
+      q: You are asked to design an assistant over internal documentation. Where do you start?
+      a: |-
+        With requirements: who uses it, the cost of an error, who can see what, volume and peaks, latency, document freshness and how success will be measured. Then data, retrieval, generation, evaluation, operations and cost and risks, with order-of-magnitude estimates.
+
+        I start with the simplest solution that works (RAG with hybrid search, permission filters, citations and abstention) and justify when I would add an agent.
+  - id: ses-11
+    level: senior
+    kind: debug
+    lessons: [m18-system-design/02-depurar-un-rag-y-un-agente]
+    es:
+      q: Los usuarios dicen que el asistente responde mal. ¿Cómo depuras?
+      a: |-
+        Recojo una muestra de fallos y los clasifico por etapa: no existía respuesta en el corpus (debió abstenerse), recuperación (el documento no llegó), ranking (llegó fuera del top-k) o generación (tenía la evidencia y falló). Cuento las causas y ataco la más frecuente ponderada por impacto y esfuerzo.
+
+        Valido cada arreglo con el conjunto de oro para detectar regresiones y convierto los fallos en tareas de evaluación. Mirar el contexto exacto que recibió el modelo evita culparlo por problemas de datos.
+    en:
+      q: Users say the assistant answers badly. How do you debug it?
+      a: |-
+        I collect a sample of failures and classify them by stage: no answer existed in the corpus (it should have abstained), retrieval (the document did not arrive), ranking (it arrived outside the top-k) or generation (it had the evidence and failed). I count causes and tackle the most frequent weighted by impact and effort.
+
+        I validate each fix with the golden set to catch regressions and turn failures into evaluation tasks. Looking at the exact context the model received avoids blaming it for data problems.
+  - id: ses-12
+    level: junior
+    kind: conceptual
+    lessons: [m18-system-design/03-que-distingue-un-diseno-senior]
+    es:
+      q: ¿Cómo comunicas un trade-off en una entrevista de diseño?
+      a: |-
+        Con cuatro partes: la decisión, la alternativa descartada, el criterio que justifica la elección y la condición que la cambiaría. Por ejemplo: uso búsqueda híbrida porque el corpus tiene códigos exactos; si las consultas fueran puramente conceptuales, bastaría la densa.
+
+        Se evitan frases como «es lo mejor» o «es el estándar» y se reconoce con precisión lo que no se sabe.
+    en:
+      q: How do you communicate a trade-off in a design interview?
+      a: |-
+        With four parts: the decision, the alternative rejected, the criterion justifying the choice and the condition that would change it. For example: I use hybrid search because the corpus has exact codes; if queries were purely conceptual, dense alone would suffice.
+
+        Avoid phrases like "it is the best" or "it is the standard" and acknowledge precisely what you do not know.
