@@ -1,0 +1,203 @@
+---
+title: Panorama de frameworks de agentes
+description: Nueve frameworks de agentes agrupados por su modelo mental (grafos y workflows, agentes con primitivas, roles y equipos, agentes que escriben código), con lo que cada documentación oficial afirma, y por qué la ausencia de una mención no es una ausencia de capacidad.
+module: m14-frameworks
+order: 1
+level: intermedio
+estimatedMinutes: 20
+objectives:
+  - Clasificar LangGraph, OpenAI Agents SDK, Claude Agent SDK, Microsoft Agent Framework, CrewAI, Google ADK, LlamaIndex Workflows, PydanticAI y smolagents por su modelo mental.
+  - Citar, para cada uno, qué afirma su documentación oficial y distinguir esa afirmación de una suposición.
+  - Reconocer el patrón común de todos ellos (bucle de agente, herramientas, estado, trazas) y dónde difieren.
+  - Evitar comparativas basadas en listas de características sin fecha ni fuente.
+prerequisites:
+  - m13-protocolos/03-como-encajan-mcp-a2a-y-skills
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: LangGraph overview
+    url: https://docs.langchain.com/oss/python/langgraph/overview
+    type: docs
+    authors: LangChain
+    year: 2026
+  - title: OpenAI Agents SDK
+    url: https://openai.github.io/openai-agents-python/
+    type: docs
+    authors: OpenAI
+    year: 2026
+  - title: Agent SDK overview (Claude)
+    url: https://code.claude.com/docs/en/agent-sdk/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Microsoft Agent Framework overview
+    url: https://learn.microsoft.com/en-us/agent-framework/overview/
+    type: docs
+    authors: Microsoft
+    year: 2026
+  - title: CrewAI introduction
+    url: https://docs.crewai.com/en/introduction
+    type: docs
+    authors: CrewAI
+    year: 2026
+  - title: Agent Development Kit (ADK)
+    url: https://adk.dev/
+    type: docs
+    authors: Google
+    year: 2026
+  - title: LlamaIndex Workflows
+    url: https://developers.llamaindex.ai/python/workflows/
+    type: docs
+    authors: LlamaIndex
+    year: 2026
+  - title: Pydantic AI overview
+    url: https://pydantic.dev/docs/ai/overview/
+    type: docs
+    authors: Pydantic
+    year: 2026
+  - title: smolagents
+    url: https://huggingface.co/docs/smolagents/index
+    type: docs
+    authors: Hugging Face
+    year: 2026
+---
+
+## Intuición: muchos nombres, pocas ideas
+
+El panorama de frameworks de agentes cambia cada pocos meses: aparecen, se fusionan, se renombran. Aprender cada API de memoria es una inversión de vida corta; entender **qué modelo mental propone** cada uno y **qué hacen todos por debajo** es una inversión duradera. Por debajo, casi todos implementan el bucle que ya conoces (modelo, herramientas, observaciones, estado) y se diferencian en **cómo lo expresas** y **qué servicios añaden alrededor**: persistencia, trazas, humanos en el bucle, despliegue.
+
+Por eso esta lección está organizada por **modelo mental**, y cada afirmación procede de la **página de visión general oficial** de cada herramienta, consultada el 6 de octubre de 2026. Tómalas como una fotografía fechada, no como una comparativa permanente.
+
+## Cómo funciona
+
+### Familia 1: grafos y workflows explícitos
+
+Aquí **tú dibujas el flujo** (nodos, aristas, eventos) y el modelo ocupa algunos pasos. Es el territorio de los workflows de la parte anterior, con más infraestructura.
+
+- **LangGraph** se describe como «un framework de orquestación de bajo nivel y entorno de ejecución para construir, gestionar y desplegar agentes de larga duración con estado». Modela los agentes como **grafos dirigidos**: nodos (pasos de procesamiento) conectados por aristas, con un **estado compartido** que fluye entre ellos. Permite mezclar pasos deterministas con lógica guiada por IA, y ofrece ejecución duradera, supervisión humana y memoria persistente. Es de código abierto y se puede usar sin depender de LangChain.
+- **LlamaIndex Workflows** es una forma «dirigida por eventos y basada en pasos» de controlar el flujo de una aplicación: cada **paso** (una función de Python con entradas y salidas tipadas) recibe eventos, hace su trabajo y devuelve eventos que disparan los pasos siguientes, con un diseño asíncrono. Admite ramificación, bucles y ejecución concurrente, y valida la coherencia del grafo antes de ejecutar. Sus ejemplos incluyen agentes ReAct, de llamadas a funciones y CodeAct.
+- **Google ADK** (Agent Development Kit) es un framework de código abierto «para construir, depurar y desplegar agentes fiables a escala empresarial». Agnóstico del modelo (Gemini, Claude, OpenAI, Ollama, vLLM, entre otros), disponible en Python, TypeScript, Go, Java y Kotlin, con **workflows basados en grafos**, orquestación multiagente y plantillas secuencial, paralela y en bucle; se despliega en tu infraestructura o en servicios de Google Cloud, e incluye soporte de **A2A y de herramientas MCP**.
+
+### Familia 2: agentes con primitivas ligeras
+
+Aquí defines **agentes** (un modelo con instrucciones y herramientas) y pocas primitivas para combinarlos.
+
+- **OpenAI Agents SDK** se presenta como un framework listo para producción, «ligero y fácil de usar, con muy pocas abstracciones». Sus primitivas: **Agents** (LLM con instrucciones y herramientas), **Handoffs** (delegación entre agentes), **Guardrails** (validación de entradas y salidas), **Sessions** (memoria persistente) y **Tracing** (visualización y depuración integradas). Usa por defecto la API Responses de OpenAI y soporta otros proveedores mediante extensiones, aunque no es estrictamente agnóstico del proveedor.
+- **Claude Agent SDK** ofrece «el mismo conjunto de herramientas, bucle de agente y gestión de contexto que impulsan Claude Code, programables en Python y TypeScript». Incluye herramientas integradas (leer, escribir y editar archivos, ejecutar comandos, buscar en la web), *hooks* (código propio en puntos del ciclo de vida), subagentes, MCP, permisos, sesiones que se pueden reanudar o bifurcar, y skills y plugins. Se distingue del SDK cliente (donde escribes tú el bucle) y de *Managed Agents* (agentes alojados por Anthropic).
+- **PydanticAI** es un framework de Python con tipado de extremo a extremo: agnóstico del modelo, **salidas estructuradas validadas** en tiempo de ejecución, herramientas tipadas con esquema y validación de argumentos generados automáticamente, ejecución duradera sobre motores como Temporal, DBOS o Prefect, e instrumentación nativa de OpenTelemetry. Insiste en mover clases enteras de errores del tiempo de ejecución al de desarrollo.
+- **Microsoft Agent Framework** (para .NET, Python y, en vista previa pública, Go) reúne agentes (con herramientas y servidores MCP, sobre varios proveedores de modelos), un **agente «harness»** con capacidades para tareas largas (planificación, compactación de contexto, memoria, aprobación de herramientas, observabilidad), **workflows** funcionales y basados en grafos, e integraciones. Es el sucesor directo de **AutoGen** y **Semantic Kernel**: combina las abstracciones simples de AutoGen con las funciones empresariales de Semantic Kernel (estado por sesión, tipado, filtros, telemetría) y añade workflows con control explícito.
+
+### Familia 3: roles y equipos
+
+- **CrewAI** se describe como un framework de código abierto para orquestar agentes autónomos y construir workflows complejos. Distingue **Flows** (gestionan el estado, la lógica y el flujo de control de la aplicación, «el gestor» del sistema) y **Crews** (equipos de agentes especializados con **roles**, objetivos y herramientas que colaboran de forma autónoma). Los Flows delegan tareas en Crews, que devuelven resultados.
+
+### Familia 4: agentes que escriben código
+
+- **smolagents** (Hugging Face) es una librería de código abierto cuya lógica de agentes cabe en «unas mil líneas de código». Su `CodeAgent` **escribe sus acciones en código** para invocar herramientas o hacer cálculos, lo que da composición natural (bucles, condicionales, funciones anidadas); para hacerlo seguro admite ejecución en **entornos aislados** (Modal, Blaxel, E2B o Docker). También ofrece `ToolCallingAgent` con llamadas a herramientas en JSON, es agnóstica del modelo y puede usar herramientas de servidores MCP.
+
+### Un ejercicio de lectura crítica: «no consta» no significa «no tiene»
+
+El código siguiente codifica, para los nueve frameworks, cuatro atributos con tres valores: `True` (la página de visión general lo afirma) o `None` (**no consta** en esa página, lo que **no** equivale a que no exista). Después filtra por requisito.
+
+```python
+T, N = True, None  # True: la página consultada lo afirma; None: no consta en esa página (no es lo mismo que «no lo tiene»)
+
+# Atributos tomados SOLO de la página de visión general de cada framework (consultadas el 6-10-2026).
+FRAMEWORKS = {
+    #                   modelo mental              larga duración  multiagente  MCP   A2A
+    "LangGraph":        ("grafo de nodos y estado", T,                   N,           N,    N),
+    "OpenAI Agents SDK": ("agentes y handoffs",      N,                   T,           N,    N),
+    "Claude Agent SDK": ("el bucle de Claude Code",  N,                   T,           T,    N),
+    "Agent Framework":  ("agentes + workflows",      T,                   T,           T,    N),
+    "CrewAI":           ("flows + crews por rol",    N,                   T,           N,    N),
+    "Google ADK":       ("workflows y agentes",      N,                   T,           T,    T),
+    "LlamaIndex Workflows": ("eventos y pasos",      N,                   N,           N,    N),
+    "PydanticAI":       ("agentes con tipos",        T,                   N,           N,    N),
+    "smolagents":       ("agentes que escriben código", N,                T,           T,    N),
+}
+COLUMNAS = ("larga_duracion", "multiagente", "mcp", "a2a")
+
+for exigencia in ("larga_duracion", "mcp", "a2a"):
+    i = COLUMNAS.index(exigencia)
+    afirman = [n for n, f in FRAMEWORKS.items() if f[1 + i] is True]
+    sin_dato = [n for n, f in FRAMEWORKS.items() if f[1 + i] is None]
+    print(f"{exigencia}: lo afirman {len(afirman)} -> {afirman}")
+    print(f"   sin dato en su página de visión general: {len(sin_dato)}")
+```
+
+Salida (determinista):
+
+```text
+larga_duracion: lo afirman 3 -> ['LangGraph', 'Agent Framework', 'PydanticAI']
+   sin dato en su página de visión general: 6
+mcp: lo afirman 4 -> ['Claude Agent SDK', 'Agent Framework', 'Google ADK', 'smolagents']
+   sin dato en su página de visión general: 5
+a2a: lo afirman 1 -> ['Google ADK']
+   sin dato en su página de visión general: 8
+```
+
+- **Solo un framework de nueve menciona A2A en su visión general**, y eso **no** significa que los otros ocho no puedan hablarlo: a veces lo soporta una extensión, un adaptador o una versión posterior, o simplemente la página resumen no lo cita. Las **listas de características de internet** (tablas «✓ / ✗») suelen confundir las dos cosas y envejecen en semanas.
+- Para decidir con rigor, la columna «sin dato» se convierte en una **tarea de verificación**: leer la documentación detallada o probar el caso en un prototipo.
+- Y recuerda que la columna «multiagente» o «MCP» dice **que existe**, no **qué tal funciona** con tu carga: eso se mide.
+
+<Snapshot date="2026-10">
+
+Todo lo anterior procede de las páginas de visión general de la documentación oficial de cada proyecto, consultadas el 6 de octubre de 2026, y es una **fotografía fechada**: los proyectos cambian de versión, de nombre y de alcance con mucha frecuencia (por ejemplo, Microsoft Agent Framework nació como sucesor de AutoGen y Semantic Kernel, y su versión para Go estaba en vista previa pública; las URL de varias documentaciones se han trasladado a dominios nuevos). No hay un «ganador»; las columnas de capacidades de cualquier tabla comparativa (incluida la de este curso) deben verificarse en la documentación vigente de cada herramienta antes de usarse para una decisión.
+
+</Snapshot>
+
+### Lo que todos comparten
+
+Aunque las superficies difieran, todos resuelven los mismos problemas, que ya conoces por los módulos anteriores:
+
+| Pieza | Para qué |
+| --- | --- |
+| Bucle de agente | Alternar modelo y herramientas hasta terminar |
+| Definición de herramientas | Esquemas, validación y errores como observaciones |
+| Estado y memoria | Qué recuerda el agente en la sesión y entre sesiones |
+| Control de flujo | Ramas, bucles, paralelismo, traspasos |
+| Humano en el bucle | Aprobaciones, pausas, reanudación |
+| Trazas y evaluación | Ver qué pasó y medir si funciona |
+| Despliegue | Dónde y cómo se ejecuta |
+
+Lo que cambia es **qué decisiones toma el framework por ti** y **cuánto te deja ver y controlar**. Un framework de bajo nivel te da control y te pide más código; uno de alto nivel te ahorra código y te oculta decisiones (los prompts, los reintentos) que a veces necesitarás cambiar.
+
+## Trade-offs
+
+| Familia | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Grafos y workflows explícitos | Control y previsibilidad; buena base para ejecución duradera | Más código; hay que diseñar el grafo |
+| Agentes con primitivas ligeras | Pocas abstracciones, rápido de empezar | Menos estructura para flujos complejos |
+| Roles y equipos | Modelo mental intuitivo para tareas colaborativas | Riesgo de añadir agentes sin necesidad |
+| Agentes que escriben código | Composición natural y menos llamadas | Exige ejecución en entornos aislados |
+| Cualquier framework | Infraestructura ya hecha | Dependencia, cambios de versión, abstracciones que ocultan prompts |
+
+## Errores comunes en producción
+
+- **Elegir por una tabla comparativa de internet.** Sin fecha ni fuente, envejece en semanas y confunde «no consta» con «no existe».
+- **Elegir por popularidad o por el último anuncio.** El ritmo de cambio hace que lo popular hoy no lo sea en un año.
+- **No fijar versiones.** Un cambio de versión puede alterar prompts internos, nombres y comportamientos.
+- **Acoplar toda la lógica de negocio al framework.** Mantén tu dominio (herramientas, esquemas, evaluación) separado del framework para poder cambiarlo.
+- **Usar el framework para algo que es una función.** La propia documentación de Microsoft lo dice: si puedes escribir una función para resolver la tarea, hazlo en lugar de usar un agente de IA.
+- **Ignorar lo que oculta.** Si no puedes ver el prompt final y la traza de cada llamada, no puedes depurar.
+- **Mezclar varios frameworks sin necesidad.** Cada uno trae su modelo de estado y de errores.
+- **No probar un caso real antes de decidir.** Un prototipo de un día con tu tarea vale más que una semana de lectura de comparativas.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué framework de agentes usarías y por qué?"_ Pista: depende de requisitos (control del flujo, persistencia, multiagente, lenguaje, proveedor de modelos); explica el modelo mental, verifica en la documentación vigente y prototipa un caso real.
+- _"¿Qué tienen en común todos los frameworks de agentes?"_ Pista: bucle de agente, herramientas con esquema, estado y memoria, control de flujo, humano en el bucle, trazas y despliegue.
+- _"¿Cómo evitas quedar atado a un framework?"_ Pista: separar el dominio (herramientas, esquemas, evaluación) de la capa del framework, fijar versiones y mantener los prompts y las trazas visibles.
+- _"¿Cuándo no usarías un framework?"_ Pista: tareas simples, una función o un workflow corto; o cuando no entiendes lo que oculta.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Los frameworks se entienden por su **modelo mental**: grafos y workflows (LangGraph, LlamaIndex Workflows, ADK), agentes con primitivas (OpenAI Agents SDK, Claude Agent SDK, PydanticAI, Agent Framework), roles y equipos (CrewAI) y agentes que escriben código (smolagents).
+- Todos implementan el mismo núcleo: **bucle, herramientas, estado, control de flujo, humano en el bucle, trazas y despliegue**.
+- **«No consta» no es «no lo tiene»**: de nueve frameworks, solo uno menciona A2A en su visión general; verifica antes de descartar.
+- Fotografía fechada (6-10-2026): las capacidades cambian en semanas; desconfía de las tablas sin fecha ni fuente.
+- Separa tu dominio del framework y prototipa un caso real antes de decidir.
+
+</KeyTakeaways>

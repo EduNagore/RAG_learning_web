@@ -1,0 +1,95 @@
+lesson: m14-frameworks/01-panorama-de-frameworks
+questions:
+  - id: m14-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Cómo se describe LangGraph en su documentación?'
+    options:
+      - 'Como un framework de orquestación de bajo nivel y entorno de ejecución para agentes de larga duración con estado, modelados como grafos.'
+      - 'Como un modelo de lenguaje de código abierto.'
+      - 'Como un protocolo de comunicación entre agentes.'
+      - 'Como una base de datos vectorial.'
+    answer: [0]
+    explanation: 'LangGraph modela los agentes como grafos dirigidos (nodos y aristas) con estado compartido, y ofrece ejecución duradera, supervisión humana y memoria persistente.'
+    ref: '#familia-1-grafos-y-workflows-explícitos'
+
+  - id: m14-01-q2
+    type: multiple
+    difficulty: 2
+    prompt: '¿Cuáles son primitivas del OpenAI Agents SDK según su visión general? Marca todas las correctas.'
+    options:
+      - 'Agents.'
+      - 'Handoffs.'
+      - 'Guardrails.'
+      - 'Crews.'
+    answer: [0, 1, 2]
+    explanation: 'Sus primitivas son agents, handoffs, guardrails, sessions y tracing. Crews es un concepto de CrewAI.'
+    ref: '#familia-2-agentes-con-primitivas-ligeras'
+
+  - id: m14-01-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué distingue a smolagents de la mayoría de frameworks de agentes?'
+    options:
+      - 'Su CodeAgent escribe las acciones en código, lo que da composición natural, y se recomienda ejecutarlo en entornos aislados.'
+      - 'No usa modelos de lenguaje.'
+      - 'Solo funciona con un proveedor concreto.'
+      - 'No admite herramientas.'
+    answer: [0]
+    explanation: 'Escribir acciones en código permite bucles, condicionales y funciones anidadas, pero exige ejecución segura (Modal, Blaxel, E2B o Docker).'
+    ref: '#familia-4-agentes-que-escriben-código'
+
+  - id: m14-01-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el ejercicio, solo Google ADK afirma soportar A2A en su visión general. ¿Qué conclusión es correcta?'
+    options:
+      - 'Los otros ocho frameworks no pueden hablar A2A.'
+      - 'No consta en esa página, lo que no equivale a que no exista: puede soportarlo una extensión, una versión posterior o simplemente no citarse; hay que verificarlo.'
+      - 'A2A es exclusivo de Google.'
+      - 'Es irrelevante para elegir un framework.'
+    answer: [1]
+    explanation: 'La ausencia de una mención no es ausencia de capacidad. Las tablas de características de internet suelen confundir ambas cosas.'
+    ref: '#un-ejercicio-de-lectura-crítica-no-consta-no-significa-no-tiene'
+
+  - id: m14-01-q5
+    type: single
+    difficulty: 2
+    prompt: '¿De qué proyectos es sucesor directo Microsoft Agent Framework?'
+    options:
+      - 'De LangChain y CrewAI.'
+      - 'De AutoGen y Semantic Kernel.'
+      - 'De smolagents y PydanticAI.'
+      - 'De ADK y LlamaIndex.'
+    answer: [1]
+    explanation: 'Combina las abstracciones simples de AutoGen con las funciones empresariales de Semantic Kernel y añade workflows con control explícito.'
+    ref: '#familia-2-agentes-con-primitivas-ligeras'
+
+  - id: m14-01-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué piezas comparten prácticamente todos los frameworks de agentes? Marca todas las correctas.'
+    options:
+      - 'Un bucle de agente que alterna modelo y herramientas.'
+      - 'Definición de herramientas con esquemas.'
+      - 'Estado y memoria.'
+      - 'Humano en el bucle, trazas y despliegue.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Todos resuelven los mismos problemas de fondo; difieren en cómo se expresan y en qué decisiones toma el framework por ti.'
+    ref: '#lo-que-todos-comparten'
+
+  - id: m14-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'La documentación de Microsoft Agent Framework recomienda que, si puedes escribir una función que resuelva la tarea, lo hagas en lugar de usar un agente de IA.'
+    answer: [0]
+    explanation: 'Es verdadero: es su criterio para decidir entre función, agente y workflow, y coincide con el consejo general de empezar por lo simple.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m14-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una tabla comparativa de frameworks de agentes encontrada en internet es una base fiable para decidir aunque no tenga fecha ni fuentes.'
+    answer: [1]
+    explanation: 'Es falso. Las capacidades cambian en semanas y las tablas suelen mezclar «no consta» con «no existe»; hay que verificar en la documentación vigente y prototipar.'
+    ref: '#errores-comunes-en-producción'

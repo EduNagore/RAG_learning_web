@@ -1,0 +1,202 @@
+---
+title: Cuándo no usar un framework de agentes
+description: Qué cabe en un agente sin framework (bucle, límites, errores como observaciones, trazas), qué infraestructura sí conviene no reescribir (persistencia duradera, aprobaciones, observabilidad, despliegue), y una ruta de adopción gradual que evita la dependencia prematura.
+module: m14-frameworks
+order: 3
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Implementar un agente de producción mínimo sin framework, con límites, errores como observaciones y traza estructurada.
+  - Identificar qué aporta realmente un framework y en qué punto compensa adoptarlo.
+  - Aplicar un camino gradual (función, workflow, agente propio, framework) con criterios de salto.
+  - Reconocer los antipatrones de dependencia (abstracciones que ocultan prompts, versiones sin fijar y acoplamiento del dominio).
+prerequisites:
+  - m14-frameworks/02-criterios-de-eleccion
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Erik S., Barry Zhang (Anthropic)
+    year: 2024
+  - title: Microsoft Agent Framework overview
+    url: https://learn.microsoft.com/en-us/agent-framework/overview/
+    type: docs
+    authors: Microsoft
+    year: 2026
+  - title: smolagents
+    url: https://huggingface.co/docs/smolagents/index
+    type: docs
+    authors: Hugging Face
+    year: 2026
+  - title: Agent SDK overview (Claude)
+    url: https://code.claude.com/docs/en/agent-sdk/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+---
+
+## Intuición: el mejor framework puede ser ninguno
+
+Anthropic lo dice sin rodeos en *Building effective agents*: los frameworks facilitan la implementación pero «pueden ocultar los prompts y las respuestas subyacentes, lo que dificulta su depuración», y recomiendan **empezar usando directamente las APIs de los modelos**, porque muchos patrones se implementan con unas pocas líneas de código. La propia documentación de Microsoft Agent Framework, un framework, aconseja: «si puedes escribir una función que resuelva la tarea, hazlo en lugar de usar un agente de IA», y distingue **agentes** (tareas abiertas o conversacionales, uso autónomo de herramientas y planificación) de **workflows** (procesos con pasos bien definidos y control explícito del orden).
+
+Esto no significa que los frameworks sean innecesarios, sino que **la adopción debe ser una decisión con motivo**. Esta lección te da las dos mitades: cuánto se puede hacer sin ellos y cuándo empieza a compensar usarlos.
+
+## Cómo funciona
+
+### Lo que cabe en poco código
+
+El núcleo de un agente son unas decenas de líneas. El ejemplo siguiente incluye lo imprescindible para llevarlo más allá de una demo: el **bucle**, **errores de herramientas como observaciones**, un **máximo de pasos**, un **presupuesto de tokens**, un **reintento** ante fallos del modelo y una **traza estructurada** de cada evento. Con un `MockLLM` guionizado, el «modelo» pide primero un tipo de cliente inexistente (la herramienta falla), lee el error y se corrige. En la segunda ejecución, un presupuesto minúsculo corta el bucle.
+
+```python
+import json
+
+from ragkit.llm import Message, MockLLM
+
+
+def agente(llm, pregunta, herramientas, max_pasos=5, max_tokens=4000, reintentos=1):
+    """Un agente completo sin framework: bucle, errores como observaciones, límites y traza."""
+    mensajes, traza, gastados = [Message("user", pregunta)], [], 0
+    for paso in range(1, max_pasos + 1):
+        for intento in range(reintentos + 1):  # reintento solo si el modelo falla (no si la herramienta falla)
+            try:
+                respuesta = llm.generate(mensajes, tools=list(herramientas))
+                break
+            except RuntimeError as e:
+                traza.append({"paso": paso, "evento": "error_modelo", "detalle": str(e)})
+        else:
+            return {"estado": "fallo_modelo", "traza": traza}
+        gastados += llm.input_tokens + llm.output_tokens
+        if gastados > max_tokens:
+            traza.append({"paso": paso, "evento": "presupuesto", "tokens": gastados})
+            return {"estado": "presupuesto", "traza": traza}
+        if not respuesta.tool_calls:
+            traza.append({"paso": paso, "evento": "final"})
+            return {"estado": "ok", "respuesta": respuesta.text, "traza": traza}
+        mensajes.append(Message("assistant", respuesta.text, tool_calls=respuesta.tool_calls))
+        for llamada in respuesta.tool_calls:
+            try:
+                resultado = json.dumps(herramientas[llamada.name](**llamada.arguments))
+            except Exception as e:  # noqa: BLE001
+                resultado = f"error: {type(e).__name__}: {e}"
+            traza.append({"paso": paso, "evento": "herramienta", "nombre": llamada.name, "ok": not resultado.startswith("error:")})
+            mensajes.append(Message("tool", resultado, tool_call_id=llamada.id))
+    return {"estado": "max_pasos", "traza": traza}
+
+
+HERRAMIENTAS = {"plazo": lambda tipo: {"particular": 14, "empresa": 7}[tipo]}
+llm = MockLLM(
+    script=[
+        {"tool": "plazo", "args": {"tipo": "autonomo"}},  # tipo inexistente: la herramienta falla
+        {"tool": "plazo", "args": {"tipo": "empresa"}},
+        "Un cliente empresa tiene 7 días naturales.",
+    ]
+)
+resultado = agente(llm, "¿Plazo de devolución para una empresa?", HERRAMIENTAS)
+print(resultado["estado"], "|", resultado.get("respuesta"))
+for evento in resultado["traza"]:
+    print("  ", evento)
+
+# Un presupuesto muy bajo corta el bucle antes de tiempo.
+llm = MockLLM(script=[{"tool": "plazo", "args": {"tipo": "empresa"}}] * 5)
+print(agente(llm, "¿Plazo?", HERRAMIENTAS, max_tokens=5)["estado"])
+```
+
+Salida (determinista):
+
+```text
+ok | Un cliente empresa tiene 7 días naturales.
+   {'paso': 1, 'evento': 'herramienta', 'nombre': 'plazo', 'ok': False}
+   {'paso': 2, 'evento': 'herramienta', 'nombre': 'plazo', 'ok': True}
+   {'paso': 3, 'evento': 'final'}
+presupuesto
+```
+
+- Son unas **treinta líneas** y ya tienen lo que más importa en producción: **ningún fallo de herramienta rompe el bucle**, **los límites están garantizados** y **cada decisión queda registrada** en una traza estructurada que puedes enviar a tu sistema de observabilidad.
+- **Se ve todo:** el prompt exacto, los mensajes, la traza. Si algo sale mal, depuras tu código, no una abstracción ajena.
+- Lo que **no** tiene este esqueleto es precisamente lo que un framework suele dar: **persistencia duradera** (sobrevivir a reinicios), **pausas y reanudaciones**, **aprobaciones humanas con interfaz**, **paralelismo y cancelación**, **integración con proveedores y protocolos**, **evaluación y despliegue**. Es la lista que decide cuándo adoptarlo.
+
+### Lo que sí conviene no reescribir
+
+Hay piezas que parecen simples y no lo son. Antes de implementarlas a mano, valora si un framework (o una librería suelta) las resuelve bien:
+
+| Pieza | Por qué es difícil |
+| --- | --- |
+| **Ejecución duradera y reanudación** | Persistir el estado entre pasos, sobrevivir a reinicios, idempotencia de los efectos, versionado del estado |
+| **Humano en el bucle** | Pausar durante horas o días, recibir la aprobación, reanudar con el contexto exacto, caducidad |
+| **Concurrencia y cancelación** | Ejecutar herramientas en paralelo, cancelar a medias, limpiar recursos |
+| **Observabilidad integral** | Trazas de modelo y herramientas, correlación entre agentes, exportación estándar |
+| **Aislamiento de ejecución de código** | Sandbox de procesos, red, sistema de archivos y cuotas |
+| **Integración con muchos proveedores y protocolos** | Diferencias de formato, versiones, autenticación |
+
+Los frameworks de las lecciones anteriores ofrecen varias de ellas (por ejemplo, ejecución duradera y supervisión humana en los basados en grafos, o sandboxes en los que escriben código). **Adoptarlo por esas piezas** es un motivo sólido; adoptarlo para «no escribir el bucle» (treinta líneas) no lo es.
+
+### Una ruta gradual
+
+| Etapa | Qué usas | Salta a la siguiente cuando… |
+| --- | --- | --- |
+| 1. Función o llamada única | Una llamada al modelo con buen prompt y, si hace falta, recuperación | No cubre los casos (pasos variables, herramientas) |
+| 2. Workflow en código | Cadena, router, paralelización con tus propias funciones | Los pasos dependen del resultado y no se pueden fijar |
+| 3. Agente propio (como el de arriba) | Bucle con límites y traza | Necesitas reanudar tras días, aprobaciones, concurrencia o trazas integradas |
+| 4. Framework o librerías de infraestructura | Solo las piezas que faltan (persistencia, trazas, sandbox) | — |
+
+Un ejemplo concreto de decisión: un asistente interno que consulta tres sistemas y responde en un turno se resuelve con una función o, como mucho, un workflow en código. Un asistente que prepara informes durante horas, pide aprobación a un responsable antes de enviarlos y debe retomarse al día siguiente tras un despliegue ya necesita **persistencia de estado y reanudación**: ahí es razonable adoptar un motor de ejecución duradera o un framework que lo incluya. Y un producto en el que clientes externos definen sus propios agentes necesita una plataforma con aislamiento, cuotas y trazas por inquilino, que suele superar lo que conviene construir a mano. En los tres casos, lo que decide no es la «complejidad» del agente, sino **qué garantías operativas exige el negocio**.
+
+Observa que el salto 3 → 4 se justifica por **necesidades concretas**, no por comodidad. Y puede hacerse **por piezas**: un motor de ejecución duradera o una librería de trazas pueden usarse sin adoptar un framework completo.
+
+<Snapshot date="2026-10">
+
+El equilibrio entre «hazlo tú» y «usa un framework» se desplaza con el tiempo: aparecen librerías especializadas (persistencia, trazas, sandbox), los proveedores incluyen más funciones en sus SDK (por ejemplo, el SDK de agentes de Claude ofrece como biblioteca el bucle, la gestión de contexto, los permisos y las sesiones de Claude Code) y los propios frameworks se simplifican o se fusionan. Revisa tu decisión de «propio o framework» cada pocos meses con los requisitos del momento; lo que hoy es un motivo para adoptar (ejecución duradera) puede resolverse mañana con una librería de dos líneas.
+
+</Snapshot>
+
+### Cómo adoptar un framework sin que te adopte él a ti
+
+Si adoptas uno, hazlo con reglas que preserven tu capacidad de salida:
+
+1. **Lee el prompt final y la traza** de un caso real antes de comprometerte: si el framework los oculta, eso será un problema el día que haya un fallo.
+2. **Aísla tu dominio**: herramientas como funciones puras con esquema, prompts versionados en archivos propios, evaluación en un arnés independiente.
+3. **Envuelve el framework en una interfaz tuya** (`ejecutar(tarea) -> resultado + traza`) que use el resto de tu aplicación.
+4. **Fija versiones** y actualiza de forma deliberada con la evaluación como red.
+5. **Prueba la salida:** reimplementa un agente simple en el esqueleto propio y comprueba que tu conjunto de pruebas lo valida igual.
+6. **Documenta por qué** lo elegiste y qué lo haría dejar de ser la elección.
+
+## Trade-offs
+
+| Opción | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Agente propio | Control total, sin dependencias, depuración transparente | Hay que construir y mantener la infraestructura difícil |
+| Framework completo | Infraestructura ya resuelta | Abstracciones que ocultan, cambios de versión, acoplamiento |
+| Librerías de infraestructura sueltas | Solo lo que falta | Integrarlas entre sí |
+| SDK del proveedor del modelo | Bien integrado con sus modelos y herramientas | Acoplado a un proveedor |
+
+## Errores comunes en producción
+
+- **Adoptar un framework para no escribir el bucle.** Treinta líneas no justifican una dependencia.
+- **Reescribir a mano la ejecución duradera o las aprobaciones humanas.** Subestimar su dificultad lleva a pérdidas de estado y a acciones duplicadas.
+- **Depender de abstracciones que no entiendes.** Si no sabes qué prompt se envía o cuántos reintentos hace, no puedes depurar ni controlar el coste.
+- **Actualizar versiones sin evaluación.** Un cambio interno de prompts puede degradar la calidad sin avisos.
+- **Mezclar dominio y framework.** Cambiar de framework se vuelve una reescritura.
+- **Comparar «frameworks» sin medir.** Un spike con tu caso real vale más que cualquier lista de características.
+- **No registrar la decisión.** Dentro de un año nadie sabrá por qué se eligió ni cuándo revisarla.
+- **Construir un framework propio genérico.** Es muy tentador y casi nunca compensa: construye lo que tu producto necesita.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Usarías un framework de agentes o lo harías a mano?"_ Pista: depende; empezar con las APIs directas; un agente mínimo cabe en unas decenas de líneas; adoptar un framework por piezas concretas (ejecución duradera, humano en el bucle, trazas, sandbox).
+- _"¿Qué le falta a un agente casero para producción?"_ Pista: persistencia y reanudación, aprobaciones humanas, concurrencia y cancelación, observabilidad integrada, aislamiento de ejecución e integración con proveedores.
+- _"¿Qué riesgos tienen los frameworks?"_ Pista: abstracciones que ocultan prompts, cambios de versión, acoplamiento del dominio, ritmo de cambio del ecosistema.
+- _"¿Cómo preservas la capacidad de cambiar de framework?"_ Pista: dominio aislado, interfaz propia sobre el framework, versiones fijadas, evaluación independiente y una prueba de reimplementación.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un agente con **bucle, errores como observaciones, límites y traza** cabe en unas **treinta líneas** y se depura de forma transparente.
+- Lo difícil de reescribir es la **infraestructura**: ejecución duradera, humano en el bucle, concurrencia, observabilidad y aislamiento; ese es el motivo legítimo para adoptar un framework o una librería.
+- Camino gradual: **función → workflow en código → agente propio → framework por piezas**, con saltos justificados por necesidades concretas.
+- Si adoptas uno: lee el prompt y la traza, aísla el dominio, envuélvelo, fija versiones y prueba la salida.
+- Revisa la decisión periódicamente: el equilibrio entre «propio» y «framework» se mueve con el ecosistema.
+
+</KeyTakeaways>
