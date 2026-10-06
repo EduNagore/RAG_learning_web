@@ -1,0 +1,95 @@
+lesson: m09-rag-produccion/02-seguridad-permisos-e-inyeccion
+questions:
+  - id: m09-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es la inyección indirecta de instrucciones?'
+    options:
+      - 'Que el usuario escribe instrucciones maliciosas directamente en el chat.'
+      - 'Que un atacante oculta instrucciones en datos que probablemente se recuperarán (documentos, web, correos) y el modelo puede obedecerlas.'
+      - 'Que el modelo se auto-modifica.'
+      - 'Que el índice se corrompe al reindexar.'
+    answer: [1]
+    explanation: 'El atacante no habla con el modelo: contamina datos que RAG trae al contexto. Por eso la recuperación es un vector natural de este ataque.'
+    ref: '#intuición-el-documento-recuperado-también-es-una-entrada-del-usuario'
+
+  - id: m09-02-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Dónde debe aplicarse el control de acceso a los documentos en un RAG?'
+    options:
+      - 'Solo en el prompt, pidiendo al modelo que no revele información confidencial.'
+      - 'En la recuperación (prefiltro en el índice) con la identidad del usuario final, y con una reverificación del resultado.'
+      - 'Solo en la interfaz de usuario.'
+      - 'Después de generar la respuesta.'
+    answer: [1]
+    explanation: 'Un prompt no es un control de acceso. El filtro debe estar en el índice o la base de datos y usar la identidad del usuario, con una segunda comprobación como defensa en profundidad.'
+    ref: '#permisos-filtrar-antes-no-después'
+
+  - id: m09-02-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, el postfiltro dejó 16 preguntas con menos de tres resultados frente a 4 con el prefiltro. ¿Por qué?'
+    options:
+      - 'Porque el postfiltro es más rápido.'
+      - 'Porque con el postfiltro los mejores resultados globales eran no públicos y se descartan después, sin reponer otros permitidos.'
+      - 'Porque el prefiltro desactiva BM25.'
+      - 'Porque el postfiltro solo funciona con vectores.'
+    answer: [1]
+    explanation: 'Si los mejores resultados se descartan por permisos, el top-k queda incompleto. Con el prefiltro, la búsqueda solo considera documentos permitidos y se completa con ellos.'
+    ref: '#permisos-filtrar-antes-no-después'
+
+  - id: m09-02-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué una expresión regular que busca «ignora las instrucciones» no basta como defensa contra la inyección?'
+    options:
+      - 'Porque las expresiones regulares no funcionan con texto en español.'
+      - 'Porque es trivial de eludir (otro idioma, espacios, codificación, paráfrasis): sirve como señal, no como garantía.'
+      - 'Porque bloquea todos los documentos.'
+      - 'Porque solo detecta mayúsculas.'
+    answer: [1]
+    explanation: 'Un atacante reformula fácilmente. Las reglas son útiles como alarma o para poner en cuarentena documentos sospechosos, pero deben combinarse con mínimo privilegio y otras capas.'
+    ref: '#permisos-filtrar-antes-no-después'
+
+  - id: m09-02-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué medidas reducen el daño de una inyección indirecta? Marca todas las correctas.'
+    options:
+      - 'Dar al agente solo herramientas de lectura cuando sea posible.'
+      - 'Pedir confirmación humana para acciones sensibles.'
+      - 'Delimitar el contenido recuperado y declararlo como datos.'
+      - 'Dar permisos totales al agente para que no falle.'
+    answer: [0, 1, 2]
+    explanation: 'Limitar la agencia, exigir confirmación y delimitar los datos acotan el daño. Dar permisos totales es lo contrario (OWASP LLM06, agencia excesiva).'
+    ref: '#defensas-por-capas-frente-a-la-inyección-indirecta'
+
+  - id: m09-02-q6
+    type: single
+    difficulty: 2
+    prompt: '¿A qué entrada de la lista de OWASP Top 10 para LLM (2025) corresponde revelar datos que el usuario no debería ver?'
+    options:
+      - 'LLM10 Unbounded Consumption.'
+      - 'LLM02 Sensitive Information Disclosure.'
+      - 'LLM03 Supply Chain.'
+      - 'LLM09 Misinformation.'
+    answer: [1]
+    explanation: 'Sensitive Information Disclosure cubre la revelación de datos sensibles, como documentos restringidos o datos personales. Unbounded Consumption trata del abuso de recursos.'
+    ref: '#mapa-de-amenazas-owasp-top-10-para-llm-2025'
+
+  - id: m09-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'La caché semántica, los resúmenes por comunidad y la memoria de la conversación también deben respetar los permisos del usuario.'
+    answer: [0]
+    explanation: 'Es verdadero. Cualquier artefacto derivado de documentos restringidos puede filtrarlos si se comparte entre usuarios con permisos distintos.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m09-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Si un documento se elimina del índice por una solicitud de supresión de datos, ya no hace falta borrarlo de las cachés ni de las copias derivadas.'
+    answer: [1]
+    explanation: 'Es falso. El borrado debe alcanzar el índice, las cachés, los resúmenes y cualquier copia derivada; para ello hacen falta identificadores estables y trazabilidad.'
+    ref: '#datos-personales-y-retención'

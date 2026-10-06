@@ -51,4 +51,6 @@ def context_recall(reference_answer, context_texts, threshold=0.6):
 # Prueba tu código: pulsa «Ejecutar» para ver esta salida.
 if __name__ == "__main__":
     contexto = ["El reembolso tarda un máximo de 7 días hábiles desde que el paquete llega."]
-    print(faithfulness("El reembolso tarda 7 días hábiles [doc-002]. Es gratis para todos.", contexto))
+    print(
+        faithfulness("El reembolso tarda 7 días hábiles [doc-002]. Es gratis para todos.", contexto)
+    )

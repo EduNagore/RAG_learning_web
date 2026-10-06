@@ -44,7 +44,9 @@ def test_el_umbral_es_configurable_y_inclusivo(student):
     expect_equal(student.claim_supported("tarda 7 días", CONTEXTO, threshold=1.0), True, what="1.0")
     # «tarda» y «pago»: solo una de las dos está en el contexto (cobertura 0.5)
     expect_equal(student.claim_supported("tarda pago", CONTEXTO, threshold=0.5), True, what="0.5")
-    expect_equal(student.claim_supported("tarda pago", CONTEXTO, threshold=0.51), False, what="0.51")
+    expect_equal(
+        student.claim_supported("tarda pago", CONTEXTO, threshold=0.51), False, what="0.51"
+    )
 
 
 def test_faithfulness_cuenta_las_afirmaciones_respaldadas(student):
@@ -75,6 +77,4 @@ def test_hidden_context_recall(student):
     expect_close(
         student.context_recall("tarda pago", CONTEXTO, threshold=0.5), 1.0, what="con umbral 0.5"
     )
-    expect_equal(
-        student.claim_supported("el de la", CONTEXTO), False, what="solo palabras vacías"
-    )
+    expect_equal(student.claim_supported("el de la", CONTEXTO), False, what="solo palabras vacías")

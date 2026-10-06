@@ -884,6 +884,104 @@ MUTANTS = [
         "claim_supported(c, context_texts, threshold) for c in claims) / len(claims)",
         "claim_supported(c, context_texts) for c in claims) / len(claims)",
     ),
+    # --- rag-17-cache-semantica ---
+    (
+        "rag-17-cache-semantica",
+        "umbral exclusivo",
+        "best_score >= self.threshold",
+        "best_score > self.threshold",
+    ),
+    (
+        "rag-17-cache-semantica",
+        "ttl inclusivo",
+        'now - entry["created"] > self.ttl',
+        'now - entry["created"] >= self.ttl',
+    ),
+    (
+        "rag-17-cache-semantica",
+        "no caduca nada",
+        "return self.ttl is not None and",
+        "return False and",
+    ),
+    (
+        "rag-17-cache-semantica",
+        "un acierto no refresca el LRU",
+        "            best = self.entries.pop(best_index)\n            self.entries.append(best)",
+        "            best = self.entries[best_index]",
+    ),
+    (
+        "rag-17-cache-semantica",
+        "expulsa la más reciente",
+        "self.entries.pop(0)",
+        "self.entries.pop()",
+    ),
+    (
+        "rag-17-cache-semantica",
+        "elige la primera por encima del umbral",
+        "if score > best_score:",
+        "if score >= self.threshold:",
+    ),
+    (
+        "rag-17-cache-semantica",
+        "no cuenta los fallos",
+        "        self.misses += 1\n        return None",
+        "        return None",
+    ),
+    (
+        "rag-17-cache-semantica",
+        "vector sin normalizar",
+        "return vector / norm if norm > 0 else vector",
+        "return vector",
+    ),
+    # --- rag-18-recuperacion-con-acl ---
+    (
+        "rag-18-recuperacion-con-acl",
+        "nivel de documento desconocido permitido",
+        "if required is None:",
+        "if False:",
+    ),
+    (
+        "rag-18-recuperacion-con-acl",
+        "usuario sin nivel es restringido",
+        'LEVELS.get(user.get("level"), 0)',
+        'LEVELS.get(user.get("level"), 2)',
+    ),
+    (
+        "rag-18-recuperacion-con-acl",
+        "restringido sin departamento",
+        'return granted >= required and doc.get("department") in user.get("departments", [])',
+        "return granted >= required",
+    ),
+    (
+        "rag-18-recuperacion-con-acl",
+        "interno exige más nivel",
+        "    return granted >= required\n\n\ndef filter_docs",
+        "    return granted > required\n\n\ndef filter_docs",
+    ),
+    (
+        "rag-18-recuperacion-con-acl",
+        "no filtra antes de puntuar",
+        "allowed = filter_docs(user, docs)",
+        "allowed = docs",
+    ),
+    (
+        "rag-18-recuperacion-con-acl",
+        "acepta puntuaciones nulas",
+        "if s[0] > 0",
+        "if s[0] >= 0",
+    ),
+    (
+        "rag-18-recuperacion-con-acl",
+        "empate por el último",
+        "key=lambda s: (-s[0], s[1])",
+        "key=lambda s: (-s[0], -s[1])",
+    ),
+    (
+        "rag-18-recuperacion-con-acl",
+        "la auditoría ignora ids inexistentes",
+        "i not in docs_by_id or ",
+        "",
+    ),
 ]
 
 survivors = []
