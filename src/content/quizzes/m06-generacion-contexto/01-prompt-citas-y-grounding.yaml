@@ -39,7 +39,7 @@ questions:
     options:
       - "['doc-001']"
       - "['doc-099']"
-      - "[]"
+      - '[]'
       - "['doc-001', 'doc-099']"
     answer: [1]
     explanation: 'Se extraen las dos citas y solo doc-099 no está entre los documentos entregados al modelo, así que es una cita inventada.'

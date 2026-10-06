@@ -11,7 +11,16 @@ const REFERENCE: [string, string[], Record<number, number>][] = [
   [
     'El reembolso tarda 7 días hábiles',
     ['reembolso', 'tarda', '7', 'dias', 'habiles'],
-    { 1: -0.301511, 2: 0.301511, 7: -0.603023, 36: -0.301511, 38: 0.301511, 39: 0.301511, 40: 0.301511, 55: -0.301511 },
+    {
+      1: -0.301511,
+      2: 0.301511,
+      7: -0.603023,
+      36: -0.301511,
+      38: 0.301511,
+      39: 0.301511,
+      40: 0.301511,
+      55: -0.301511,
+    },
   ],
   ['ñandú año', ['ñandu', 'año'], { 1: -0.57735, 19: -0.57735, 37: -0.57735 }],
 ];
@@ -28,7 +37,9 @@ describe('port de ragkit a TypeScript', () => {
 
   it.each(REFERENCE)('produce el mismo vector que Python: %s', (text, _tokens, nonzero) => {
     const vec = new HashingEmbedder(64).embed(text);
-    const got = Object.fromEntries(vec.flatMap((v, i) => (v !== 0 ? [[i, Number(v.toFixed(6))]] : [])));
+    const got = Object.fromEntries(
+      vec.flatMap((v, i) => (v !== 0 ? [[i, Number(v.toFixed(6))]] : [])),
+    );
     expect(got).toEqual(nonzero);
   });
 

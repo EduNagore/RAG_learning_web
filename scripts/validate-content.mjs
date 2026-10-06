@@ -96,7 +96,10 @@ for (const [id, { file, data, body }] of lessons) {
       err(f, `${field}: todos los elementos deben ser texto (¿falta citar uno que contiene ": "?)`);
   for (const s of data.sources ?? [])
     if (typeof s.title !== 'string')
-      err(f, `una fuente tiene un título que no es texto (¿falta citarlo?): ${JSON.stringify(s.title)}`);
+      err(
+        f,
+        `una fuente tiene un título que no es texto (¿falta citarlo?): ${JSON.stringify(s.title)}`,
+      );
   for (const p of data.prerequisites ?? []) {
     if (!lessons.has(p)) err(f, `prerequisito inexistente: ${p}`);
     if (p === id) err(f, 'es prerequisito de sí misma');

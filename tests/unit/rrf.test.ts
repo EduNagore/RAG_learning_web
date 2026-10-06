@@ -3,7 +3,13 @@ import { parseRanking, rrfFuse } from '../../src/lib/rrf';
 
 describe('rrfFuse', () => {
   it('suma 1/(k+posición) y ordena de mayor a menor', () => {
-    const out = rrfFuse([['a', 'b', 'c'], ['c', 'a', 'd']], 60);
+    const out = rrfFuse(
+      [
+        ['a', 'b', 'c'],
+        ['c', 'a', 'd'],
+      ],
+      60,
+    );
     expect(out.map((d) => d.id)).toEqual(['a', 'c', 'b', 'd']);
     expect(out[0].score).toBeCloseTo(1 / 61 + 1 / 62, 10);
     expect(out[1].score).toBeCloseTo(1 / 63 + 1 / 61, 10);
@@ -11,7 +17,10 @@ describe('rrfFuse', () => {
   });
 
   it('la constante k cambia el ganador (k=0 frente a k=60)', () => {
-    const rankings = [['A', 'B', 'D'], ['C', 'E', 'B']];
+    const rankings = [
+      ['A', 'B', 'D'],
+      ['C', 'E', 'B'],
+    ];
     expect(rrfFuse(rankings, 0)[0].id).toBe('A');
     expect(rrfFuse(rankings, 60)[0].id).toBe('B');
   });
@@ -23,7 +32,15 @@ describe('rrfFuse', () => {
   });
 
   it('los empates conservan el orden de primera aparición', () => {
-    expect(rrfFuse([['x', 'y'], ['y', 'x']], 60).map((d) => d.id)).toEqual(['x', 'y']);
+    expect(
+      rrfFuse(
+        [
+          ['x', 'y'],
+          ['y', 'x'],
+        ],
+        60,
+      ).map((d) => d.id),
+    ).toEqual(['x', 'y']);
   });
 
   it('registra la posición y la contribución por ranking', () => {

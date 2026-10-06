@@ -42,7 +42,8 @@ const CRC_TABLE = (() => {
 
 export function crc32(text: string): number {
   let crc = 0xffffffff;
-  for (const byte of new TextEncoder().encode(text)) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  for (const byte of new TextEncoder().encode(text))
+    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
 
@@ -55,7 +56,8 @@ export class HashingEmbedder {
   embed(text: string): number[] {
     const tokens = tokenize(text);
     const features = [...tokens];
-    if (this.useBigrams) for (let i = 0; i + 1 < tokens.length; i++) features.push(`${tokens[i]}_${tokens[i + 1]}`);
+    if (this.useBigrams)
+      for (let i = 0; i + 1 < tokens.length; i++) features.push(`${tokens[i]}_${tokens[i + 1]}`);
 
     const vec = new Array<number>(this.dim).fill(0);
     for (const feature of features) {

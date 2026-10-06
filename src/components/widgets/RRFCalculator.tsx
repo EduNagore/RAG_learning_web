@@ -20,8 +20,9 @@ export default function RRFCalculator() {
       <h3 className="text-lg font-semibold">Calculadora de RRF</h3>
       <p className="text-sm text-slate-600 dark:text-slate-400">
         Escribe los resultados de cada buscador (de mejor a peor, separados por comas) y mueve la
-        constante <em>k</em>. Cada documento suma <code>1 / (k + posición)</code> por cada lista donde
-        aparece. Prueba <code>k = 0</code> y <code>k = 60</code> y observa cómo cambia el primero.
+        constante <em>k</em>. Cada documento suma <code>1 / (k + posición)</code> por cada lista
+        donde aparece. Prueba <code>k = 0</code> y <code>k = 60</code> y observa cómo cambia el
+        primero.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">

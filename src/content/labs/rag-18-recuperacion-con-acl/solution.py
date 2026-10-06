@@ -33,9 +33,7 @@ def acl_search(user, query, docs, score_fn, top_k=3):
 
 def audit_leaks(user, result_ids, docs_by_id):
     """Ids de los resultados que el usuario NO debería ver (o que no existen), en orden."""
-    return [
-        i for i in result_ids if i not in docs_by_id or not can_access(user, docs_by_id[i])
-    ]
+    return [i for i in result_ids if i not in docs_by_id or not can_access(user, docs_by_id[i])]
 
 
 # Prueba tu código: pulsa «Ejecutar» para ver esta salida.

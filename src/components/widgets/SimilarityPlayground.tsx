@@ -18,7 +18,15 @@ export default function SimilarityPlayground() {
   const [query, setQuery] = useState('¿En cuánto tiempo me devuelven el dinero?');
   const [dim, setDim] = useState(512);
 
-  const sentences = useMemo(() => text.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 8), [text]);
+  const sentences = useMemo(
+    () =>
+      text
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 8),
+    [text],
+  );
   const embedder = useMemo(() => new HashingEmbedder(dim), [dim]);
   const vectors = useMemo(() => sentences.map((s) => embedder.embed(s)), [sentences, embedder]);
   const ranking = useMemo(() => {
@@ -28,16 +36,17 @@ export default function SimilarityPlayground() {
       .sort((a, b) => b.score - a.score);
   }, [query, sentences, vectors, embedder]);
 
-  const field = 'rounded-md border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900';
+  const field =
+    'rounded-md border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900';
 
   return (
     <div className="not-prose my-8 space-y-4 rounded-xl border border-slate-200 p-5 dark:border-slate-800">
       <h3 className="text-lg font-semibold">Laboratorio de similitud</h3>
       <p className="text-sm text-slate-600 dark:text-slate-400">
-        Escribe una frase por línea (máximo 8) y mira la matriz de similitud coseno. Usa el embedder de
-        juguete del curso (hashing): comparte palabras, pero <strong>no entiende sinónimos</strong>, a
-        diferencia de un modelo real. Prueba la consulta de abajo, que no comparte casi ninguna palabra con
-        la frase del reembolso.
+        Escribe una frase por línea (máximo 8) y mira la matriz de similitud coseno. Usa el embedder
+        de juguete del curso (hashing): comparte palabras, pero{' '}
+        <strong>no entiende sinónimos</strong>, a diferencia de un modelo real. Prueba la consulta
+        de abajo, que no comparte casi ninguna palabra con la frase del reembolso.
       </p>
 
       <label className="block text-sm">
@@ -100,7 +109,11 @@ export default function SimilarityPlayground() {
 
       <label className="block text-sm">
         Consulta
-        <input value={query} onChange={(e) => setQuery(e.target.value)} className={`${field} mt-1 w-full`} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className={`${field} mt-1 w-full`}
+        />
       </label>
       <ol className="space-y-1 text-sm" aria-label="Frases ordenadas por similitud con la consulta">
         {ranking.map((r, i) => (

@@ -20,12 +20,16 @@ def test_cada_nivel_ve_lo_que_le_corresponde(student):
     expect_equal(student.can_access(ANONIMO, PUBLICO), True, what="anónimo ve público")
     expect_equal(student.can_access(ANONIMO, INTERNO), False, what="anónimo no ve interno")
     expect_equal(student.can_access(EMPLEADO, INTERNO), True, what="empleado ve interno")
-    expect_equal(student.can_access(EMPLEADO, RESTRINGIDO), False, what="empleado no ve restringido")
+    expect_equal(
+        student.can_access(EMPLEADO, RESTRINGIDO), False, what="empleado no ve restringido"
+    )
 
 
 def test_el_restringido_exige_nivel_y_departamento(student):
     """Un restringido requiere nivel restricted Y que el departamento sea uno de los del usuario"""
-    expect_equal(student.can_access(DIRECTORA_RRHH, RESTRINGIDO), True, what="RRHH ve su restringido")
+    expect_equal(
+        student.can_access(DIRECTORA_RRHH, RESTRINGIDO), True, what="RRHH ve su restringido"
+    )
     expect_equal(
         student.can_access(DIRECTOR_ENVIOS, RESTRINGIDO), False, what="otro departamento no lo ve"
     )
@@ -42,7 +46,12 @@ def test_filter_docs_conserva_el_orden(student):
 def test_la_busqueda_filtra_antes_de_puntuar(student):
     """El restringido no aparece aunque sea el que más puntúa, y los huecos los ocupan otros"""
     docs = [
-        {"id": "r", "access": "restricted", "department": "Recursos Humanos", "text": "salario salario salario"},
+        {
+            "id": "r",
+            "access": "restricted",
+            "department": "Recursos Humanos",
+            "text": "salario salario salario",
+        },
         {"id": "p1", "access": "public", "department": "Envíos", "text": "salario medio"},
         {"id": "p2", "access": "public", "department": "Envíos", "text": "salario"},
     ]
@@ -59,7 +68,11 @@ def test_la_busqueda_ignora_puntuaciones_nulas_y_desempata_por_orden(student):
         {"id": "b", "access": "public", "department": "X", "text": "reembolso"},
         {"id": "c", "access": "public", "department": "X", "text": "otro tema"},
     ]
-    expect_equal(student.acl_search(ANONIMO, "reembolso", docs, solapamiento, top_k=5), ["a", "b"], what="resultados")
+    expect_equal(
+        student.acl_search(ANONIMO, "reembolso", docs, solapamiento, top_k=5),
+        ["a", "b"],
+        what="resultados",
+    )
 
 
 def test_audit_leaks_detecta_lo_que_no_debe_verse(student):
@@ -72,10 +85,14 @@ def test_audit_leaks_detecta_lo_que_no_debe_verse(student):
 def test_hidden_nivel_desconocido_se_deniega_y_usuario_sin_nivel_es_publico(student):
     """Caso adicional: acceso desconocido denegado; usuario sin nivel = público"""
     raro = {"id": "x", "access": "secreto", "department": "Legal"}
-    expect_equal(student.can_access(DIRECTORA_RRHH, raro), False, what="nivel de documento desconocido")
+    expect_equal(
+        student.can_access(DIRECTORA_RRHH, raro), False, what="nivel de documento desconocido"
+    )
     expect_equal(student.can_access({}, PUBLICO), True, what="usuario sin nivel ve público")
     expect_equal(student.can_access({}, INTERNO), False, what="usuario sin nivel no ve interno")
-    expect_equal(student.can_access({"level": "restricted"}, RESTRINGIDO), False, what="sin departamentos")
+    expect_equal(
+        student.can_access({"level": "restricted"}, RESTRINGIDO), False, what="sin departamentos"
+    )
 
 
 def test_hidden_con_el_corpus_real_el_usuario_publico_nunca_recibe_restringidos(student):

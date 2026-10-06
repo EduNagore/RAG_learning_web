@@ -21,3 +21,22 @@ test('ChunkingVisualizer: reacciona a la estrategia y a los controles', async ({
   await widget.getByLabel('Estrategia').selectOption('markdown');
   await expect(widget.getByText(/ruta: Devoluciones > Plazos/)).toBeVisible();
 });
+
+test('RRFCalculator: la constante k cambia el documento ganador', async ({ page }) => {
+  await page.goto('teoria/m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf/');
+  const widget = page.locator('h3', { hasText: 'Calculadora de RRF' }).locator('..');
+  await widget.scrollIntoViewIfNeeded();
+  const status = widget.getByRole('status');
+
+  // La isla se hidrata al hacerse visible: se reintenta hasta que responda.
+  await expect(async () => {
+    await widget.getByLabel('Búsqueda léxica (BM25)').fill('A, B, D');
+    await widget.getByLabel('Búsqueda densa').fill('C, E, B');
+    await widget.getByLabel(/Constante k/).fill('0');
+    await expect(status).toContainText('Primero: A', { timeout: 500 });
+  }).toPass();
+
+  await widget.getByLabel(/Constante k/).fill('60');
+  await expect(status).toContainText('Primero: B');
+  await expect(widget.getByRole('table', { name: 'Resultado de la fusión RRF' })).toBeVisible();
+});
