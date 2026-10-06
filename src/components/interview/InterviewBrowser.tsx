@@ -123,7 +123,10 @@ export default function InterviewBrowser({ questions }: Props) {
           {q.lessons.map((l, i) => (
             <span key={l.id}>
               {i > 0 && ', '}
-              <a href={l.href} className="text-indigo-700 hover:underline dark:text-indigo-300">
+              <a
+                href={l.href}
+                className="text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
+              >
                 {l.title}
               </a>
             </span>

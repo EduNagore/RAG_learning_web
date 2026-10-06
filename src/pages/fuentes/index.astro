@@ -85,7 +85,7 @@ const groups = partOrder
                 <a
                   href={s.url}
                   rel="noopener noreferrer"
-                  class="font-medium text-indigo-700 hover:underline dark:text-indigo-300"
+                  class="font-medium text-indigo-700 underline underline-offset-2 dark:text-indigo-300"
                 >
                   {s.title}
                 </a>
@@ -97,7 +97,7 @@ const groups = partOrder
                   {s.lessons.slice(0, 4).map((l, i) => (
                     <>
                       {i > 0 && ', '}
-                      <a class="hover:underline" href={url(`/teoria/${l.id}/`)}>
+                      <a class="underline underline-offset-2" href={url(`/teoria/${l.id}/`)}>
                         {l.title}
                       </a>
                     </>

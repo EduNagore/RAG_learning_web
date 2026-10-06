@@ -94,6 +94,8 @@ export default function CodeLab({ labId, starter, solution, tests, hints, packag
         ],
       }),
     });
+    // La región con scroll debe poder recibir el foco del teclado (regla scrollable-region-focusable).
+    editor.scrollDOM.tabIndex = 0;
     view.current = editor;
 
     // El tema del editor sigue al tema de la web.
