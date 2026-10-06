@@ -145,4 +145,22 @@ const cases = defineCollection({
   }),
 });
 
-export const collections = { modules, lessons, quizzes, labs, interview, cases };
+const glossary = defineCollection({
+  loader: glob({ pattern: '*.yaml', base: './src/content/glossary' }),
+  schema: z.object({
+    terms: z
+      .array(
+        z.object({
+          id: z.string(),
+          es: z.string(),
+          en: z.string(),
+          def: z.string().min(30),
+          /** Lecciones donde se explica el término. */
+          lessons: z.array(z.string()).default([]),
+        }),
+      )
+      .min(1),
+  }),
+});
+
+export const collections = { modules, lessons, quizzes, labs, interview, cases, glossary };

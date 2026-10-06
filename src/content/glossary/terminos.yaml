@@ -1,0 +1,372 @@
+terms:
+  - id: token
+    es: token
+    en: token
+    def: Unidad en la que un modelo lee y escribe texto (fragmento de palabra, palabra o signo). El coste y el límite de contexto se miden en tokens.
+    lessons: [m00-fundamentos-llm/01-tokens-y-contexto]
+  - id: ventana-de-contexto
+    es: ventana de contexto
+    en: context window
+    def: Máximo de tokens que el modelo puede procesar en una llamada, contando instrucciones, historial, documentos y respuesta.
+    lessons: [m00-fundamentos-llm/01-tokens-y-contexto]
+  - id: temperatura
+    es: temperatura
+    en: temperature
+    def: Parámetro de muestreo que reescala las probabilidades de los siguientes tokens; valores bajos hacen la salida más concentrada y valores altos, más variada.
+    lessons: [m00-fundamentos-llm/02-sampling]
+  - id: top-p
+    es: top-p (muestreo por núcleo)
+    en: top-p (nucleus sampling)
+    def: Restringe la elección del siguiente token al conjunto más pequeño cuya probabilidad acumulada alcanza p.
+    lessons: [m00-fundamentos-llm/02-sampling]
+  - id: alucinacion
+    es: alucinación
+    en: hallucination
+    def: Respuesta fluida pero falsa o no respaldada por las fuentes. Se mitiga con fundamentación, abstención y verificación, pero no se elimina.
+    lessons: [m00-fundamentos-llm/08-limitaciones]
+  - id: prompt-de-sistema
+    es: prompt de sistema
+    en: system prompt
+    def: Instrucciones estables (rol, reglas, formato) que se envían al modelo antes de la conversación. No es una barrera de seguridad.
+    lessons: [m00-fundamentos-llm/03-prompting-y-system-prompts]
+  - id: salida-estructurada
+    es: salida estructurada
+    en: structured output
+    def: Salida del modelo que cumple un esquema (por ejemplo JSON), garantizada por decodificación restringida o validada y reintentada.
+    lessons: [m00-fundamentos-llm/04-salidas-estructuradas]
+  - id: tool-calling
+    es: llamada a herramientas
+    en: tool calling
+    def: El modelo devuelve una petición estructurada para ejecutar una función; el programa la valida, la ejecuta y devuelve el resultado al modelo.
+    lessons: [m00-fundamentos-llm/05-tool-calling]
+  - id: cache-de-prompt
+    es: caché de prompt
+    en: prompt caching
+    def: Reutilización por el proveedor de un prefijo largo y estable del prompt para reducir coste y latencia en llamadas posteriores.
+    lessons: [m00-fundamentos-llm/07-coste-latencia-caching]
+  - id: embedding
+    es: embedding (vector semántico)
+    en: embedding
+    def: Vector numérico que representa el significado de un texto; textos semánticamente cercanos quedan cerca en el espacio.
+    lessons:
+      [m00-fundamentos-llm/06-embeddings-intuicion, m03-embeddings/01-densos-dispersos-y-modelos]
+  - id: rag
+    es: generación aumentada con recuperación (RAG)
+    en: retrieval-augmented generation (RAG)
+    def: Técnica que recupera información de una base de conocimiento externa y la da al modelo como contexto para generar la respuesta.
+    lessons: [m01-intro-rag/01-que-es-rag]
+  - id: chunking
+    es: troceado (chunking)
+    en: chunking
+    def: División de documentos en fragmentos que se indexan y se recuperan por separado; el tamaño y el solape condicionan precisión y contexto.
+    lessons: [m02-ingesta-chunking/02-estrategias-de-chunking]
+  - id: recuperacion-contextual
+    es: recuperación contextual
+    en: contextual retrieval
+    def: Enriquecer cada fragmento con una descripción de su contexto antes de indexarlo para que no pierda el significado fuera de su documento.
+    lessons: [m02-ingesta-chunking/03-chunking-con-contexto]
+  - id: similitud-coseno
+    es: similitud coseno
+    en: cosine similarity
+    def: Medida de cercanía entre dos vectores basada en el ángulo que forman; es la métrica habitual para comparar embeddings.
+    lessons:
+      [m00-fundamentos-llm/06-embeddings-intuicion, m04-indices-vectoriales/02-metricas-y-filtrado]
+  - id: busqueda-densa
+    es: búsqueda densa
+    en: dense retrieval
+    def: Recuperación por cercanía entre embeddings de la consulta y de los documentos; capta significado y paráfrasis.
+    lessons: [m03-embeddings/01-densos-dispersos-y-modelos]
+  - id: bm25
+    es: BM25
+    en: BM25
+    def: Función de puntuación léxica que combina la frecuencia del término, su rareza y la longitud del documento.
+    lessons:
+      [
+        m03-embeddings/01-densos-dispersos-y-modelos,
+        m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf,
+      ]
+  - id: busqueda-hibrida
+    es: búsqueda híbrida
+    en: hybrid search
+    def: Combinación de búsqueda léxica y densa cuyos resultados se fusionan en un único ranking.
+    lessons: [m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf]
+  - id: rrf
+    es: fusión por rango recíproco (RRF)
+    en: reciprocal rank fusion (RRF)
+    def: Fusiona rankings sumando 1/(k + posición) por cada lista en que aparece un documento, sin normalizar puntuaciones.
+    lessons: [m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf]
+  - id: reranker
+    es: reordenador (reranker)
+    en: reranker
+    def: Modelo que puntúa la relevancia de cada candidato junto con la consulta para reordenar los mejores resultados; más preciso y más lento que un bi-encoder.
+    lessons: [m05-recuperacion-avanzada/02-reranking]
+  - id: hyde
+    es: documento hipotético (HyDE)
+    en: hypothetical document embeddings (HyDE)
+    def: Técnica que genera una respuesta hipotética a la consulta y busca con su embedding en lugar del de la pregunta.
+    lessons: [m05-recuperacion-avanzada/03-transformacion-de-consulta]
+  - id: hnsw
+    es: HNSW
+    en: HNSW
+    def: Índice de búsqueda aproximada basado en grafos navegables por capas que da alto recall y baja latencia a costa de memoria.
+    lessons: [m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq]
+  - id: ivf
+    es: índice de archivo invertido (IVF)
+    en: inverted file index (IVF)
+    def: Índice aproximado que reparte los vectores en clústeres y solo explora los más cercanos a la consulta.
+    lessons: [m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq]
+  - id: cuantizacion-de-producto
+    es: cuantización de producto (PQ)
+    en: product quantization (PQ)
+    def: Compresión de vectores que los descompone en subvectores codificados con libros de códigos, ahorrando memoria con pérdida de precisión.
+    lessons: [m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq]
+  - id: recall
+    es: exhaustividad (recall)
+    en: recall
+    def: Fracción de los elementos relevantes que el sistema recupera; recall@k la mide entre los k primeros resultados.
+    lessons: [m08-evaluacion-rag/01-metricas-de-recuperacion]
+  - id: mrr
+    es: rango recíproco medio (MRR)
+    en: mean reciprocal rank (MRR)
+    def: Promedio de la inversa de la posición del primer resultado relevante; premia que lo correcto salga arriba.
+    lessons: [m08-evaluacion-rag/01-metricas-de-recuperacion]
+  - id: ndcg
+    es: nDCG
+    en: nDCG
+    def: Métrica de calidad del orden con relevancia graduada que descuenta los resultados relevantes situados en posiciones bajas.
+    lessons: [m08-evaluacion-rag/01-metricas-de-recuperacion]
+  - id: fundamentacion
+    es: fundamentación (grounding)
+    en: grounding
+    def: Hacer que la respuesta se apoye en las fuentes recuperadas, con citas verificables.
+    lessons: [m06-generacion-contexto/01-prompt-citas-y-grounding]
+  - id: abstencion
+    es: abstención
+    en: abstention
+    def: Capacidad del sistema de responder que no tiene evidencia suficiente en lugar de inventar una respuesta.
+    lessons: [m06-generacion-contexto/03-abstencion-no-lo-se]
+  - id: fidelidad
+    es: fidelidad
+    en: faithfulness
+    def: Grado en que una respuesta se deduce del contexto recuperado, sin afirmaciones no respaldadas.
+    lessons: [m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez]
+  - id: llm-como-juez
+    es: LLM como juez
+    en: LLM-as-a-judge
+    def: Uso de un modelo para puntuar respuestas con una rúbrica; es flexible pero tiene sesgos y debe calibrarse con revisión humana.
+    lessons: [m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez]
+  - id: conjunto-de-oro
+    es: conjunto de oro (golden set)
+    en: golden set
+    def: Conjunto versionado de preguntas con documentos relevantes y respuestas de referencia que se usa para evaluar y detectar regresiones.
+    lessons: [m08-evaluacion-rag/03-golden-sets-benchmarks-y-evaluacion-online]
+  - id: graphrag
+    es: GraphRAG
+    en: GraphRAG
+    def: Variante de RAG que construye un grafo de entidades y relaciones con resúmenes de comunidades para responder preguntas globales sobre un corpus.
+    lessons: [m07-rag-avanzado/01-graphrag-y-lightrag]
+  - id: agentic-rag
+    es: RAG agéntico
+    en: agentic RAG
+    def: RAG en el que un agente decide cuándo y dónde recuperar, reformula consultas y verifica resultados de forma iterativa.
+    lessons: [m07-rag-avanzado/03-agentic-rag]
+  - id: inyeccion-de-prompts
+    es: inyección de prompts
+    en: prompt injection
+    def: Ataque que introduce instrucciones maliciosas en la entrada o en contenido que el modelo lee; la indirecta ocurre a través de datos externos.
+    lessons:
+      [
+        m09-rag-produccion/02-seguridad-permisos-e-inyeccion,
+        m17-fiabilidad-seguridad/01-inyeccion-de-prompts-y-triada-letal,
+      ]
+  - id: triada-letal
+    es: tríada letal
+    en: lethal trifecta
+    def: Combinación de acceso a datos privados, exposición a contenido no fiable y capacidad de comunicar hacia fuera que hace a un agente explotable para robar datos.
+    lessons: [m17-fiabilidad-seguridad/01-inyeccion-de-prompts-y-triada-letal]
+  - id: agente
+    es: agente
+    en: agent
+    def: Sistema en el que un modelo decide dinámicamente qué hacer y qué herramientas usar, en un bucle con retroalimentación del entorno.
+    lessons: [m10-fundamentos-agentes/01-que-es-un-agente]
+  - id: workflow
+    es: flujo de trabajo (workflow)
+    en: workflow
+    def: Sistema en el que modelos y herramientas se orquestan mediante rutas de código predefinidas, en lugar de decidir el modelo el proceso.
+    lessons:
+      [
+        m10-fundamentos-agentes/01-que-es-un-agente,
+        m11-patrones-workflows/01-encadenado-routing-y-paralelizacion,
+      ]
+  - id: react
+    es: ReAct
+    en: ReAct
+    def: Patrón que intercala razonamiento y acciones para que lo observado refine el plan del agente.
+    lessons: [m10-fundamentos-agentes/02-bucle-react-y-herramientas]
+  - id: reflexion
+    es: Reflexion
+    en: Reflexion
+    def: Método en el que el agente convierte la retroalimentación de un intento en una reflexión verbal guardada en memoria para el siguiente.
+    lessons: [m10-fundamentos-agentes/03-planificacion-y-reflexion]
+  - id: context-engineering
+    es: ingeniería de contexto
+    en: context engineering
+    def: Decidir qué información entra en el contexto del modelo en cada paso, con recuperación bajo demanda, compactación, notas y sub-agentes.
+    lessons: [m10-fundamentos-agentes/04-memoria-y-context-engineering]
+  - id: compactacion
+    es: compactación de contexto
+    en: context compaction
+    def: Resumir el historial de un agente para reiniciar con un contexto más corto sin perder restricciones, decisiones ni estado.
+    lessons: [m15-memoria-estado/03-compactacion-y-aislamiento-de-contexto]
+  - id: enrutado
+    es: enrutado (routing)
+    en: routing
+    def: Patrón que clasifica la entrada y la dirige a un manejador especializado.
+    lessons: [m11-patrones-workflows/01-encadenado-routing-y-paralelizacion]
+  - id: orquestador-trabajadores
+    es: orquestador-trabajadores
+    en: orchestrator-workers
+    def: Patrón en el que un modelo central descompone dinámicamente la tarea, la reparte a trabajadores y sintetiza los resultados.
+    lessons: [m11-patrones-workflows/02-orquestador-workers-y-evaluador-optimizador]
+  - id: evaluador-optimizador
+    es: evaluador-optimizador
+    en: evaluator-optimizer
+    def: Patrón en el que un modelo genera y otro evalúa y propone mejoras en bucle, con criterio de parada y presupuesto.
+    lessons: [m11-patrones-workflows/02-orquestador-workers-y-evaluador-optimizador]
+  - id: rewoo
+    es: ReWOO
+    en: ReWOO
+    def: Patrón que separa planificación, ejecución de herramientas y síntesis para reducir tokens frente a los bucles intercalados.
+    lessons: [m11-patrones-workflows/03-plan-and-execute-rewoo-y-llmcompiler]
+  - id: llmcompiler
+    es: LLMCompiler
+    en: LLMCompiler
+    def: Planificador que genera un grafo de tareas con dependencias y las ejecuta en paralelo para reducir la latencia.
+    lessons: [m11-patrones-workflows/03-plan-and-execute-rewoo-y-llmcompiler]
+  - id: sistema-multiagente
+    es: sistema multiagente
+    en: multi-agent system
+    def: Sistema en el que varios agentes con roles o contextos distintos colaboran, coordinados por una topología y un estado compartido.
+    lessons: [m12-multi-agente/01-cuando-si-y-cuando-no]
+  - id: handoff
+    es: traspaso (handoff)
+    en: handoff
+    def: Transferencia directa del control de un agente a otro, con el estado relevante de la tarea.
+    lessons: [m12-multi-agente/02-topologias-y-estado-compartido]
+  - id: blackboard
+    es: pizarra compartida (blackboard)
+    en: blackboard
+    def: Topología en la que los agentes leen y escriben en un estado común en lugar de comunicarse directamente.
+    lessons: [m12-multi-agente/02-topologias-y-estado-compartido]
+  - id: mast
+    es: MAST
+    en: MAST
+    def: Taxonomía de 14 modos de fallo de sistemas multiagente de LLM en tres categorías, construida con trazas anotadas.
+    lessons: [m12-multi-agente/04-economia-de-tokens-y-modos-de-fallo]
+  - id: mcp
+    es: Protocolo de Contexto de Modelo (MCP)
+    en: Model Context Protocol (MCP)
+    def: Estándar abierto, basado en JSON-RPC, para conectar aplicaciones de IA con herramientas y datos mediante servidores.
+    lessons: [m13-protocolos/01-tool-calling-y-mcp]
+  - id: a2a
+    es: protocolo Agent2Agent (A2A)
+    en: Agent2Agent protocol (A2A)
+    def: Protocolo para que agentes de distintos proveedores se descubran mediante Agent Cards y colaboren intercambiando tareas.
+    lessons: [m13-protocolos/02-a2a-y-agent-skills]
+  - id: agent-card
+    es: Agent Card
+    en: Agent Card
+    def: Documento en el que un agente A2A publica su identidad, sus capacidades y cómo contactarlo.
+    lessons: [m13-protocolos/02-a2a-y-agent-skills]
+  - id: agent-skill
+    es: Agent Skill
+    en: Agent Skill
+    def: Carpeta con un archivo SKILL.md que enseña un procedimiento al agente y se carga por divulgación progresiva.
+    lessons: [m13-protocolos/02-a2a-y-agent-skills]
+  - id: checkpoint
+    es: punto de control (checkpoint)
+    en: checkpoint
+    def: Instantánea del estado de un agente guardada en cada paso para poder pausar, reanudar o recuperarse de fallos.
+    lessons: [m15-memoria-estado/01-checkpointing-y-ejecucion-duradera]
+  - id: ejecucion-duradera
+    es: ejecución duradera
+    en: durable execution
+    def: Ejecución que persiste su estado para sobrevivir a caídas y esperas largas, por ejemplo mientras aguarda una aprobación humana.
+    lessons: [m15-memoria-estado/01-checkpointing-y-ejecucion-duradera]
+  - id: idempotencia
+    es: idempotencia
+    en: idempotency
+    def: Propiedad de una operación que, repetida con la misma clave, produce el mismo efecto una sola vez; evita duplicados al reintentar o reanudar.
+    lessons:
+      [
+        m15-memoria-estado/01-checkpointing-y-ejecucion-duradera,
+        m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad,
+      ]
+  - id: memoria-a-largo-plazo
+    es: memoria a largo plazo
+    en: long-term memory
+    def: Hechos y experiencias reutilizables entre sesiones, que se extraen, consolidan y recuperan bajo demanda.
+    lessons: [m15-memoria-estado/02-memoria-a-largo-plazo]
+  - id: pass-at-k
+    es: pass@k
+    en: pass@k
+    def: Probabilidad de que al menos uno de k intentos tenga éxito; mide capacidad y crece con k.
+    lessons: [m16-evaluacion-agentes/02-fiabilidad-pass-k-y-trayectorias]
+  - id: pass-hat-k
+    es: pass^k
+    en: pass^k
+    def: Probabilidad de que los k intentos tengan éxito; mide fiabilidad y decrece con k.
+    lessons: [m16-evaluacion-agentes/02-fiabilidad-pass-k-y-trayectorias]
+  - id: trayectoria
+    es: trayectoria
+    en: trajectory
+    def: Secuencia de pasos, llamadas a herramientas y observaciones de un intento de un agente; se evalúa junto con el resultado.
+    lessons: [m16-evaluacion-agentes/01-que-medir-en-un-agente]
+  - id: harness
+    es: arnés de evaluación (harness)
+    en: evaluation harness
+    def: Código que ejecuta las tareas contra el agente en entornos aislados, aplica los graders y registra las trazas.
+    lessons: [m16-evaluacion-agentes/03-benchmarks-trazas-y-harness]
+  - id: sandbox
+    es: entorno aislado (sandbox)
+    en: sandbox
+    def: Entorno de ejecución con alcance acotado de antemano, con aislamiento de archivos y de red, para contener el daño de un agente.
+    lessons: [m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana]
+  - id: minimo-privilegio
+    es: mínimo privilegio
+    en: least privilege
+    def: Principio de conceder a un agente solo las herramientas, datos y credenciales que necesita y durante el tiempo imprescindible.
+    lessons: [m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana]
+  - id: human-in-the-loop
+    es: humano en el circuito
+    en: human-in-the-loop
+    def: Diseño en el que una persona aprueba o corrige las acciones sensibles de un agente antes de que se ejecuten.
+    lessons:
+      [
+        m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana,
+        m15-memoria-estado/01-checkpointing-y-ejecucion-duradera,
+      ]
+  - id: consumo-no-acotado
+    es: consumo no acotado
+    en: unbounded consumption
+    def: Riesgo de que un uso abusivo o un bucle descontrolado agote presupuesto o recursos; se contiene con guardas y cuotas.
+    lessons: [m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad]
+  - id: observabilidad
+    es: observabilidad
+    en: observability
+    def: Capacidad de entender el comportamiento de un sistema a partir de trazas, métricas y registros.
+    lessons:
+      [
+        m09-rag-produccion/03-observabilidad-y-guardrails,
+        m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad,
+      ]
+  - id: guardarrail
+    es: guardarraíl (guardrail)
+    en: guardrail
+    def: Control de entrada, salida o sistema que limita lo que una aplicación con modelo puede aceptar, producir o hacer.
+    lessons: [m09-rag-produccion/03-observabilidad-y-guardrails]
+  - id: hecho-canario
+    es: hecho canario
+    en: canary fact
+    def: Dato conocido insertado en una conversación para comprobar si sobrevive a una compactación del contexto.
+    lessons: [m15-memoria-estado/03-compactacion-y-aislamiento-de-contexto]

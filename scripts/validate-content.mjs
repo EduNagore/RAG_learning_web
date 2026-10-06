@@ -294,9 +294,24 @@ for (const file of walk(casesDir, '.mdx')) {
 if (caseIds.length < MIN_CASES && !process.env.ALLOW_PARTIAL_INTERVIEW)
   err('src/content/cases', `hay ${caseIds.length} casos; el mínimo es ${MIN_CASES}`);
 
+// --- Glosario -----------------------------------------------------------------
+const glossaryIds = new Set();
+const glossaryDir = join(CONTENT, 'glossary');
+for (const file of walk(glossaryDir, '.yaml')) {
+  const data = parseYaml(readFileSync(file, 'utf8'));
+  for (const t of data.terms ?? []) {
+    if (glossaryIds.has(t.id)) err(rel(file), `id de término repetido: ${t.id}`);
+    glossaryIds.add(t.id);
+    for (const l of t.lessons ?? [])
+      if (!lessons.has(l)) err(rel(file), `${t.id}: lección inexistente: ${l}`);
+  }
+}
+if (glossaryIds.size < 50)
+  err('src/content/glossary', `hay ${glossaryIds.size} términos; el mínimo es 50`);
+
 // --- Informe -----------------------------------------------------------------
 console.log(
-  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size} · Labs: ${labIds.size} · Entrevistas: ${interviewIds.size} · Casos: ${caseIds.length}`,
+  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size} · Labs: ${labIds.size} · Entrevistas: ${interviewIds.size} · Casos: ${caseIds.length} · Glosario: ${glossaryIds.size}`,
 );
 for (const w of warnings) console.warn(`  aviso  ${w}`);
 for (const e of errors) console.error(`  ERROR  ${e}`);

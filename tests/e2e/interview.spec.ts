@@ -54,3 +54,19 @@ test('Entrevistas: cada caso de system design se abre con sus secciones', async 
     }
   }
 });
+
+test('Glosario: la búsqueda ignora acentos y mezcla español e inglés', async ({ page }) => {
+  await page.goto('glosario/');
+  await expect(page.locator('astro-island[ssr]')).toHaveCount(0);
+  const status = page.getByText(/\d+ de \d+ términos/);
+  await expect(status).toBeVisible();
+  const total = Number((await status.textContent())!.match(/de (\d+) términos/)![1]);
+  expect(total).toBeGreaterThanOrEqual(50);
+
+  await page.getByLabel(/Buscar un término/).fill('recuperacion contextual');
+  await expect(page.getByTestId('glossary-term')).toHaveCount(1);
+  await page.getByLabel(/Buscar un término/).fill('lethal trifecta');
+  await expect(page.getByTestId('glossary-term').first()).toContainText('tríada letal');
+  await page.getByLabel(/Buscar un término/).fill('zzzz');
+  await expect(page.getByText('Ningún término coincide')).toBeVisible();
+});
