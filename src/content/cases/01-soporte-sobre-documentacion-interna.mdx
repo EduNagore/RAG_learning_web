@@ -1,0 +1,95 @@
+---
+title: Chatbot de soporte sobre documentación interna
+description: Asistente que responde a empleados sobre políticas y procedimientos internos con citas, abstención y control de permisos.
+order: 1
+level: mid
+estimatedMinutes: 40
+lessons:
+  - m18-system-design/01-metodo-de-system-design-rag-y-agentes
+  - m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf
+  - m06-generacion-contexto/03-abstencion-no-lo-se
+  - m09-rag-produccion/02-seguridad-permisos-e-inyeccion
+lastReviewed: 2026-10-06
+---
+
+**Enunciado.** Una empresa de 5 000 personas tiene unos 20 000 documentos internos (políticas de RR. HH., guías de TI, procedimientos de finanzas, wikis de equipos). Quiere un asistente al que los empleados pregunten en lenguaje natural y que responda con la fuente.
+
+## Requisitos
+
+- **Funcionales:** responder preguntas sobre políticas y procedimientos, citar el documento y la sección, decir «no lo sé» cuando no hay evidencia y enlazar al documento original.
+- **No funcionales:** latencia percibida de pocos segundos con respuesta en streaming, disponibilidad en horario laboral, cumplimiento de permisos (cada persona solo ve lo que puede ver), datos que no salen del entorno corporativo y coste previsible.
+- **Éxito (a medir):** porcentaje de respuestas correctas y fundamentadas sobre un conjunto de preguntas reales, tasa de abstenciones correctas, reducción de tickets al servicio de ayuda y satisfacción de las personas usuarias.
+
+## Preguntas de aclaración
+
+1. ¿Qué coste tiene un error? Una respuesta errónea sobre vacaciones es molesta; una sobre normativa de seguridad o de finanzas puede ser grave. Condiciona citas obligatorias y revisión.
+2. ¿Quién puede ver qué? ¿Hay documentos restringidos por departamento o confidenciales (RR. HH., legal)? ¿De dónde salen los permisos (directorio corporativo)?
+3. ¿Dónde viven los documentos (wiki, gestor documental, PDFs, tickets) y con qué frecuencia cambian? ¿Hay versiones y borrados?
+4. ¿Cuántas consultas al día y qué picos? ¿Idiomas?
+5. ¿Existe un histórico de preguntas al servicio de ayuda que sirva de conjunto de evaluación?
+6. ¿Hay restricciones sobre proveedores de modelos o residencia de datos?
+
+Supuestos para el resto del caso: 3 000 consultas al día concentradas en horario laboral, español e inglés, permisos heredados del directorio, errores graves solo en un 10 % de los temas.
+
+## Arquitectura
+
+<Diagram
+  caption="Flujo de una consulta: la identidad de la persona viaja hasta el filtro de recuperación."
+  code={`flowchart LR
+  U[Empleado] --> G[Pasarela con identidad]
+  G --> Q[Reformulación de la consulta]
+  Q --> R[Recuperación híbrida con filtro de permisos]
+  R --> K[Reranker]
+  K --> P[Prompt con fragmentos delimitados]
+  P --> M[Modelo]
+  M --> V[Validación de citas y abstención]
+  V --> U
+  subgraph Ingesta
+    D[Fuentes: wiki, gestor documental, PDFs] --> L[Limpieza y troceado con contexto]
+    L --> I[(Índice léxico y denso con metadatos de acceso)]
+  end
+  I --> R
+  G -.-> T[Trazas y métricas]
+  V -.-> T`}
+/>
+
+**Ingesta.** Conectores a cada fuente con detección de cambios (hashes y fechas); limpieza de navegación y plantillas, troceado que respeta títulos y secciones, prefijo de título y ruta en cada fragmento y metadatos: documento, sección, versión, fecha y lista de grupos con acceso. Se eliminan los fragmentos de documentos borrados.
+
+**Recuperación.** Búsqueda híbrida (léxica y densa) fusionada con RRF, **filtrada por permisos durante la búsqueda** con los grupos de la persona, y un reranker sobre los 30–50 mejores candidatos para quedarse con 5–8. La reformulación de consulta solo se aplica con historial de conversación.
+
+**Generación.** Prompt de sistema estable (responde solo con los fragmentos, cita con identificador, di que no lo sabes si no hay evidencia), fragmentos delimitados como datos y salida estructurada con respuesta, citas y un indicador de confianza. Un modelo de tamaño medio para la mayoría de las consultas.
+
+**Posproceso.** Validar que cada cita existe y respalda la afirmación, aplicar el umbral de abstención y devolver la respuesta con enlaces al documento y a su fecha de actualización.
+
+## Decisiones y trade-offs
+
+| Decisión | Alternativa | Criterio | Qué la cambiaría |
+| --- | --- | --- | --- |
+| Búsqueda híbrida con RRF | Solo densa | Hay códigos de formularios, siglas y nombres de sistemas que los embeddings confunden | Si el análisis de fallos mostrara que la léxica no aporta, se simplifica |
+| Filtrar por permisos en la recuperación | Filtrar después de generar | Lo que entra en el contexto puede salir en la respuesta | Nada: es un requisito de seguridad |
+| RAG de un paso con reformulación opcional | Agente con herramientas | Las preguntas se resuelven con uno o dos documentos y la latencia importa | Si el análisis de fallos mostrara muchas preguntas multi-salto |
+| Reranker | Más fragmentos sin reordenar | Mejora la precisión con un coste de 100–200 ms (a medir) | Si la latencia se vuelve crítica |
+| Abstención con umbral | Responder siempre | El coste de una respuesta inventada es alto en normativa | Si las abstenciones indebidas superan lo tolerable |
+
+## Evaluación
+
+- **Conjunto de oro:** 150–300 preguntas reales del servicio de ayuda, con documentos relevantes y respuesta de referencia, incluyendo preguntas sin respuesta en el corpus, ambiguas y de permisos (la persona no debe ver el documento).
+- **Recuperación:** recall@k y MRR; **generación:** fidelidad al contexto, corrección y validez de las citas, con graders de código siempre que sea posible y un juez calibrado para el resto.
+- **Seguridad:** pruebas de fuga entre perfiles y de inyección en documentos.
+- **En producción:** muestreo para revisión humana, botón de útil o no útil, y los fallos reales se incorporan al conjunto de oro.
+
+## Riesgos
+
+- **Fuga por permisos:** índice sin filtros o metadatos de acceso desactualizados. Se prueba con perfiles distintos y se sincroniza el directorio con frecuencia.
+- **Documentos obsoletos o contradictorios:** versiones, fechas visibles y eliminación de duplicados.
+- **Inyección indirecta:** un documento editable por cualquiera puede contener instrucciones; el asistente no tiene herramientas con efectos, lo que limita el daño.
+- **Alucinación y falsa confianza:** citas verificadas, abstención y avisos de que debe confirmarse en el original en temas críticos.
+- **Dependencia del proveedor:** capa de abstracción de modelos y plan de degradación (mostrar solo documentos relevantes si el modelo falla).
+
+## Coste
+
+Estimación de orden de magnitud, con precios **ilustrativos**: 3 000 consultas al día y unos 2 000 tokens de entrada y 250 de salida por consulta suponen alrededor de 6 millones de tokens de entrada y 0,75 millones de salida al día; a 3 y 15 USD por millón respectivamente, son unos 29 USD al día. El resto del coste es de ingesta (una vez y por cambios), infraestructura del índice y el equipo. Palancas: menos fragmentos con reranker, caché de respuestas a preguntas frecuentes, caché de prompt para la parte estable y un modelo más pequeño para consultas fáciles.
+
+## Qué diría una persona senior
+
+Empezaría por el conjunto de evaluación y por los permisos, no por el modelo: sin preguntas reales y sin control de acceso correcto, cualquier demostración engaña. Lanzaría a un grupo piloto con revisión humana, mediría abstenciones y fugas antes de ampliar y trataría cada fallo como una tarea nueva de evaluación. Y explicaría por qué no usa un agente todavía: porque las preguntas se resuelven con un paso de recuperación y la previsibilidad pesa más que la flexibilidad; lo reconsideraría si el análisis de fallos mostrara preguntas que necesitan varios saltos.

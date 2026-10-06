@@ -1,0 +1,95 @@
+lesson: m18-system-design/02-depurar-un-rag-y-un-agente
+questions:
+  - id: m18-02-q1
+    type: single
+    difficulty: 1
+    prompt: 'Un RAG responde mal a una pregunta. ¿Cuál es el primer paso del diagnóstico?'
+    options:
+      - 'Cambiar el modelo por uno más grande.'
+      - 'Comprobar si la respuesta existe en el corpus y, si existe, si el documento correcto llegó al contexto.'
+      - 'Reescribir todo el prompt.'
+      - 'Aumentar la temperatura.'
+    answer: [1]
+    explanation: 'El recorrido del dato (corpus, recuperación, contexto, generación) indica en qué etapa se rompe el fallo.'
+    ref: '#el-árbol-de-diagnóstico-de-un-rag'
+
+  - id: m18-02-q2
+    type: single
+    difficulty: 2
+    prompt: 'El documento correcto fue recuperado pero quedó fuera del top-k que se pasa al modelo. ¿Qué tipo de fallo es?'
+    options:
+      - 'Recuperación pura.'
+      - 'Ranking.'
+      - 'Generación.'
+      - 'Abstención correcta.'
+    answer: [1]
+    explanation: 'Llegó a la recuperación pero no al contexto; los arreglos son un reranker, un top-k mayor o un mejor orden.'
+    ref: '#el-árbol-de-diagnóstico-de-un-rag'
+
+  - id: m18-02-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el ejemplo, cuatro de seis fallos eran de generación y ninguno de recuperación pura. ¿Qué arreglo tiene más sentido?'
+    options:
+      - 'Cambiar el modelo de embeddings y el troceado.'
+      - 'Trabajar el prompt de fundamentación, las citas y la evaluación de la respuesta.'
+      - 'Reindexar todo el corpus.'
+      - 'Subir el número de documentos del índice.'
+    answer: [1]
+    explanation: 'El documento correcto llega al contexto, así que tocar la recuperación no ayudaría; el esfuerzo debe ir a la etapa donde se rompe.'
+    ref: '#el-árbol-de-diagnóstico-de-un-rag'
+
+  - id: m18-02-q4
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué se separa la pregunta sin respuesta en el corpus de las demás?'
+    options:
+      - 'Porque es más fácil.'
+      - 'Porque su arreglo es distinto: lo correcto era abstenerse, no mejorar la recuperación.'
+      - 'Porque no cuenta como fallo.'
+      - 'Porque siempre es culpa del índice.'
+    answer: [1]
+    explanation: 'Responder sin evidencia es un fallo de generación o de abstención; buscar mejor no lo resuelve.'
+    ref: '#el-árbol-de-diagnóstico-de-un-rag'
+
+  - id: m18-02-q5
+    type: single
+    difficulty: 3
+    prompt: '¿Cómo se priorizan los arreglos?'
+    options:
+      - 'Por lo que sea más divertido.'
+      - 'Por frecuencia de la causa, impacto del error y esfuerzo del arreglo, validando con el conjunto de oro.'
+      - 'Siempre el cambio de modelo primero.'
+      - 'Por orden alfabético.'
+    answer: [1]
+    explanation: 'Un arreglo que cubre muchos fallos con poco esfuerzo va antes; y cada cambio se valida para detectar regresiones.'
+    ref: '#priorizar-frecuencia-por-impacto-por-esfuerzo'
+
+  - id: m18-02-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué conviene hacer al depurar un agente? Marca todo lo correcto.'
+    options:
+      - 'Abrir la transcripción completa del intento fallido.'
+      - 'Encontrar el primer paso donde la trayectoria se desvía.'
+      - 'Arreglar la causa (herramienta, error devuelto, contexto) en lugar de solo añadir instrucciones.'
+      - 'Convertir el fallo en una tarea de evaluación.'
+    answer: [0, 1, 2, 3]
+    explanation: 'El fallo suele estar en un paso concreto lejos de la respuesta final; arreglarlo y fijarlo como tarea evita que reaparezca.'
+    ref: '#depurar-un-agente-leer-la-traza'
+
+  - id: m18-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Con siete registros de fallos se puede concluir de forma estadística cuál es la causa dominante en producción.'
+    answer: [1]
+    explanation: 'Es falso. Con tan pocos registros solo se ilustra el procedimiento; en un sistema real se clasifican decenas o cientos y se reporta el tamaño de la muestra.'
+    ref: '#el-árbol-de-diagnóstico-de-un-rag'
+
+  - id: m18-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Guardar los documentos recuperados y el contexto final de cada pregunta permite separar fallos de recuperación de fallos de generación.'
+    answer: [0]
+    explanation: 'Es verdadero. Sin esos datos no se puede saber si la evidencia llegó al modelo.'
+    ref: '#qué-instrumentar-desde-el-principio'

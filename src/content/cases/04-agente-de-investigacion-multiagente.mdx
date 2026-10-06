@@ -1,0 +1,96 @@
+---
+title: Agente de investigación multiagente
+description: Sistema que investiga preguntas abiertas con un orquestador, sub-agentes de búsqueda en paralelo y un sintetizador con citas, con presupuesto, evaluación y verificación de fuentes.
+order: 4
+level: senior
+estimatedMinutes: 45
+lessons:
+  - m18-system-design/01-metodo-de-system-design-rag-y-agentes
+  - m12-multi-agente/01-cuando-si-y-cuando-no
+  - m12-multi-agente/04-economia-de-tokens-y-modos-de-fallo
+  - m15-memoria-estado/03-compactacion-y-aislamiento-de-contexto
+lastReviewed: 2026-10-06
+---
+
+**Enunciado.** Una consultora quiere una herramienta que, dada una pregunta abierta («¿cómo ha evolucionado la regulación de X en tres mercados y qué actores destacan?»), explore la web y documentos, y entregue un informe con citas en pocos minutos.
+
+## Requisitos
+
+- **Funcionales:** descomponer la pregunta, buscar en paralelo en varias fuentes, sintetizar un informe estructurado con citas verificables, indicar lo que no se pudo comprobar y permitir seguimiento.
+- **No funcionales:** tiempo de minutos (no segundos), coste por informe acotado y conocido, trazabilidad completa y calidad estable.
+- **Éxito (a medir):** exactitud y cobertura frente a informes de referencia de analistas, calidad de las fuentes, exactitud de las citas y coste por informe.
+
+## Preguntas de aclaración
+
+1. ¿Cuál es el valor de un informe y el coste de un error? Un dato inventado en un informe para un cliente es grave.
+2. ¿Qué fuentes están permitidas (web abierta, bases de datos de pago, documentos internos)? ¿Hay listas de fuentes fiables?
+3. ¿Cuántos informes al día y con qué presupuesto por informe?
+4. ¿Cuánto tarda hoy un analista y qué nivel de calidad se espera?
+5. ¿Debe ser interactivo (aclarar la pregunta) o de una pasada?
+6. ¿Quién revisa el informe antes de enviarlo?
+
+Supuestos: unas 200 investigaciones al día, presupuesto de pocos dólares por informe, fuentes web abiertas y bases licenciadas, revisión humana antes de entregar al cliente.
+
+## Arquitectura
+
+<Diagram
+  caption="Orquestador y sub-agentes en paralelo con contextos aislados; el sintetizador solo ve resúmenes y fuentes."
+  code={`flowchart TD
+  U[Pregunta] --> O[Orquestador: plan y presupuesto]
+  O --> S1[Sub-agente de búsqueda 1]
+  O --> S2[Sub-agente de búsqueda 2]
+  O --> S3[Sub-agente de búsqueda N]
+  S1 --> R[Resúmenes estructurados con fuentes]
+  S2 --> R
+  S3 --> R
+  R --> E{Cobertura suficiente?}
+  E -- no --> O
+  E -- sí --> Y[Sintetizador con citas]
+  Y --> V[Verificador de citas y afirmaciones]
+  V --> H[Revisión humana]
+  O -.-> T[Trazas, tokens y coste por agente]`}
+/>
+
+**Orquestador.** Analiza la pregunta, decide el plan y el **esfuerzo según la complejidad** (una consulta simple no necesita varios sub-agentes), crea los encargos y guarda el plan fuera del contexto para sobrevivir a compactaciones. Cada encargo incluye **objetivo, formato de salida, herramientas y fuentes sugeridas y límites** (cuánto buscar y cuándo parar).
+
+**Sub-agentes de búsqueda.** Trabajan en paralelo con contextos aislados, usan herramientas de búsqueda y lectura de páginas y devuelven un **resumen estructurado**: hallazgos, fuente con URL y fecha, nivel de confianza y lo que no pudieron comprobar. Están limitados por pasos y tokens.
+
+**Bucle de cobertura.** El orquestador evalúa si falta información y puede lanzar una segunda ronda, con un límite de rondas.
+
+**Sintetizador y verificación.** Redacta el informe solo con los hallazgos y las fuentes recibidas, con citas por afirmación. Un verificador comprueba que cada cita existe y respalda la frase, y marca las afirmaciones sin fuente. Un humano revisa antes de entregar.
+
+## Decisiones y trade-offs
+
+| Decisión | Alternativa | Criterio | Qué la cambiaría |
+| --- | --- | --- | --- |
+| Multiagente con sub-agentes en paralelo | Un solo agente con contexto largo | La tarea es amplia, de lectura y paralelizable; el contexto de un agente se saturaría | Si las consultas son estrechas, un agente basta y cuesta menos |
+| Contextos aislados con resúmenes estructurados | Compartir todo el historial | Evita saturación y ruido; la devolución condensada es suficiente | Si los hallazgos dependen unos de otros, se comparte más estado |
+| Esfuerzo escalado a la complejidad | Mismo plan siempre | Los sistemas multiagente consumen mucho más que un chat (en torno a 15 veces según las medidas de Anthropic en su sistema de investigación) | Si el presupuesto lo permite, se amplía |
+| Verificador independiente de citas | Confiar en el sintetizador | Los errores de fuente son el fallo principal de calidad | Nada |
+| Revisión humana final | Entrega automática | El coste de un error es alto | Productos internos de bajo riesgo |
+| Presupuestos por agente y por informe | Sin límites | Evita bucles y gasto descontrolado | Se calibran con datos |
+
+## Evaluación
+
+- **Conjunto de preguntas** con informes de referencia de analistas y rúbrica: exactitud de los hechos, cobertura, calidad de las fuentes y eficiencia. Un juez calibrado ayuda a puntuar, con muestras revisadas por humanos, porque no hay una única respuesta correcta.
+- **Exactitud de citas** con comprobación determinista (la URL existe y contiene el texto).
+- **Evaluación de trayectorias y de coste:** pasos, tokens y paradas por guarda por informe.
+- **Fiabilidad:** varios intentos por pregunta y análisis de la varianza; una pregunta que da informes muy distintos en cada ejecución no es fiable.
+- **Lectura de trazas** para identificar fallos como sub-agentes que duplican búsquedas, fuentes de baja calidad o consultas demasiado largas.
+
+## Riesgos
+
+- **Inyección indirecta desde páginas web:** el contenido web es no fiable; los sub-agentes no tienen herramientas con efectos ni acceso a datos privados, y el sintetizador solo recibe resúmenes (se rompe la tríada letal).
+- **Fuentes de baja calidad o contradictorias:** puntuación de fiabilidad de fuentes, listas de preferencia y mención explícita de discrepancias.
+- **Alucinación en la síntesis:** verificación de afirmaciones y marcado de lo no comprobado.
+- **Coste y bucles:** presupuestos, límites de rondas y de profundidad, motivos de parada monitorizados.
+- **Fallos de coordinación:** encargos ambiguos que duplican trabajo; se mitigan con formatos estructurados y se vigilan en las trazas.
+- **Derechos de uso de las fuentes:** respetar términos y licencias.
+
+## Coste
+
+Con **precios ilustrativos**, un informe con 5 sub-agentes de unos 10 pasos cada uno puede sumar de 300 000 a 1 000 000 de tokens de entrada, por la repetición del historial en cada paso, es decir, del orden de uno a varios dólares por informe, más el sintetizador y el verificador. Hay que medirlo con tu distribución real. Palancas: caché de prompt para el prefijo del encargo, resultados de búsqueda truncados, modelos pequeños para los sub-agentes y mayores para la síntesis, y escalado del esfuerzo.
+
+## Qué diría una persona senior
+
+Empezaría comparando con una línea base de un solo agente: el multiagente se justifica si mejora la cobertura de preguntas amplias lo suficiente como para pagar su coste, y no en todas las preguntas. Insistiría en que la calidad depende de los encargos y de la evaluación más que del número de agentes, mediría la fiabilidad y el coste por informe desde el principio, y mantendría la revisión humana mientras la exactitud de las citas y de los hechos no esté demostrada en el conjunto de evaluación.

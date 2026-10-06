@@ -1,0 +1,12 @@
+[
+  {
+    "question": "¿Cuál es el plazo de devolución de un producto?",
+    "relevant_ids": [3],
+    "answerable": true
+  },
+  {
+    "question": "¿Cuál es la política de teletrabajo de 2019?",
+    "relevant_ids": [],
+    "answerable": false
+  }
+]

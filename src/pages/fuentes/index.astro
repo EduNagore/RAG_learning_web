@@ -1,9 +1,114 @@
 ---
-import ComingSoon from '../../components/layout/ComingSoon.astro';
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { PART_LABELS, getModules } from '../../lib/content';
+import { url } from '../../lib/url';
+
+const TYPE_LABELS = {
+  paper: 'Papers',
+  spec: 'Especificaciones',
+  docs: 'Documentación oficial',
+  blog: 'Blogs técnicos y expertos',
+  book: 'Libros',
+  video: 'Vídeos',
+} as const;
+type SourceType = keyof typeof TYPE_LABELS;
+
+const modules = await getModules();
+const partOf = new Map(modules.map((m) => [m.id, m.data.part]));
+const lessons = await getCollection('lessons');
+
+interface Entry {
+  title: string;
+  url: string;
+  type: SourceType;
+  authors?: string;
+  year: number;
+  parts: Set<string>;
+  lessons: { id: string; title: string }[];
+}
+const byUrl = new Map<string, Entry>();
+for (const lesson of lessons) {
+  for (const s of lesson.data.sources) {
+    const entry = byUrl.get(s.url) ?? { ...s, parts: new Set<string>(), lessons: [] };
+    entry.parts.add(partOf.get(lesson.data.module) ?? 'profesional');
+    entry.lessons.push({ id: lesson.id, title: lesson.data.title });
+    byUrl.set(s.url, entry);
+  }
+}
+const all = [...byUrl.values()];
+
+const partOrder = ['fundamentos', 'rag', 'agentes', 'profesional'] as const;
+// Cada fuente aparece en la primera parte del curso donde se usa.
+const groups = partOrder
+  .map((part) => {
+    const inPart = all.filter((e) => partOrder.find((p) => e.parts.has(p)) === part);
+    const byType = (Object.keys(TYPE_LABELS) as SourceType[])
+      .map((type) => ({
+        type,
+        items: inPart
+          .filter((e) => e.type === type)
+          .sort((a, b) => a.title.localeCompare(b.title, 'en')),
+      }))
+      .filter((g) => g.items.length > 0);
+    return { part, byType, count: inPart.length };
+  })
+  .filter((g) => g.count > 0);
 ---
 
-<ComingSoon
+<BaseLayout
   title="Fuentes"
-  description="Bibliografía global agrupada por tema y tipo."
-  phase="F6"
-/>
+  description="Bibliografía del curso agrupada por parte y tipo, con las lecciones que usan cada fuente."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Fuentes</h1>
+  <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">
+    {all.length} fuentes citadas en las lecciones. Las primarias (papers, especificaciones y
+    documentación oficial) van antes que los blogs. Cada lección indica la fecha de su última
+    revisión, y las cifras que cambian con rapidez figuran en bloques con fecha.
+  </p>
+  <p class="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+    Ninguna fuente se cita sin haberla abierto; el registro de verificación está en el repositorio (
+    <code>docs/SOURCES.md</code>).
+  </p>
+
+  {groups.map((g) => (
+    <section class="mt-10" aria-labelledby={`parte-${g.part}`}>
+      <h2 id={`parte-${g.part}`} class="text-2xl font-semibold">
+        {PART_LABELS[g.part]} <span class="text-base font-normal text-slate-500">({g.count})</span>
+      </h2>
+      {g.byType.map((t) => (
+        <div class="mt-4">
+          <h3 class="text-lg font-medium">{TYPE_LABELS[t.type]}</h3>
+          <ul class="mt-2 space-y-2" data-testid="source-list">
+            {t.items.map((s) => (
+              <li class="text-sm">
+                <a
+                  href={s.url}
+                  rel="noopener noreferrer"
+                  class="font-medium text-indigo-700 hover:underline dark:text-indigo-300"
+                >
+                  {s.title}
+                </a>
+                <span class="text-slate-600 dark:text-slate-400">
+                  {s.authors ? ` · ${s.authors}` : ''} · {s.year}
+                </span>
+                <span class="block text-xs text-slate-500">
+                  Usada en:{' '}
+                  {s.lessons.slice(0, 4).map((l, i) => (
+                    <>
+                      {i > 0 && ', '}
+                      <a class="hover:underline" href={url(`/teoria/${l.id}/`)}>
+                        {l.title}
+                      </a>
+                    </>
+                  ))}
+                  {s.lessons.length > 4 && ` y ${s.lessons.length - 4} más`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  ))}
+</BaseLayout>

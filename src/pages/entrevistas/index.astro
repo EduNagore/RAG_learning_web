@@ -1,9 +1,63 @@
 ---
-import ComingSoon from '../../components/layout/ComingSoon.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import InterviewBrowser from '../../components/interview/InterviewBrowser';
+import { caseHref, getCases, getInterviewQuestions } from '../../lib/interview';
+import { url } from '../../lib/url';
+
+const questions = await getInterviewQuestions();
+const cases = await getCases();
 ---
 
-<ComingSoon
+<BaseLayout
   title="Entrevistas"
-  description="Preguntas de entrevista, system design y casos de estudio."
-  phase="F6"
-/>
+  description="Preguntas de entrevista de RAG y agentes en español e inglés, casos de system design y hojas de resumen."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Entrevistas</h1>
+  <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">
+    {questions.length} preguntas con respuesta modelo en español e inglés, etiquetadas por tema,
+    nivel y tipo, y {cases.length} casos de system design. Antes de mirar la respuesta, contéstala
+    en voz alta.
+  </p>
+
+  <section class="mt-8" aria-labelledby="casos">
+    <h2 id="casos" class="text-xl font-semibold">
+      Casos de system design
+    </h2>
+    <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">
+      Cada caso trae requisitos, preguntas de aclaración, arquitectura, decisiones, evaluación,
+      riesgos, coste y lo que diría una persona senior. Aplica el método de la lección
+      <a
+        class="text-indigo-700 hover:underline dark:text-indigo-300"
+        href={url('/teoria/m18-system-design/01-metodo-de-system-design-rag-y-agentes/')}
+      >
+        «Un método para el system design»
+      </a>
+      .
+    </p>
+    <ul class="mt-4 grid gap-4 md:grid-cols-2">
+      {cases.map((c) => (
+        <li>
+          <a
+            href={caseHref(c.id)}
+            class="block h-full rounded-lg border border-slate-200 p-4 hover:border-indigo-400 dark:border-slate-800"
+          >
+            <h3 class="font-semibold">{c.data.title}</h3>
+            <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">{c.data.description}</p>
+            <p class="mt-2 text-xs text-slate-500">
+              {c.data.level} · {c.data.estimatedMinutes} min
+            </p>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="mt-10" aria-labelledby="preguntas">
+    <h2 id="preguntas" class="text-xl font-semibold">
+      Preguntas
+    </h2>
+    <div class="mt-4">
+      <InterviewBrowser client:load questions={questions} />
+    </div>
+  </section>
+</BaseLayout>

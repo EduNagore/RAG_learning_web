@@ -1,0 +1,20 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../../components/layout/Breadcrumbs.astro';
+import LlmPlayground from '../../../components/playground/LlmPlayground';
+import { url } from '../../../lib/url';
+---
+
+<BaseLayout
+  title="Playground con un modelo real"
+  description="Prueba un RAG sobre el corpus de demostración con tu propia clave de API. Opcional y no evaluado."
+>
+  <Breadcrumbs items={[{ label: 'Práctica', href: url('/practica/') }, { label: 'Playground' }]} />
+  <h1 class="text-3xl font-bold tracking-tight">Playground con un modelo real</h1>
+  <p class="mb-6 mt-2 max-w-3xl text-slate-600 dark:text-slate-400">
+    Opcional y sin nota. Recupera documentos del corpus ficticio de Nimbus con el perfil de acceso
+    que elijas y se los envía a un modelo real con instrucciones de citar y abstenerse. Sirve para
+    ver con tus propios ojos lo que hacen los laboratorios con un modelo simulado.
+  </p>
+  <LlmPlayground client:only="react" corpusUrl={url('/data/nimbus/corpus.json')} />
+</BaseLayout>

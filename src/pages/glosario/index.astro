@@ -1,9 +1,33 @@
 ---
-import ComingSoon from '../../components/layout/ComingSoon.astro';
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import GlossaryBrowser from '../../components/interview/GlossaryBrowser';
+import { url } from '../../lib/url';
+
+const files = await getCollection('glossary');
+const lessons = new Map((await getCollection('lessons')).map((l) => [l.id, l]));
+const terms = files
+  .flatMap((f) => f.data.terms)
+  .sort((a, b) => a.es.localeCompare(b.es, 'es'))
+  .map((t) => ({
+    ...t,
+    lessons: t.lessons.flatMap((id) => {
+      const lesson = lessons.get(id);
+      return lesson ? [{ id, title: lesson.data.title, href: url(`/teoria/${id}/`) }] : [];
+    }),
+  }));
 ---
 
-<ComingSoon
+<BaseLayout
   title="Glosario"
-  description="Glosario bilingüe español/inglés con enlaces a las lecciones."
-  phase="F6"
-/>
+  description="Glosario español-inglés de RAG y agentes con enlaces a las lecciones."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Glosario</h1>
+  <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">
+    {terms.length} términos en español con su equivalente en inglés, que es el que verás en la
+    documentación y en las entrevistas.
+  </p>
+  <div class="mt-6">
+    <GlossaryBrowser client:load terms={terms} />
+  </div>
+</BaseLayout>

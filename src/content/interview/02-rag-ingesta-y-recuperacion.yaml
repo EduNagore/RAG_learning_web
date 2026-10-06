@@ -1,0 +1,227 @@
+title: RAG, ingesta y recuperación
+order: 2
+questions:
+  - id: rag-01
+    level: junior
+    kind: conceptual
+    lessons: [m01-intro-rag/01-que-es-rag]
+    es:
+      q: Explica qué es RAG y qué problema resuelve.
+      a: |-
+        RAG (Retrieval-Augmented Generation) recupera información relevante de una base de conocimiento externa y se la da al modelo como contexto para generar la respuesta. Resuelve que el modelo no conoce datos privados o recientes, que puede alucinar y que sus respuestas no son trazables.
+
+        Permite actualizar el conocimiento sin reentrenar, citar fuentes y aplicar permisos por usuario.
+    en:
+      q: Explain what RAG is and what problem it solves.
+      a: |-
+        RAG (Retrieval-Augmented Generation) retrieves relevant information from an external knowledge base and gives it to the model as context to generate the answer. It addresses that the model does not know private or recent data, may hallucinate and gives untraceable answers.
+
+        It lets you update knowledge without retraining, cite sources and apply per-user permissions.
+  - id: rag-02
+    level: mid
+    kind: design
+    lessons: [m01-intro-rag/02-rag-frente-a-finetuning-y-contexto-largo]
+    es:
+      q: ¿Cuándo elegirías RAG, fine-tuning o contexto largo?
+      a: |-
+        RAG cuando el conocimiento es grande, cambia o tiene permisos y necesitas citas. Fine-tuning para cambiar comportamiento, estilo o formato, o para tareas muy específicas, no como forma fiable de inyectar hechos. Contexto largo para conjuntos pequeños o un documento concreto, aceptando más coste y latencia.
+
+        Se combinan: por ejemplo, un modelo ajustado al formato más RAG para los datos.
+    en:
+      q: When would you choose RAG, fine-tuning or long context?
+      a: |-
+        RAG when knowledge is large, changing or permissioned and you need citations. Fine-tuning to change behavior, style or format, or for very specific tasks, not as a reliable way to inject facts. Long context for small sets or one specific document, accepting more cost and latency.
+
+        They combine: for example, a format-tuned model plus RAG for the data.
+  - id: rag-03
+    level: junior
+    kind: conceptual
+    lessons: [m02-ingesta-chunking/02-estrategias-de-chunking]
+    es:
+      q: ¿Por qué se trocean los documentos y qué compromisos tiene el tamaño del fragmento?
+      a: |-
+        Se trocean porque el embedding de un documento largo diluye el significado y porque solo cabe una parte en el contexto. Fragmentos pequeños dan recuperación precisa pero pierden contexto; fragmentos grandes conservan contexto pero añaden ruido, coste y hacen menos específico el embedding.
+
+        El tamaño y el solape se eligen midiendo con preguntas reales, y se puede respetar la estructura (títulos, párrafos) en lugar de cortar por longitud fija.
+    en:
+      q: Why do you chunk documents and what are the trade-offs of chunk size?
+      a: |-
+        You chunk because a long document's embedding blurs its meaning and only part of it fits in context. Small chunks give precise retrieval but lose context; large chunks keep context but add noise and cost and make the embedding less specific.
+
+        Size and overlap are chosen by measuring on real questions, and you can respect structure (headings, paragraphs) instead of cutting at a fixed length.
+  - id: rag-04
+    level: mid
+    kind: design
+    lessons: [m02-ingesta-chunking/03-chunking-con-contexto]
+    es:
+      q: Un fragmento dice «el plazo es de 14 días» sin indicar de qué producto. ¿Cómo lo arreglas?
+      a: |-
+        Es un fragmento sin contexto. Se enriquece antes de indexar: prefijar el título del documento y la ruta de secciones, o generar con un modelo una frase de contexto por fragmento (recuperación contextual), y guardar metadatos (producto, fecha, versión).
+
+        El coste es de ingesta (una llamada por fragmento, mitigable con caché de prompt) y hay que validar con el conjunto de oro que la recuperación mejora.
+    en:
+      q: A chunk says "the deadline is 14 days" without naming the product. How do you fix it?
+      a: |-
+        It is a chunk without context. Enrich before indexing: prefix the document title and section path, or generate with a model a short context sentence per chunk (contextual retrieval), and store metadata (product, date, version).
+
+        The cost is at ingestion (one call per chunk, mitigated with prompt caching) and you must validate with the golden set that retrieval improves.
+  - id: rag-05
+    level: mid
+    kind: conceptual
+    lessons: [m03-embeddings/01-densos-dispersos-y-modelos]
+    es:
+      q: ¿En qué se diferencian la recuperación densa y la léxica, y cuándo falla cada una?
+      a: |-
+        La léxica (BM25) puntúa por coincidencia de términos y es buena con identificadores, siglas y términos raros, pero no entiende sinónimos. La densa compara embeddings y capta paráfrasis y significado, pero puede fallar con códigos exactos, números o vocabulario muy específico.
+
+        Por eso se combinan en búsqueda híbrida y se fusionan los resultados, por ejemplo con Reciprocal Rank Fusion.
+    en:
+      q: How do dense and lexical retrieval differ, and when does each fail?
+      a: |-
+        Lexical (BM25) scores by term match and is good with identifiers, acronyms and rare terms, but does not understand synonyms. Dense compares embeddings and captures paraphrase and meaning, but can fail on exact codes, numbers or very specific vocabulary.
+
+        So they are combined in hybrid search and results are fused, for example with Reciprocal Rank Fusion.
+  - id: rag-06
+    level: mid
+    kind: conceptual
+    lessons: [m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf]
+    es:
+      q: ¿Cómo funciona Reciprocal Rank Fusion y qué papel tiene la constante k?
+      a: |-
+        RRF suma, para cada documento, 1/(k + posición) en cada lista de resultados donde aparece, y ordena por la suma. No necesita normalizar puntuaciones de sistemas distintos.
+
+        La constante k amortigua el peso de las primeras posiciones: con k pequeño, ser el primero pesa mucho; con k grande, las posiciones se parecen más. 60 es un valor habitual y no una ley: se comprueba con los datos propios.
+    en:
+      q: How does Reciprocal Rank Fusion work and what is the role of the constant k?
+      a: |-
+        RRF adds, for each document, 1/(k + rank) over every result list where it appears, and sorts by the sum. It needs no score normalization across different systems.
+
+        The constant k dampens the weight of top ranks: with small k, being first matters a lot; with large k, ranks look more alike. 60 is a common value and not a law: check it on your own data.
+  - id: rag-07
+    level: mid
+    kind: conceptual
+    lessons: [m05-recuperacion-avanzada/02-reranking]
+    es:
+      q: ¿Qué es un reranker y en qué se diferencia de un bi-encoder?
+      a: |-
+        Un bi-encoder codifica consulta y documento por separado y compara vectores, lo que permite precalcular y buscar rápido. Un reranker (cross-encoder) procesa consulta y documento juntos y puntúa su relevancia con más precisión, pero es más lento y solo se aplica a los mejores candidatos.
+
+        Es una arquitectura en dos etapas: recuperar muchos con un método barato y reordenar pocos con uno caro, a cambio de latencia y coste.
+    en:
+      q: What is a reranker and how does it differ from a bi-encoder?
+      a: |-
+        A bi-encoder encodes query and document separately and compares vectors, allowing precomputation and fast search. A reranker (cross-encoder) processes query and document together and scores relevance more accurately, but is slower and is applied only to the top candidates.
+
+        It is a two-stage architecture: retrieve many cheaply and rerank few expensively, in exchange for latency and cost.
+  - id: rag-08
+    level: senior
+    kind: design
+    lessons: [m04-indices-vectoriales/01-busqueda-aproximada-hnsw-ivf-pq]
+    es:
+      q: ¿Cómo eliges entre búsqueda exacta y aproximada (HNSW, IVF, PQ)?
+      a: |-
+        Con pocos miles de vectores la búsqueda exacta suele bastar y evita errores. A mayor escala se usa búsqueda aproximada: HNSW da buen recall y baja latencia a costa de memoria; IVF reparte en clusters y reduce el cómputo; PQ comprime vectores para ahorrar memoria perdiendo precisión.
+
+        Se mide recall frente a latencia y memoria con los datos reales y los parámetros (ef, nprobe) se ajustan al objetivo, sin olvidar el filtrado por metadatos, que interactúa con el índice.
+    en:
+      q: How do you choose between exact and approximate search (HNSW, IVF, PQ)?
+      a: |-
+        With a few thousand vectors exact search is usually enough and avoids approximation errors. At larger scale use approximate search: HNSW gives good recall and low latency at the price of memory; IVF partitions into clusters and cuts compute; PQ compresses vectors to save memory at some accuracy cost.
+
+        Measure recall against latency and memory on real data and tune parameters (ef, nprobe) to the target, without forgetting metadata filtering, which interacts with the index.
+  - id: rag-09
+    level: mid
+    kind: design
+    lessons: [m04-indices-vectoriales/02-metricas-y-filtrado]
+    es:
+      q: Necesitas filtrar por permisos y por fecha en la búsqueda vectorial. ¿Cómo lo haces?
+      a: |-
+        Se guardan los permisos y la fecha como metadatos y se filtra durante la búsqueda (prefiltrado o filtrado integrado en el índice), nunca después de generar. El postfiltrado puede dejar sin resultados útiles o, peor, exponer contenido si se aplica tarde.
+
+        Hay que probar el rendimiento y el recall con filtros muy selectivos, que degradan algunos índices aproximados, y considerar particiones por inquilino cuando el aislamiento es estricto.
+    en:
+      q: You need to filter by permissions and date in vector search. How?
+      a: |-
+        Store permissions and date as metadata and filter during search (pre-filtering or filtering integrated in the index), never after generation. Post-filtering can leave no useful results or, worse, expose content if applied late.
+
+        Test performance and recall with very selective filters, which degrade some approximate indexes, and consider per-tenant partitions when isolation must be strict.
+  - id: rag-10
+    level: senior
+    kind: design
+    lessons: [m04-indices-vectoriales/03-elegir-base-de-datos-vectorial]
+    es:
+      q: ¿Qué criterios usas para elegir una base de datos vectorial?
+      a: |-
+        Escala y latencia necesarias, tipo de búsqueda (híbrida, filtros), operación (gestionada o autoalojada), integración con lo que ya tienes (pgvector si ya usas PostgreSQL y el volumen es moderado), coste, madurez, consistencia de las actualizaciones y seguridad.
+
+        La decisión se justifica con un prueba de concepto sobre datos propios, no con comparativas genéricas; las capacidades y precios cambian, así que se verifican en la documentación vigente.
+    en:
+      q: What criteria do you use to choose a vector database?
+      a: |-
+        Required scale and latency, type of search (hybrid, filters), operation (managed or self-hosted), integration with what you already run (pgvector if you already use PostgreSQL and volume is moderate), cost, maturity, update consistency and security.
+
+        Justify the decision with a proof of concept on your own data, not generic comparisons; capabilities and prices change, so verify them in current documentation.
+  - id: rag-11
+    level: mid
+    kind: conceptual
+    lessons: [m05-recuperacion-avanzada/03-transformacion-de-consulta]
+    es:
+      q: ¿Qué técnicas de transformación de consulta conoces y qué riesgos tienen?
+      a: |-
+        Reescritura de la consulta con el historial, descomposición en subpreguntas, expansión con sinónimos o múltiples variantes y HyDE (generar una respuesta hipotética y buscar con ella). Mejoran el recall en consultas ambiguas o complejas.
+
+        Los riesgos son latencia y coste extra y que la transformación introduzca desviaciones o alucine términos; se evalúa con el conjunto de oro y se aplica solo cuando hace falta.
+    en:
+      q: What query transformation techniques do you know and what are their risks?
+      a: |-
+        Rewriting the query with the history, decomposition into sub-questions, expansion with synonyms or multiple variants, and HyDE (generate a hypothetical answer and search with it). They improve recall on ambiguous or complex queries.
+
+        Risks are extra latency and cost, and the transformation may drift or hallucinate terms; evaluate with the golden set and apply only when needed.
+  - id: rag-12
+    level: senior
+    kind: design
+    lessons: [m05-recuperacion-avanzada/04-parent-document-y-raptor]
+    es:
+      q: ¿Qué es la recuperación parent-document y cuándo la usarías?
+      a: |-
+        Se indexan fragmentos pequeños para recuperar con precisión, pero al generar se devuelve el fragmento padre (la sección o el documento) para dar más contexto. Resuelve el conflicto entre precisión de recuperación y contexto suficiente para responder.
+
+        Conviene cuando las respuestas dependen del entorno del fragmento. Cuesta más tokens, por lo que se limita el tamaño del padre o se combina con compresión.
+    en:
+      q: What is parent-document retrieval and when would you use it?
+      a: |-
+        Small chunks are indexed for precise retrieval, but at generation time the parent chunk (the section or document) is returned to give more context. It resolves the conflict between retrieval precision and enough context to answer.
+
+        Use it when answers depend on the chunk's surroundings. It costs more tokens, so you cap the parent size or combine it with compression.
+  - id: rag-13
+    level: junior
+    kind: debug
+    lessons: [m02-ingesta-chunking/01-ingesta-y-limpieza]
+    es:
+      q: Las respuestas incluyen texto de menús y pies de página de las páginas web indexadas. ¿Qué haces?
+      a: |-
+        Es un problema de ingesta: hay que limpiar el contenido antes de indexar, extrayendo solo el cuerpo principal (con un extractor de contenido o reglas por plantilla), eliminando navegación y duplicados y conservando la estructura útil como títulos.
+
+        Después se reindexa y se comprueba con preguntas que antes fallaban. Limpiar en la ingesta es más barato que intentar corregirlo en el prompt.
+    en:
+      q: Answers include menu and footer text from the indexed web pages. What do you do?
+      a: |-
+        It is an ingestion problem: clean content before indexing, extracting only the main body (with a content extractor or per-template rules), removing navigation and duplicates and keeping useful structure such as headings.
+
+        Then reindex and check with questions that used to fail. Cleaning at ingestion is cheaper than trying to fix it in the prompt.
+  - id: rag-14
+    level: mid
+    kind: debug
+    lessons: [m03-embeddings/03-multilingue-finetuning-multimodal]
+    es:
+      q: Los usuarios preguntan en español pero los documentos están en inglés y la recuperación es mala. ¿Qué opciones tienes?
+      a: |-
+        Usar un modelo de embeddings multilingüe que alinee idiomas, traducir la consulta o los documentos antes de indexar (con coste y posible pérdida de matices) o mantener índices por idioma. También ayuda la búsqueda léxica sobre términos que no cambian (códigos, nombres propios).
+
+        Se decide con una prueba sobre preguntas reales en ambos idiomas, midiendo recall, y vigilando que las citas indiquen el idioma original.
+    en:
+      q: Users ask in Spanish but documents are in English and retrieval is poor. What are your options?
+      a: |-
+        Use a multilingual embedding model that aligns languages, translate the query or the documents before indexing (with cost and possible loss of nuance), or keep per-language indexes. Lexical search on terms that do not change (codes, proper names) also helps.
+
+        Decide with a test on real questions in both languages, measuring recall, and make sure citations show the original language.

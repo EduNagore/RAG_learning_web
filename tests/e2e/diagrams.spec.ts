@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
-// Cada diagrama Mermaid de cada lección debe renderizarse (si la sintaxis falla, queda el código fuente).
+// Cada diagrama Mermaid de cada lección y de cada caso de system design debe renderizarse (si la sintaxis falla, queda el código fuente).
 const LESSONS_DIR = resolve(process.cwd(), 'src/content/lessons');
 const routes = readdirSync(LESSONS_DIR).flatMap((mod) =>
   readdirSync(resolve(LESSONS_DIR, mod))
@@ -10,7 +10,21 @@ const routes = readdirSync(LESSONS_DIR).flatMap((mod) =>
     .map((f) => `teoria/${mod}/${f.replace(/\.mdx$/, '')}/`),
 );
 
-test.setTimeout(120_000);
+const CASES_DIR = resolve(process.cwd(), 'src/content/cases');
+routes.push(
+  ...readdirSync(CASES_DIR)
+    .filter((f) => f.endsWith('.mdx'))
+    .map((f) => `entrevistas/system-design/${f.replace(/\.mdx$/, '')}/`),
+);
+
+const PROJECTS_DIR = resolve(process.cwd(), 'src/content/projects');
+routes.push(
+  ...readdirSync(PROJECTS_DIR)
+    .filter((f) => f.endsWith('.mdx'))
+    .map((f) => `proyectos/${f.replace(/\.mdx$/, '')}/`),
+);
+
+test.setTimeout(180_000);
 
 test('todos los diagramas Mermaid de las lecciones se renderizan', async ({ page }) => {
   const broken: string[] = [];

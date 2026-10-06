@@ -1,0 +1,92 @@
+---
+title: Buscador legal y regulatorio con citas
+description: Sistema que responde a juristas con citas exactas a artículos y sentencias, con versiones temporales, abstención estricta y trazabilidad completa.
+order: 2
+level: senior
+estimatedMinutes: 45
+lessons:
+  - m18-system-design/01-metodo-de-system-design-rag-y-agentes
+  - m02-ingesta-chunking/03-chunking-con-contexto
+  - m06-generacion-contexto/01-prompt-citas-y-grounding
+  - m08-evaluacion-rag/03-golden-sets-benchmarks-y-evaluacion-online
+lastReviewed: 2026-10-06
+---
+
+**Enunciado.** Un despacho de abogados quiere un asistente para consultar legislación, reglamentos y jurisprudencia de varias jurisdicciones. Las personas usuarias son juristas que **verificarán** lo que lean, pero que ahorrarán horas si el sistema encuentra las normas y los pasajes pertinentes.
+
+## Requisitos
+
+- **Funcionales:** responder preguntas con **citas exactas** (norma, artículo, apartado, fecha de vigencia), buscar por concepto y por referencia literal («artículo 12.3»), comparar versiones de una norma en el tiempo y abstenerse cuando la evidencia no basta.
+- **No funcionales:** precisión por encima de cobertura, trazabilidad total (qué se recuperó y qué se citó), confidencialidad de las consultas, latencia de varios segundos aceptable y soporte multilingüe en las jurisdicciones relevantes.
+- **Éxito (a medir):** exactitud de las citas (¿existe y dice lo que se afirma?), recall de las normas pertinentes en un conjunto de casos anotados por juristas y tasa de abstención correcta.
+
+## Preguntas de aclaración
+
+1. ¿Qué coste tiene un error? Aquí es alto: una cita inventada o una norma derogada puede acabar en un escrito. Condiciona todo el diseño.
+2. ¿Qué fuentes son oficiales y con qué licencias (boletines oficiales, bases de jurisprudencia)? ¿Hay APIs o hay que ingerir PDFs?
+3. ¿Se necesita vigencia por fecha («qué decía la norma el 1 de marzo de 2022»)?
+4. ¿Qué jurisdicciones e idiomas? ¿Hay documentos internos del despacho (que son confidenciales)?
+5. ¿El sistema debe redactar o solo buscar y resumir? Redactar aumenta mucho el riesgo.
+6. ¿Hay conjunto de casos anotados por juristas para evaluar?
+
+Supuestos: solo búsqueda y resumen con citas (no redacción de escritos), tres jurisdicciones, fuentes oficiales ingeribles, vigencia por fecha necesaria.
+
+## Arquitectura
+
+<Diagram
+  caption="Ingesta con estructura legal y verificación de citas antes de responder."
+  code={`flowchart LR
+  F[Fuentes oficiales] --> E[Extracción con estructura: norma, título, artículo, apartado]
+  E --> V[Versionado temporal: vigencia desde y hasta]
+  V --> I[(Índice híbrido con metadatos jurídicos)]
+  Q[Consulta del jurista] --> A[Analizador de consulta: referencias literales y filtros de fecha y jurisdicción]
+  A --> R[Recuperación híbrida y reranker]
+  I --> R
+  R --> G[Generación con citas obligatorias]
+  G --> C[Verificador: cada cita existe y respalda la frase]
+  C --> O[Respuesta con pasajes literales y enlaces]
+  C --> X[Abstención si falla la verificación]`}
+/>
+
+**Ingesta con estructura.** El troceado respeta la unidad jurídica (artículo y apartado) en lugar de cortar por longitud. Cada fragmento lleva la ruta completa (norma, título, capítulo, artículo), la jurisdicción, el rango normativo y las fechas de entrada en vigor y de derogación. Las modificaciones generan **versiones**, no sobrescriben.
+
+**Recuperación.** Un analizador detecta referencias literales (se resuelven por búsqueda exacta sobre metadatos) y filtros de fecha y jurisdicción. El resto va por búsqueda híbrida: la léxica es esencial para términos jurídicos y numeraciones; la densa, para el concepto. Un reranker ordena los candidatos y se amplía con fragmentos vecinos (artículo anterior y siguiente) cuando hace falta contexto.
+
+**Generación.** El modelo debe responder **solo con los pasajes**, citar el identificador de cada uno y devolver el **texto literal** que respalda cada afirmación. Salida estructurada con afirmaciones, citas y nivel de confianza.
+
+**Verificación.** Un paso determinista comprueba que cada cita existe en el índice, que el texto citado aparece en el fragmento y que el fragmento estaba vigente en la fecha consultada. Un verificador basado en modelo comprueba que la afirmación se deduce del pasaje. Si algo falla, se repite la generación una vez y, si persiste, se **abstiene** o se muestran solo los pasajes.
+
+## Decisiones y trade-offs
+
+| Decisión | Alternativa | Criterio | Qué la cambiaría |
+| --- | --- | --- | --- |
+| Troceado por estructura jurídica | Longitud fija | Los artículos son la unidad de cita y las referencias literales deben resolverse | Documentos sin estructura fiable: se recurre a heurísticas |
+| Versionado temporal | Solo la versión actual | Los casos dependen de la fecha de los hechos | Si nadie necesita fechas pasadas, se simplifica |
+| Verificación de citas en dos capas | Confiar en el modelo | El coste de una cita falsa es muy alto | Nada: es el núcleo del sistema |
+| Abstención estricta | Responder siempre | Prefiere no responder a responder mal | Si los juristas rechazan el sistema por abstenerse demasiado, se ajusta el umbral con datos |
+| Mostrar pasajes literales | Solo resumen | Permite verificación rápida | Para vistas ejecutivas se ofrece resumen aparte |
+| Sin agente en el primer lanzamiento | Agente de investigación | Previsibilidad y trazabilidad | Preguntas multi-norma que exijan varios saltos |
+
+## Evaluación
+
+- **Conjunto de oro** construido por juristas: preguntas reales, normas pertinentes anotadas, casos con derogaciones y con conflictos entre jurisdicciones, y preguntas sin respuesta. Revisión de al menos dos personas sobre una muestra para medir el acuerdo.
+- **Métricas:** recall@k de las normas pertinentes, **exactitud de las citas** (existencia, literalidad y vigencia) y fidelidad, además de la tasa de abstención correcta y la de abstención indebida.
+- **Pruebas adversas:** preguntas con premisas falsas, referencias a artículos inexistentes y normas derogadas.
+- **Producción:** revisión humana de una muestra continua y registro de las correcciones de los juristas como nuevas tareas.
+
+## Riesgos
+
+- **Cita inventada o mal atribuida:** mitigada con verificación determinista y literalidad.
+- **Norma derogada o versión equivocada:** metadatos de vigencia y filtro por fecha, con avisos visibles.
+- **Confianza excesiva:** la interfaz muestra pasajes, fecha y fuente, y recuerda que la verificación humana es obligatoria.
+- **Confidencialidad:** las consultas y los documentos del despacho son privilegiados; aislamiento por cliente, cifrado y sin retención de datos por el proveedor (a verificar contractualmente).
+- **Cobertura desigual de fuentes:** se informa de qué jurisdicciones y fechas cubre el índice.
+- **Cambios del proveedor del modelo:** reevaluación automática tras cada cambio.
+
+## Coste
+
+El coste por consulta es moderado: contexto de unos 3 000 a 5 000 tokens (pasajes literales largos) y una pasada extra de verificación. Con **precios ilustrativos** de 3 y 15 USD por millón de tokens de entrada y salida, una consulta con 4 000 tokens de entrada, 400 de salida y una verificación de 2 000 de entrada y 100 de salida cuesta del orden de 0,03 USD. El coste dominante es de **ingesta y curación** (parsing, versionado y revisión jurídica) y de la **evaluación con juristas**, no de las consultas. Palancas: caché para consultas repetidas, verificación determinista primero y modelo pequeño para el analizador.
+
+## Qué diría una persona senior
+
+Diría que este es un problema de **verificabilidad** antes que de generación: la mitad del valor está en estructurar bien las normas y en comprobar las citas. Pediría ver 50 casos reales desde el primer día, definiría la exactitud de citas como métrica de bloqueo para lanzar y no prometería redacción de escritos. Explicaría que prefiere un asistente que a veces diga «no tengo evidencia suficiente» y muestre los pasajes pertinentes a uno que redacte con aplomo, y que revisaría el diseño tras medir cuántas abstenciones son indebidas.

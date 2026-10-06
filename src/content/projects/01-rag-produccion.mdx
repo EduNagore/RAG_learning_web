@@ -1,0 +1,61 @@
+---
+title: RAG de producción sobre documentación
+description: Construye un RAG sobre una carpeta de documentación real con ingesta, búsqueda híbrida, permisos, citas validadas, abstención y evaluación.
+order: 1
+level: intermedio
+estimatedHours: 12
+stack: [Docling, Qdrant, sentence-transformers, BM25, Anthropic SDK]
+lessons:
+  - m02-ingesta-chunking/03-chunking-con-contexto
+  - m05-recuperacion-avanzada/01-busqueda-hibrida-y-rrf
+  - m06-generacion-contexto/01-prompt-citas-y-grounding
+  - m08-evaluacion-rag/03-golden-sets-benchmarks-y-evaluacion-online
+  - m09-rag-produccion/02-seguridad-permisos-e-inyeccion
+verified: 2026-10-06
+---
+
+## Objetivo
+
+Pasar del RAG de juguete de los laboratorios a un sistema que podrías enseñar en una entrevista: ingesta de documentos reales, recuperación híbrida filtrada por permisos, respuestas con citas que se validan, abstención cuando no hay evidencia y una evaluación que separa los fallos de recuperación de los de generación.
+
+Requisitos previos: Python 3.10 o superior, `uv`, una clave de API de un proveedor de modelos y una carpeta con 20 a 200 documentos (PDF, DOCX o HTML) que puedas usar sin problemas de confidencialidad.
+
+## Arquitectura
+
+<Diagram
+  caption="Ingesta, recuperación híbrida con permisos y generación con validación de citas."
+  code={`flowchart LR
+  D[Documentos] --> C[Docling: a Markdown]
+  C --> T[Troceado por secciones con contexto]
+  T --> E[Embeddings]
+  E --> Q[(Qdrant con payload de permisos)]
+  T --> B[(Índice BM25)]
+  U[Pregunta y grupos del usuario] --> R[Recuperación densa y léxica con filtro]
+  Q --> R
+  B --> R
+  R --> F[Fusión RRF y reranker opcional]
+  F --> G[Generación con citas]
+  G --> V[Validación de citas y abstención]
+  V --> A[Respuesta]`}
+/>
+
+## Pasos
+
+1. **Ingesta.** Convierte los documentos a Markdown con Docling y trocea por secciones, anteponiendo el título del documento y la ruta de encabezados a cada fragmento. Guarda en el payload el documento, la sección y la lista de grupos con acceso.
+2. **Índices.** Calcula embeddings y guárdalos en Qdrant; construye un índice BM25 con los mismos fragmentos.
+3. **Recuperación.** Implementa la búsqueda densa y la léxica, fusiónalas con RRF y aplica el filtro de permisos **durante** la búsqueda. Mide el efecto de un reranker como extensión.
+4. **Generación.** Pide respuestas con citas por fragmento y la frase `NO_LO_SE` si la evidencia no basta. Valida automáticamente que cada cita existe.
+5. **Evaluación.** Construye un conjunto de oro de al menos 30 preguntas (incluye 5 sin respuesta y 5 que dependen de permisos). Calcula recall@5 y MRR, la tasa de abstención correcta y la validez de citas, y clasifica los fallos por etapa.
+6. **Informe.** Resume los resultados con el tamaño de la muestra y qué cambiarías a continuación.
+
+## Criterios de evaluación
+
+- Recall@5 y MRR medidos y reportados con el tamaño de la muestra.
+- Pruebas con dos perfiles de permisos distintos sin ninguna fuga.
+- Todas las citas existen y las preguntas sin respuesta se abstienen.
+- Informe de fallos clasificados por etapa (recuperación, ranking y generación) con una mejora propuesta para la causa más frecuente.
+- Código con pruebas de las funciones puras (fusión, recall, validación de citas).
+
+## Extensiones
+
+Reranker y medición de su efecto frente a su latencia; evaluación con RAGAS (comprueba la API de su versión vigente); trazas con Langfuse; actualización incremental del índice con detección de cambios; caché de respuestas con invalidación.

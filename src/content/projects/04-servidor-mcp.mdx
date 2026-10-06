@@ -1,0 +1,57 @@
+---
+title: Servidor MCP propio sobre tu índice de RAG
+description: Expón la búsqueda de tu RAG como herramienta MCP con el SDK oficial de Python, consúmela desde un cliente y aplica un buen diseño de herramientas y de errores.
+order: 4
+level: intermedio
+estimatedHours: 6
+stack: [mcp (SDK de Python), Python]
+lessons:
+  - m13-protocolos/01-tool-calling-y-mcp
+  - m13-protocolos/03-como-encajan-mcp-a2a-y-skills
+  - m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana
+verified: 2026-10-06
+---
+
+## Objetivo
+
+Publicar la búsqueda de tu RAG como un servidor MCP que cualquier cliente compatible pueda usar, y consumirlo desde un cliente propio. El proyecto practica lo esencial de un buen servidor: descripciones claras, argumentos tipados y validados, errores útiles y comprobación de permisos.
+
+Requisitos previos: el proyecto 1 (o cualquier recuperador) y Python 3.10 o superior.
+
+<Callout type="aviso" title="API en movimiento">
+
+El SDK de Python de MCP está en su versión 2 (2.3 en PyPI el 2026-10-06) y su API ha cambiado entre versiones mayores. El código inicial usa lo que muestra el README del SDK en esa fecha (`MCPServer`, `@mcp.tool()`, `Client` y `call_tool`). Antes de empezar, abre el README de la versión que instales: el arranque del servidor y los transportes disponibles dependen de ella.
+
+</Callout>
+
+## Arquitectura
+
+<Diagram
+  caption="El cliente descubre y llama a la herramienta del servidor, que consulta el índice."
+  code={`flowchart LR
+  C[Cliente MCP] -->|descubre y llama a search_docs| S[Servidor MCP]
+  S --> V[Validación de argumentos y permisos]
+  V --> R[Recuperador del proyecto 1]
+  R --> I[(Índice)]
+  S -->|resultado o error de herramienta| C`}
+/>
+
+## Pasos
+
+1. Escribe la herramienta `search_docs` con una descripción que explique **cuándo** usarla y qué devuelve.
+2. Valida `top_k` y la consulta; devuelve errores de herramienta informativos (qué falló y cómo corregirlo).
+3. Conecta la herramienta con el recuperador y decide cómo identificas a quien llama para aplicar permisos.
+4. Arranca el servidor siguiendo el README del SDK y conéctate con el cliente.
+5. Comprueba la diferencia entre un error de herramienta (resultado marcado como error) y un error de protocolo.
+6. Escribe pruebas automáticas que arranquen el servidor y llamen a la herramienta con casos válidos e inválidos.
+
+## Criterios de evaluación
+
+- La herramienta es fácil de usar para un modelo: nombre, descripción, tipos y ejemplos de salida.
+- Los errores permiten corregir la llamada y no filtran detalles internos.
+- Sin identidad válida no se devuelve contenido restringido (prueba con dos perfiles).
+- Pruebas automáticas en verde y una nota breve sobre qué revisarías antes de exponerlo a terceros (autorización, límites de uso y registro de llamadas).
+
+## Extensiones
+
+Exponer los documentos como recursos, añadir plantillas de prompt, límites de uso por cliente, registro de auditoría y conectar el servidor al proyecto 3 como herramienta de búsqueda.

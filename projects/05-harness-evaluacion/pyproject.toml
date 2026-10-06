@@ -1,0 +1,12 @@
+[project]
+name = "harness-evaluacion"
+version = "0.1.0"
+description = "Proyecto 5: harness de evaluación de agentes con tareas, intentos repetidos, pass@k, pass^k y análisis de fallos."
+requires-python = ">=3.10"
+dependencies = [
+  "python-dotenv>=1.2",
+]
+
+[project.optional-dependencies]
+# Solo si evalúas un agente real (versión comprobada en PyPI el 2026-10-06).
+agent = ["anthropic>=1.11"]

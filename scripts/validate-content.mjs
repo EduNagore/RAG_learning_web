@@ -229,9 +229,122 @@ for (const [id, { data }] of lessons) {
   }
 }
 
+// --- Entrevistas y casos de system design ------------------------------------
+const MIN_INTERVIEW_QUESTIONS = 80;
+const interviewIds = new Set();
+const interviewLevels = { junior: 0, mid: 0, senior: 0 };
+const interviewKinds = { conceptual: 0, design: 0, debug: 0 };
+const interviewDir = join(CONTENT, 'interview');
+for (const file of walk(interviewDir, '.yaml')) {
+  const data = parseYaml(readFileSync(file, 'utf8'));
+  for (const q of data.questions ?? []) {
+    if (interviewIds.has(q.id)) err(rel(file), `id de pregunta repetido: ${q.id}`);
+    interviewIds.add(q.id);
+    interviewLevels[q.level] = (interviewLevels[q.level] ?? 0) + 1;
+    interviewKinds[q.kind] = (interviewKinds[q.kind] ?? 0) + 1;
+    for (const l of q.lessons ?? [])
+      if (!lessons.has(l)) err(rel(file), `${q.id}: lección inexistente: ${l}`);
+    for (const lang of ['es', 'en']) {
+      if (/^\s|\s$/.test(q[lang].q))
+        err(rel(file), `${q.id}: pregunta ${lang} con espacios sobrantes`);
+      if (q[lang].a.split(/\s+/).length < 25)
+        err(rel(file), `${q.id}: respuesta ${lang} demasiado corta`);
+    }
+  }
+}
+if (interviewIds.size < MIN_INTERVIEW_QUESTIONS && !process.env.ALLOW_PARTIAL_INTERVIEW)
+  err(
+    'src/content/interview',
+    `hay ${interviewIds.size} preguntas; el mínimo es ${MIN_INTERVIEW_QUESTIONS}`,
+  );
+for (const [level, n] of Object.entries(interviewLevels))
+  if (interviewIds.size >= MIN_INTERVIEW_QUESTIONS && n < 10)
+    err('src/content/interview', `pocas preguntas de nivel ${level} (${n})`);
+
+const CASE_SECTIONS = [
+  'Requisitos',
+  'Preguntas de aclaración',
+  'Arquitectura',
+  'Decisiones y trade-offs',
+  'Evaluación',
+  'Riesgos',
+  'Coste',
+  'Qué diría una persona senior',
+];
+const MIN_CASES = 6;
+const caseIds = [];
+const casesDir = join(CONTENT, 'cases');
+for (const file of walk(casesDir, '.mdx')) {
+  caseIds.push(idOf(casesDir, file));
+  const fm = splitFrontmatter(readFileSync(file, 'utf8'));
+  if (!fm) {
+    err(rel(file), 'falta el frontmatter');
+    continue;
+  }
+  for (const l of fm.data.lessons ?? [])
+    if (!lessons.has(l)) err(rel(file), `lección relacionada inexistente: ${l}`);
+  const headings = [...stripCode(fm.body).matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+  for (const section of CASE_SECTIONS)
+    if (!headings.some((h) => h.startsWith(section)))
+      err(rel(file), `falta la sección «${section}»`);
+  const words = stripCode(fm.body).split(/\s+/).length;
+  if (words < 900) err(rel(file), `${words} palabras (mínimo 900 sin contar código)`);
+  if (!/```mermaid|<Diagram/.test(fm.body)) err(rel(file), 'falta el diagrama de arquitectura');
+}
+if (caseIds.length < MIN_CASES && !process.env.ALLOW_PARTIAL_INTERVIEW)
+  err('src/content/cases', `hay ${caseIds.length} casos; el mínimo es ${MIN_CASES}`);
+
+// --- Glosario -----------------------------------------------------------------
+const glossaryIds = new Set();
+const glossaryDir = join(CONTENT, 'glossary');
+for (const file of walk(glossaryDir, '.yaml')) {
+  const data = parseYaml(readFileSync(file, 'utf8'));
+  for (const t of data.terms ?? []) {
+    if (glossaryIds.has(t.id)) err(rel(file), `id de término repetido: ${t.id}`);
+    glossaryIds.add(t.id);
+    for (const l of t.lessons ?? [])
+      if (!lessons.has(l)) err(rel(file), `${t.id}: lección inexistente: ${l}`);
+  }
+}
+if (glossaryIds.size < 50)
+  err('src/content/glossary', `hay ${glossaryIds.size} términos; el mínimo es 50`);
+
+// --- Proyectos ----------------------------------------------------------------
+const PROJECT_SECTIONS = [
+  'Objetivo',
+  'Arquitectura',
+  'Pasos',
+  'Criterios de evaluación',
+  'Extensiones',
+];
+const projectIds = [];
+const projectsDir = join(CONTENT, 'projects');
+for (const file of walk(projectsDir, '.mdx')) {
+  const id = idOf(projectsDir, file);
+  projectIds.push(id);
+  const fm = splitFrontmatter(readFileSync(file, 'utf8'));
+  if (!fm) {
+    err(rel(file), 'falta el frontmatter');
+    continue;
+  }
+  for (const l of fm.data.lessons ?? [])
+    if (!lessons.has(l)) err(rel(file), `lección relacionada inexistente: ${l}`);
+  const folder = join(ROOT, 'projects', id);
+  for (const needed of ['README.md', 'pyproject.toml', '.env.example'])
+    if (!existsSync(join(folder, needed))) err(rel(file), `falta projects/${id}/${needed}`);
+  const headings = [...stripCode(fm.body).matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+  for (const section of PROJECT_SECTIONS)
+    if (!headings.some((h) => h.startsWith(section)))
+      err(rel(file), `falta la sección «${section}»`);
+  if (existsSync(join(folder, '.env')))
+    err(rel(file), `projects/${id}/.env no debe existir en el repositorio`);
+}
+if (projectIds.length < 5)
+  err('src/content/projects', `hay ${projectIds.length} proyectos; el mínimo es 5`);
+
 // --- Informe -----------------------------------------------------------------
 console.log(
-  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size} · Labs: ${labIds.size}`,
+  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size} · Labs: ${labIds.size} · Entrevistas: ${interviewIds.size} · Casos: ${caseIds.length} · Glosario: ${glossaryIds.size} · Proyectos: ${projectIds.length}`,
 );
 for (const w of warnings) console.warn(`  aviso  ${w}`);
 for (const e of errors) console.error(`  ERROR  ${e}`);

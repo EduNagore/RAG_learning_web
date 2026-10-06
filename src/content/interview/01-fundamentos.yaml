@@ -1,0 +1,204 @@
+title: Fundamentos de LLM y prompting
+order: 1
+questions:
+  - id: fund-01
+    level: junior
+    kind: conceptual
+    lessons: [m00-fundamentos-llm/01-tokens-y-contexto]
+    es:
+      q: ¿Qué es un token y por qué importa para el coste y el contexto?
+      a: |-
+        Un token es la unidad en la que el modelo lee y escribe texto: un fragmento de palabra, una palabra corta o un signo. El número de tokens depende del tokenizador, así que el mismo texto cuesta distinto según el modelo.
+
+        Importa porque el precio se factura por tokens de entrada y de salida, y porque la ventana de contexto es un límite en tokens que incluye instrucciones, historial, documentos recuperados y la respuesta.
+    en:
+      q: What is a token and why does it matter for cost and context?
+      a: |-
+        A token is the unit in which the model reads and writes text: a word fragment, a short word or a symbol. The token count depends on the tokenizer, so the same text costs differently across models.
+
+        It matters because pricing is per input and output token, and because the context window is a token limit that covers instructions, history, retrieved documents and the answer.
+  - id: fund-02
+    level: junior
+    kind: conceptual
+    lessons: [m00-fundamentos-llm/02-sampling]
+    es:
+      q: ¿Qué hacen la temperatura y top-p al generar texto?
+      a: |-
+        La temperatura reescala las probabilidades de los siguientes tokens: valores bajos concentran la elección en los más probables y valores altos la reparten. Top-p (muestreo por núcleo) restringe la elección al conjunto más pequeño de tokens cuya probabilidad acumulada alcanza p.
+
+        Para tareas que exigen consistencia (extracción, respuestas fundamentadas) se usan valores bajos; para tareas creativas, valores mayores. Con temperatura baja la salida sigue sin ser garantizadamente determinista.
+    en:
+      q: What do temperature and top-p do when generating text?
+      a: |-
+        Temperature rescales the probabilities of the next tokens: low values concentrate the choice on the likeliest ones, high values spread it out. Top-p (nucleus sampling) restricts the choice to the smallest set of tokens whose cumulative probability reaches p.
+
+        For tasks that need consistency (extraction, grounded answers) use low values; for creative tasks, higher ones. Even with low temperature, the output is still not guaranteed to be deterministic.
+  - id: fund-03
+    level: junior
+    kind: conceptual
+    lessons: [m00-fundamentos-llm/08-limitaciones]
+    es:
+      q: ¿Por qué alucinan los modelos de lenguaje y qué puedes hacer al respecto?
+      a: |-
+        Un modelo genera la continuación más plausible según lo aprendido; no verifica hechos ni distingue de forma fiable entre saber y adivinar. Si falta información o la pregunta la induce, puede producir una respuesta fluida pero falsa.
+
+        Se mitiga con fundamentación en fuentes (RAG con citas), permitir y premiar la abstención, instrucciones de no inventar, verificación posterior y evaluación continua. No se elimina del todo.
+    en:
+      q: Why do language models hallucinate and what can you do about it?
+      a: |-
+        A model generates the most plausible continuation given what it learned; it does not verify facts or reliably separate knowing from guessing. When information is missing or the question pushes it, it can produce a fluent but false answer.
+
+        Mitigations: grounding in sources (RAG with citations), allowing and rewarding abstention, instructions not to invent, post-hoc verification and continuous evaluation. It is not eliminated entirely.
+  - id: fund-04
+    level: mid
+    kind: conceptual
+    lessons:
+      [
+        m00-fundamentos-llm/01-tokens-y-contexto,
+        m06-generacion-contexto/02-posicion-compresion-y-cache,
+      ]
+    es:
+      q: ¿Basta con una ventana de contexto enorme para no necesitar RAG?
+      a: |-
+        No. Meter todo en el contexto aumenta coste y latencia, y la calidad no es uniforme: hay evidencia de que los modelos aprovechan peor la información situada en mitad de un contexto largo. Además, los datos cambian, hay permisos por usuario y la trazabilidad de las fuentes exige saber qué se usó.
+
+        Un contexto largo es una herramienta complementaria: sirve para documentos concretos o conjuntos pequeños; RAG para corpus grandes, cambiantes o con control de acceso.
+    en:
+      q: Is a huge context window enough to avoid needing RAG?
+      a: |-
+        No. Putting everything in context raises cost and latency, and quality is not uniform: there is evidence that models use information in the middle of a long context less well. Also, data changes, access is per user, and source traceability requires knowing what was used.
+
+        A long context is a complementary tool: it fits specific documents or small sets; RAG fits large, changing or access-controlled corpora.
+  - id: fund-05
+    level: junior
+    kind: conceptual
+    lessons: [m00-fundamentos-llm/03-prompting-y-system-prompts]
+    es:
+      q: ¿Qué diferencia hay entre el mensaje de sistema y el del usuario, y qué debería ir en cada uno?
+      a: |-
+        El mensaje de sistema fija el rol, las reglas, el formato y las restricciones que deben mantenerse durante toda la conversación; el del usuario trae la petición concreta y los datos de cada turno.
+
+        Conviene poner en el sistema lo estable (política, tono, formato de salida, qué hacer sin evidencia) y en el turno del usuario lo variable (pregunta, documentos recuperados, delimitados). No es una barrera de seguridad: un modelo puede seguir instrucciones maliciosas incluidas en los datos.
+    en:
+      q: What is the difference between the system and user messages, and what should go in each?
+      a: |-
+        The system message sets the role, rules, format and constraints that should hold across the whole conversation; the user message carries the specific request and the data for each turn.
+
+        Put the stable parts in the system message (policy, tone, output format, what to do without evidence) and the variable parts in the user turn (question, retrieved documents, delimited). It is not a security boundary: a model can follow malicious instructions placed in the data.
+  - id: fund-06
+    level: mid
+    kind: design
+    lessons: [m00-fundamentos-llm/04-salidas-estructuradas]
+    es:
+      q: Necesitas que el modelo devuelva JSON válido en producción. ¿Cómo lo garantizas?
+      a: |-
+        Lo más robusto es usar salidas estructuradas con un esquema (decodificación restringida o la función equivalente del proveedor), que obliga a que la salida cumpla el esquema. Si no está disponible, se pide JSON con un esquema claro y ejemplos, se valida con una librería y se reintenta con el error de validación como retroalimentación.
+
+        Aun con salida válida hay que validar el contenido (rangos, enumeraciones, coherencia), porque un JSON bien formado puede contener datos incorrectos.
+    en:
+      q: You need the model to return valid JSON in production. How do you guarantee it?
+      a: |-
+        The most robust option is structured outputs with a schema (constrained decoding or the provider's equivalent feature), which forces the output to satisfy the schema. If unavailable, ask for JSON with a clear schema and examples, validate with a library and retry feeding the validation error back.
+
+        Even with valid output you must validate the content (ranges, enums, consistency), because well-formed JSON can still contain wrong data.
+  - id: fund-07
+    level: mid
+    kind: conceptual
+    lessons: [m00-fundamentos-llm/05-tool-calling]
+    es:
+      q: ¿Cómo funciona el tool calling y quién ejecuta la herramienta?
+      a: |-
+        Describes al modelo las herramientas con nombre, descripción y esquema de argumentos. El modelo no ejecuta nada: devuelve una petición estructurada («llama a esta herramienta con estos argumentos»). Tu programa la valida, la ejecuta y devuelve el resultado como un mensaje; el modelo lo lee y decide el siguiente paso.
+
+        Por eso el control (permisos, validación, límites) es responsabilidad del programa, y los errores de la herramienta deben devolverse al modelo como observaciones útiles.
+    en:
+      q: How does tool calling work and who runs the tool?
+      a: |-
+        You describe tools to the model with a name, description and argument schema. The model runs nothing: it returns a structured request ("call this tool with these arguments"). Your program validates and executes it and returns the result as a message; the model reads it and decides the next step.
+
+        So control (permissions, validation, limits) is the program's responsibility, and tool errors should be returned to the model as useful observations.
+  - id: fund-08
+    level: mid
+    kind: design
+    lessons: [m00-fundamentos-llm/07-coste-latencia-caching]
+    es:
+      q: Tu aplicación gasta demasiado en tokens de entrada. ¿Qué palancas tienes?
+      a: |-
+        Reducir lo que se envía (recuperar menos y mejor, reranking, comprimir o resumir el historial), reutilizar prefijos largos con la caché de prompts del proveedor (poniendo lo estable al principio), usar un modelo más pequeño para las consultas fáciles (enrutado) y cachear respuestas a consultas repetidas.
+
+        Cada palanca tiene un coste: la caché de respuestas puede servir contenido obsoleto, el enrutado puede equivocarse y comprimir puede perder datos. Se mide el efecto con un conjunto de oro.
+    en:
+      q: Your application spends too much on input tokens. What levers do you have?
+      a: |-
+        Send less (retrieve fewer and better chunks, reranking, compress or summarize history), reuse long prefixes with the provider's prompt caching (placing stable content first), use a smaller model for easy queries (routing) and cache answers to repeated queries.
+
+        Each lever has a cost: answer caching can serve stale content, routing can misclassify and compression can lose data. Measure the effect with a golden set.
+  - id: fund-09
+    level: senior
+    kind: debug
+    lessons:
+      [m00-fundamentos-llm/02-sampling, m08-evaluacion-rag/02-metricas-de-generacion-y-llm-juez]
+    es:
+      q: La misma consulta da respuestas distintas entre ejecuciones y tus tests se vuelven inestables. ¿Qué haces?
+      a: |-
+        Primero separar fuentes de variabilidad: muestreo (bajar temperatura, fijar semilla si el proveedor la admite), cambios en la recuperación (orden de empates, índices aproximados) y actualizaciones del modelo. Después, dejar de comparar cadenas exactas: evaluar propiedades (contiene el hecho, cita la fuente correcta, formato válido) con graders de código o un juez calibrado.
+
+        Y repetir cada caso varias veces y reportar tasas (por ejemplo pass@k y pass^k en agentes), porque con salidas no deterministas un solo intento no es una medida fiable.
+    en:
+      q: The same query gives different answers across runs and your tests are flaky. What do you do?
+      a: |-
+        First separate sources of variance: sampling (lower temperature, fix the seed if the provider supports it), retrieval changes (tie ordering, approximate indexes) and model updates. Then stop comparing exact strings: evaluate properties (contains the fact, cites the right source, valid format) with code graders or a calibrated judge.
+
+        And repeat each case several times and report rates (for example pass@k and pass^k for agents), because with non-deterministic outputs a single attempt is not a reliable measure.
+  - id: fund-10
+    level: junior
+    kind: conceptual
+    lessons: [m00-fundamentos-llm/06-embeddings-intuicion]
+    es:
+      q: ¿Qué es un embedding y para qué sirve en RAG?
+      a: |-
+        Un embedding es un vector numérico que representa el significado de un texto, de forma que los textos semánticamente cercanos quedan cerca en el espacio. En RAG se calcula para los fragmentos del corpus y para la consulta, y se recuperan los fragmentos cuyos vectores son más cercanos (por ejemplo, por similitud coseno).
+
+        Captura sinónimos y paráfrasis, pero puede fallar con identificadores exactos, siglas o números, por lo que a menudo se combina con búsqueda léxica.
+    en:
+      q: What is an embedding and what is it used for in RAG?
+      a: |-
+        An embedding is a numeric vector that represents the meaning of a text so that semantically close texts end up close in the space. In RAG it is computed for corpus chunks and for the query, and the chunks with the closest vectors (for example by cosine similarity) are retrieved.
+
+        It captures synonyms and paraphrases but can fail on exact identifiers, acronyms or numbers, so it is often combined with lexical search.
+  - id: fund-11
+    level: mid
+    kind: conceptual
+    lessons: [m00-fundamentos-llm/03-prompting-y-system-prompts]
+    es:
+      q: ¿Cuándo usarías few-shot y cuándo razonamiento paso a paso?
+      a: |-
+        Few-shot (ejemplos en el prompt) ayuda cuando importa el formato, el estilo o un criterio difícil de describir con palabras; los ejemplos deben ser representativos y variados. Pedir razonamiento paso a paso ayuda en tareas de varios pasos (cálculo, lógica) aunque aumenta tokens y latencia.
+
+        Ninguna es gratuita: se prueban con el conjunto de evaluación, porque el efecto depende del modelo y de la tarea, y en modelos con razonamiento integrado a veces no hace falta pedirlo.
+    en:
+      q: When would you use few-shot and when step-by-step reasoning?
+      a: |-
+        Few-shot (examples in the prompt) helps when format, style or a hard-to-describe criterion matters; examples should be representative and varied. Asking for step-by-step reasoning helps on multi-step tasks (arithmetic, logic) though it adds tokens and latency.
+
+        Neither is free: test them on your evaluation set, because the effect depends on the model and task, and with models that reason natively you sometimes do not need to ask for it.
+  - id: fund-12
+    level: senior
+    kind: design
+    lessons:
+      [
+        m00-fundamentos-llm/07-coste-latencia-caching,
+        m09-rag-produccion/01-latencia-coste-cache-y-actualizacion,
+      ]
+    es:
+      q: ¿Cómo reducirías la latencia percibida de un asistente sin cambiar de modelo?
+      a: |-
+        Usar streaming para que el primer token aparezca pronto, paralelizar lo independiente (recuperación en varias fuentes, llamadas a herramientas sin dependencias), acortar el contexto, usar caché de prompt y de respuestas y ejecutar tareas secundarias (reranking costoso, verificación) solo cuando aporten.
+
+        También conviene medir por etapas con trazas para atacar la que domina: en una consulta típica suele ser la generación, y la latencia percibida con streaming es mucho menor que la total.
+    en:
+      q: How would you reduce an assistant's perceived latency without changing the model?
+      a: |-
+        Use streaming so the first token appears early, parallelize independent work (retrieval across sources, tool calls without dependencies), shorten the context, use prompt and answer caching, and run secondary steps (expensive reranking, verification) only when they add value.
+
+        Also measure per stage with traces to attack the dominant one: in a typical query it is usually generation, and perceived latency with streaming is much lower than total latency.
