@@ -147,6 +147,12 @@ Qué debe contener, como lista de comprobación:
 
 Dos reglas prácticas: **cita literalmente las restricciones** (una paráfrasis las suaviza) y **conserva los identificadores**: es más barato recargar un detalle por su referencia que guardarlo.
 
+### Cuándo compactar y qué canarios elegir
+
+Compactar tiene un coste (una llamada, una posible pérdida) y por eso conviene decidir **cuándo**. Dos criterios habituales: un **umbral de uso** de la ventana (por ejemplo, compactar al superar cierta fracción del límite, dejando margen para la respuesta) y un **hito natural** de la tarea (se cierra una subtarea, se termina una fase de exploración). Compactar en un hito es mejor que hacerlo a mitad de un razonamiento, porque el estado «en curso» es lo más difícil de resumir bien. El umbral concreto depende del modelo y de la tarea, así que se calibra midiendo, no se copia de un tutorial.
+
+Los canarios también se diseñan con intención. Un conjunto útil mezcla **restricciones** (lo que el usuario prohíbe o exige), **decisiones** (una opción descartada y su motivo), **identificadores** (un número de pedido que habrá que usar después) y **correcciones** (el usuario cambió de opinión: debe sobrevivir la versión nueva, no la vieja). Colócalos en **posiciones distintas** de la conversación, **dentro de frases con ruido** y no solo al principio de un mensaje, porque la pérdida suele ocurrir en el medio; este patrón recuerda al hallazgo de _Lost in the Middle_: los modelos aprovechan peor la información situada en mitad de un contexto largo que la del principio o el final. Y mide siempre **con y sin** la política para comprobar que los canarios eran recuperables en la conversación original, de modo que un fallo se deba a la compactación y no a un canario mal escrito.
+
 ### Aislar el contexto con sub-agentes
 
 La alternativa a compactar es **no acumular**: delegar una exploración en un **sub-agente** que trabaja en su propia ventana y devuelve un **resumen condensado**. Como describe la guía de Anthropic, los sub-agentes especializados gestionan tareas acotadas con **ventanas de contexto limpias** y devuelven al agente coordinador un resumen, a menudo de unos pocos miles de tokens aunque hayan usado decenas de miles en explorar. El agente principal conserva un contexto **pequeño y centrado en la síntesis**.
