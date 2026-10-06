@@ -1,0 +1,223 @@
+---
+title: Tool calling y el Model Context Protocol (MCP)
+description: Qué problema resuelve MCP frente al tool calling propietario de cada proveedor, su arquitectura (hosts, clientes, servidores), sus mensajes JSON-RPC, sus transportes, la autorización y las consideraciones de seguridad, con un intercambio de mensajes reales.
+module: m13-protocolos
+order: 1
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Explicar el problema de integración que resuelve MCP y su arquitectura de hosts, clientes y servidores.
+  - Describir los mensajes tools/list y tools/call, la diferencia entre errores de protocolo y errores de ejecución, y el formato de resultados.
+  - Distinguir los transportes (stdio y Streamable HTTP) y cuándo se aplica la autorización (OAuth 2.1 sobre HTTP).
+  - Aplicar las reglas de seguridad de MCP (consentimiento, descripciones no fiables, validación, mínimo privilegio).
+prerequisites:
+  - m10-fundamentos-agentes/02-bucle-react-y-herramientas
+  - m12-multi-agente/04-economia-de-tokens-y-modos-de-fallo
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: Model Context Protocol, Specification
+    url: https://modelcontextprotocol.io/specification/latest
+    type: docs
+    authors: Model Context Protocol
+    year: 2026
+  - title: Model Context Protocol, Tools
+    url: https://modelcontextprotocol.io/specification/latest/server/tools
+    type: docs
+    authors: Model Context Protocol
+    year: 2026
+  - title: Model Context Protocol, Transports
+    url: https://modelcontextprotocol.io/specification/latest/basic/transports
+    type: docs
+    authors: Model Context Protocol
+    year: 2026
+  - title: Model Context Protocol, Authorization
+    url: https://modelcontextprotocol.io/specification/latest/basic/authorization
+    type: docs
+    authors: Model Context Protocol
+    year: 2026
+relatedLabs:
+  - agents-31-servidor-mcp
+  - agents-22-registro-de-tools
+---
+
+## Intuición: el problema de N por M
+
+Cada proveedor de modelos define su propio formato de *tool calling* (cómo se describen las herramientas, cómo se piden y cómo se devuelven los resultados). Si quieres que una aplicación con LLM use diez servicios (un calendario, un repositorio de código, una base de datos, una herramienta de tickets…) y quieres usarla con tres aplicaciones distintas (un IDE, un chat, un agente propio), sin un estándar tienes que escribir **diez integraciones por cada aplicación**: 30 piezas. Con un protocolo común, cada servicio se escribe **una vez** como servidor y cada aplicación **una vez** como cliente: 13 piezas.
+
+Ese es el problema que ataca el **Model Context Protocol (MCP)**: según su especificación, un protocolo abierto que permite una integración fluida entre aplicaciones LLM y fuentes de datos y herramientas externas, que estandariza cómo conectar los modelos con el contexto que necesitan. Toma inspiración del *Language Server Protocol*, que hizo lo mismo para el soporte de lenguajes de programación en los editores.
+
+## Cómo funciona
+
+### Arquitectura: hosts, clientes y servidores
+
+El protocolo usa mensajes **JSON-RPC 2.0** entre tres papeles:
+
+- **Host:** la aplicación LLM que inicia las conexiones (un IDE, un chat, tu agente).
+- **Cliente:** un conector dentro del host; cada uno gestiona la conexión con un servidor.
+- **Servidor:** un servicio que ofrece contexto y capacidades.
+
+Un servidor puede ofrecer tres tipos de funciones:
+
+| Función | Qué es | Quién la controla |
+| --- | --- | --- |
+| **Tools** (herramientas) | Funciones que el modelo puede ejecutar | El modelo (con confirmación del usuario) |
+| **Resources** (recursos) | Contexto y datos que el usuario o el modelo pueden usar | La aplicación o el usuario |
+| **Prompts** | Mensajes y flujos de trabajo con plantilla | El usuario |
+
+Los clientes, por su parte, pueden ofrecer a los servidores la **elicitación** (*elicitation*): el servidor solicita información adicional al usuario. La especificación define también utilidades (configuración, progreso, cancelación, informes de error) y **extensiones opcionales** que se negocian entre ambas partes, entre ellas *Tasks* (ejecución asíncrona de operaciones largas), *Skills over MCP* (instrucciones estructuradas para flujos de agentes) y *MCP Apps* (elementos de interfaz interactivos).
+
+<Diagram
+  caption="Un host con varios clientes MCP, cada uno conectado a un servidor que ofrece herramientas, recursos y prompts."
+  code={`flowchart LR
+  U[Usuario] --> H[Host: aplicación LLM]
+  H --> M[Modelo]
+  H --- C1[Cliente MCP 1]
+  H --- C2[Cliente MCP 2]
+  C1 -->|JSON-RPC| S1[Servidor: repositorio de código]
+  C2 -->|JSON-RPC| S2[Servidor: base de datos de políticas]`}
+/>
+
+### Mensajes de herramientas
+
+Las herramientas se descubren con **`tools/list`** y se invocan con **`tools/call`**. Cada herramienta tiene un **nombre único** en el servidor, una descripción y un **`inputSchema`** (JSON Schema de los argumentos); opcionalmente un `outputSchema` y anotaciones. La especificación recomienda que los nombres tengan entre 1 y 128 caracteres y usen solo letras ASCII, dígitos, guion bajo, guion y punto.
+
+El resultado de una llamada contiene `content` (una lista de elementos de texto, imagen, audio, enlaces o recursos embebidos), opcionalmente `structuredContent` conforme al `outputSchema`, e `isError`. Hay **dos mecanismos de error**, y la diferencia es el eje de la lección:
+
+1. **Errores de protocolo**: herramienta desconocida, petición mal formada, error del servidor. Son errores JSON-RPC estándar (por ejemplo, `-32602`), y es poco probable que el modelo pueda arreglarlos.
+2. **Errores de ejecución de la herramienta**: fallos de API, validación de entradas (una fecha en el pasado), errores de lógica de negocio. Se devuelven **dentro de un resultado normal con `isError: true`**, y la especificación indica que los clientes **deberían entregárselos al modelo** para que se autocorrija.
+
+El código siguiente reproduce cuatro intercambios contra un servidor mínimo con una herramienta de consulta de políticas: listar, una llamada correcta, un error de ejecución (tema inexistente) y un error de protocolo (herramienta desconocida).
+
+```python
+import json
+
+HERRAMIENTAS = {
+    "buscar_politica": {
+        "description": "Busca en las políticas de Nimbus y devuelve el texto del documento",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"tema": {"type": "string"}},
+            "required": ["tema"],
+        },
+    }
+}
+POLITICAS = {"devoluciones": "14 días naturales para clientes particulares."}
+
+
+def servidor(linea):
+    """Servidor MCP mínimo: tools/list y tools/call (el laboratorio lo completa)."""
+    msg = json.loads(linea)
+    if msg["method"] == "tools/list":
+        tools = [{"name": n, **meta} for n, meta in HERRAMIENTAS.items()]
+        return {"jsonrpc": "2.0", "id": msg["id"], "result": {"tools": tools}}
+    if msg["method"] == "tools/call":
+        p = msg["params"]
+        if p["name"] not in HERRAMIENTAS:
+            return {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32602, "message": f"Unknown tool: {p['name']}"}}
+        tema = p["arguments"].get("tema")
+        if tema not in POLITICAS:
+            texto, error = f"No hay una política sobre '{tema}'. Temas: {sorted(POLITICAS)}", True
+        else:
+            texto, error = POLITICAS[tema], False
+        return {"jsonrpc": "2.0", "id": msg["id"], "result": {"content": [{"type": "text", "text": texto}], "isError": error}}
+    return {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32601, "message": "Method not found"}}
+
+
+def pedir(id, method, params=None):
+    linea = json.dumps({"jsonrpc": "2.0", "id": id, "method": method, **({"params": params} if params else {})})
+    print("->", linea)
+    print("<-", json.dumps(servidor(linea), ensure_ascii=False))
+
+
+pedir(1, "tools/list")
+pedir(2, "tools/call", {"name": "buscar_politica", "arguments": {"tema": "devoluciones"}})
+pedir(3, "tools/call", {"name": "buscar_politica", "arguments": {"tema": "vacaciones"}})
+pedir(4, "tools/call", {"name": "borrar_todo", "arguments": {}})
+```
+
+Salida (determinista):
+
+```text
+-> {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+<- {"jsonrpc": "2.0", "id": 1, "result": {"tools": [{"name": "buscar_politica", "description": "Busca en las políticas de Nimbus y devuelve el texto del documento", "inputSchema": {"type": "object", "properties": {"tema": {"type": "string"}}, "required": ["tema"]}}]}}
+-> {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "buscar_politica", "arguments": {"tema": "devoluciones"}}}
+<- {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "14 días naturales para clientes particulares."}], "isError": false}}
+-> {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "buscar_politica", "arguments": {"tema": "vacaciones"}}}
+<- {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "No hay una política sobre 'vacaciones'. Temas: ['devoluciones']"}], "isError": true}}
+-> {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "borrar_todo", "arguments": {}}}
+<- {"jsonrpc": "2.0", "id": 4, "error": {"code": -32602, "message": "Unknown tool: borrar_todo"}}
+```
+
+- El **tercer** intercambio es un fallo de ejecución: el servidor responde con un resultado `isError: true` cuyo texto **orienta al modelo** («temas disponibles: devoluciones») para que reintente con un tema válido. Es el equivalente del error como observación de la lección del bucle del agente.
+- El **cuarto** es un error de protocolo: una herramienta que no existe no tiene arreglo posible por parte del modelo.
+- El protocolo en sí es sencillo. Lo difícil, como siempre, es el **diseño de las herramientas** (descripciones claras, esquemas estrictos, errores útiles) y la **seguridad**.
+
+<Snapshot date="2026-10">
+
+MCP se revisa con frecuencia y su especificación lleva versión por fecha. La versión vigente consultada el 6 de octubre de 2026 es la **2026-07-28**. En ella, las peticiones son **autocontenidas** (cada una lleva en `_meta` su versión del protocolo y las capacidades del cliente), la negociación de capacidades es **por petición** y los servidores no inician peticiones JSON-RPC. Las **revisiones anteriores** establecían una sesión con un saludo `initialize`, y existen reglas de compatibilidad para interoperar con ellas; por eso el laboratorio implementa también `initialize`. Hay además extensiones opcionales (Tasks, Skills over MCP, MCP Apps) y la lista de transportes y los detalles de autorización han cambiado entre revisiones. Antes de implementar, consulta la especificación vigente y la compatibilidad con las versiones que soporten tus clientes.
+
+</Snapshot>
+
+### Transportes
+
+La especificación define dos transportes estándar, y aclara que un transporte es un **enlace** (*binding*) que define cómo se enmarcan y entregan los mensajes, no qué significan: la semántica del protocolo es idéntica en todos.
+
+1. **stdio:** mensajes delimitados por saltos de línea a través de los flujos estándar de un **subproceso lanzado por el cliente**. Es el caso típico de un servidor local (un servidor que lee tu sistema de archivos).
+2. **Streamable HTTP:** cada mensaje es una petición HTTP `POST` a un único *endpoint* MCP; las respuestas llegan como un objeto JSON o como un flujo SSE ligado a la petición. Es el caso de un servidor remoto, compartido y escalable.
+
+También se permiten transportes personalizados que conserven el formato JSON-RPC y los patrones de mensaje.
+
+### Autorización
+
+La autorización en MCP es **opcional**. Cuando se soporta: las implementaciones con transporte **HTTP** deberían seguir la especificación (basada en **OAuth 2.1** y estándares relacionados); las que usan **stdio** no deberían seguirla y obtienen sus credenciales **del entorno**. El servidor MCP actúa como **servidor de recursos** OAuth y el cliente como cliente OAuth. Reglas con consecuencias de seguridad prácticas: el cliente incluye el parámetro `resource` (identifica al servidor MCP destinatario) en las peticiones de autorización y de token; el servidor **debe validar que el token se emitió para él como destinatario**; las respuestas `401`/`403` indican autorización necesaria o permisos insuficientes; el cliente **no debe enviar tokens ajenos** al servidor MCP, y el servidor **no debe aceptar ni retransmitir otros tokens**, la defensa contra el ataque del «adjunto confundido» (*confused deputy*).
+
+### Seguridad: lo que el protocolo no puede garantizar
+
+La especificación es explícita: MCP habilita acceso arbitrario a datos y rutas de ejecución de código, y **el protocolo no puede imponer por sí mismo** los principios de seguridad, que recaen en quien implementa. Sus principios clave:
+
+- **Consentimiento y control del usuario:** debe consentir de forma explícita el acceso a datos y las operaciones, y poder revisar y autorizar la actividad.
+- **Privacidad de datos:** los hosts deben obtener consentimiento antes de exponer datos del usuario a servidores y no transmitirlos a otros sitios sin permiso.
+- **Seguridad de herramientas:** representan **ejecución arbitraria de código**; los hosts deben obtener consentimiento explícito antes de invocar una herramienta y **las descripciones y anotaciones de las herramientas deben considerarse no fiables**, salvo que vengan de un servidor de confianza.
+
+Para herramientas, la especificación indica que **debería haber siempre una persona en el bucle con capacidad de denegar** las invocaciones; que los servidores **deben** validar todas las entradas, aplicar controles de acceso, limitar la tasa de invocaciones y sanear las salidas; y que los clientes **deberían** mostrar al usuario las entradas antes de llamar al servidor (para evitar la exfiltración accidental o maliciosa), validar los resultados antes de pasarlos al LLM, aplicar tiempos máximos y registrar el uso para auditoría. La mayor amenaza práctica es la **inyección indirecta** (visto en el módulo de RAG): un servidor o un resultado de herramienta que lleve instrucciones maliciosas.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Estándar (MCP) frente a integraciones a medida | Un servidor sirve a muchos clientes; ecosistema | Una capa más; la especificación evoluciona |
+| Servidor local (stdio) | Simple, sin red, credenciales del entorno | Un proceso por usuario; difícil de compartir |
+| Servidor remoto (Streamable HTTP) | Compartido, escalable, autorización OAuth | Operación, seguridad de red y gestión de tokens |
+| Muchas herramientas expuestas | Más capacidades | Confusión del modelo, más tokens, más superficie de ataque |
+| Confirmación humana para cada llamada | Seguridad | Fricción: conviene reservarla a acciones sensibles |
+
+## Errores comunes en producción
+
+- **Confiar en las descripciones de herramientas de servidores de terceros.** Pueden contener instrucciones dirigidas al modelo; trátalas como no fiables.
+- **Exponer demasiadas herramientas.** Cada una cuesta tokens y añade puntos de decisión ambiguos.
+- **No distinguir los dos tipos de error.** Devolver un error de protocolo cuando el modelo podría corregirse, o esconder un fallo real en un resultado «correcto».
+- **Reenviar tokens de usuario a servicios intermedios.** Rompe la validación de destinatario y abre el «adjunto confundido».
+- **Sin confirmación en acciones destructivas.** Una herramienta que borra o envía no debe ejecutarse solo por una decisión del modelo.
+- **Servidores que no validan entradas ni limitan tasa.** El modelo puede producir argumentos extraños o repetir llamadas sin fin.
+- **Fijar la versión del protocolo sin comprobar compatibilidad.** Un cliente y un servidor de revisiones distintas deben negociar o degradar con cuidado.
+- **Servidor local con permisos de usuario completos.** Un servidor de archivos o de shell debería ejecutarse en un entorno acotado.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué problema resuelve MCP?"_ Pista: estandariza cómo las aplicaciones LLM se conectan a herramientas y datos, convirtiendo N×M integraciones en N+M; inspirado en el Language Server Protocol.
+- _"Explica la arquitectura de MCP."_ Pista: hosts, clientes y servidores sobre JSON-RPC 2.0; los servidores ofrecen tools, resources y prompts; transportes stdio y Streamable HTTP.
+- _"¿Qué diferencia hay entre un error de protocolo y un error de ejecución de una herramienta?"_ Pista: el primero es un error JSON-RPC (herramienta desconocida, petición mal formada); el segundo viaja en un resultado con `isError: true` para que el modelo se corrija.
+- _"¿Qué riesgos de seguridad tiene MCP y cómo los mitigas?"_ Pista: ejecución arbitraria y descripciones no fiables; consentimiento, humano en el bucle, validación de entradas y salidas, mínimo privilegio, validación de tokens por destinatario.
+
+</Callout>
+
+<KeyTakeaways>
+
+- MCP estandariza la conexión de aplicaciones LLM con herramientas y datos: **hosts, clientes y servidores** sobre **JSON-RPC 2.0**; los servidores ofrecen **tools, resources y prompts**.
+- `tools/list` y `tools/call`; **errores de protocolo** (JSON-RPC) frente a **errores de ejecución** (`isError: true`, para que el modelo se corrija).
+- Transportes: **stdio** (subproceso local) y **Streamable HTTP** (remoto); la autorización (**OAuth 2.1**) aplica a HTTP y es opcional.
+- **El protocolo no garantiza la seguridad:** consentimiento, humano en el bucle, descripciones no fiables, validación de entradas y salidas, validación de tokens por destinatario.
+- La especificación cambia (versión 2026-07-28 vigente): consúltala antes de implementar.
+
+</KeyTakeaways>

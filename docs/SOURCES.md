@@ -36,11 +36,11 @@ Jerarquía (PLAN §8): **N1** primarias (papers, especificaciones, documentació
 ## Pendientes de verificar al usarlas
 
 - **Papers (RAG):** RAG (Lewis et al. 2020), REALM, DPR, ColBERT/ColBERTv2, RETRO, HyDE, Self-RAG, CRAG, RAPTOR, GraphRAG (Edge et al. 2024), LightRAG, RAGAS, ARES, BEIR, MTEB, SPLADE, Matryoshka Representation Learning, Late Chunking, ColPali.
-- **Papers (agentes):** ReAct, Reflexion, Generative Agents, CAMEL, MetaGPT, ChatDev, AutoGen, multi-agent debate (Du et al.), "Why Do Multi-Agent LLM Systems Fail?" (MAST), Agentic RAG survey (Singh et al., arXiv 2501.09136).
-- **Especificaciones:** Model Context Protocol, A2A Protocol, OpenTelemetry GenAI semantic conventions, JSON Schema.
+- **Papers (agentes):** Agentic RAG survey (Singh et al., arXiv 2501.09136) si se usa. El resto (ReAct, Reflexion, MAST, etc.) está verificado en F5.
+- **Especificaciones:** JSON Schema. MCP, A2A y OpenTelemetry GenAI están verificadas en F4 y F5.
 - **Documentación oficial:** Anthropic (engineering blog: Building effective agents, Contextual Retrieval, multi-agent research system, Agent Skills), OpenAI (Agents SDK, Cookbook), Google ADK, Microsoft (Agent Framework, GraphRAG), LangGraph, LlamaIndex, CrewAI, PydanticAI, smolagents, bases vectoriales, RAGAS, DeepEval, Langfuse, Arize Phoenix, Pyodide.
 - **Expertos (N2):** Lilian Weng, Chip Huyen (_AI Engineering_), Simon Willison, Hamel Husain y Shreya Shankar, Eugene Yan, Jason Liu; Cognition ("Don't Build Multi-Agents"); OWASP GenAI Security Project.
-- **Benchmarks:** MTEB, SWE-bench, GAIA, τ-bench, BFCL, Terminal-Bench.
+- **Benchmarks:** MTEB (pendiente si se cita). SWE-bench, GAIA, τ-bench, τ²-bench, WebArena, OSWorld, BFCL y Terminal-Bench están verificados en F5.
 
 ## Cómo añadir una fuente
 
@@ -122,3 +122,70 @@ Fuentes de las lecciones de RAG. Se abrió cada una al redactar la lección y se
 | [Langfuse, documentación](https://langfuse.com/docs) (Langfuse) | N1 | docs | 2026 | M09 L3 | 2026-10 |
 | [Arize Phoenix, documentación](https://arize.com/docs/phoenix) (Arize AI) | N1 | docs | 2026 | M09 L3 | 2026-10 |
 | [LangSmith, documentación](https://docs.langchain.com/langsmith/home) (LangChain) | N1 | docs | 2026 | M09 L3 | 2026-10 |
+
+## Verificadas en F5 (M10–M17)
+
+Fuentes de las lecciones de agentes. Se abrió cada una al redactar la lección (título, autores, año y las cifras o afirmaciones citadas). Las cifras de benchmarks son las de los artículos originales y se señalan como tales; los datos volátiles (versiones de protocolos y frameworks, ediciones de OWASP, estado de las convenciones de OpenTelemetry) van en bloques `<Snapshot>` con fecha. Dos fuentes secundarias se usan con cautela y así consta en las lecciones: la nota de la Cloud Security Alliance para el ranking OWASP LLM Top 10 2026 (la lista no estaba en la página de OWASP) y, para el Top 10 agéntico, la página oficial confirma fecha (9-12-2025), participación de más de cien expertos y códigos ASI01–ASI10, pero remite a la descarga para los nombres; las categorías que M17 L2 menciona proceden de resúmenes de terceros y se citan como orientación, con la advertencia de consultar el documento.
+
+| Fuente | Nivel | Tipo | Año | Usada en | Verificada |
+| ------ | ----- | ---- | --- | -------- | ---------- |
+| [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents) (Schluntz, Zhang (Anthropic)) | N2 | blog | 2024 | M10 L1, M10 L2, M10 L4, M11 L1, M11 L2, M11 L3, M12 L1, M13 L3, M14 L2, M14 L3, M17 L2, M17 L3 | 2026-10 |
+| [ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629) (Yao, Zhao, Yu, Du, Shafran, Narasimhan, Cao) | N1 | paper | 2022 | M10 L1, M10 L2, M10 L3, M11 L3 | 2026-10 |
+| [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) (Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)) | N2 | blog | 2025 | M10 L1, M10 L2, M10 L4, M11 L2, M15 L2, M15 L3 | 2026-10 |
+| [Tool use with Claude (documentación)](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) (Anthropic) | N1 | docs | 2026 | M10 L2 | 2026-10 |
+| [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366) (Shinn, Cassano, Berman, Gopinath, Narasimhan, Yao) | N1 | paper | 2023 | M10 L3 | 2026-10 |
+| [Large Language Models Cannot Self-Correct Reasoning Yet](https://arxiv.org/abs/2310.01798) (Huang, Chen, Mishra, Zheng, Yu, Song, Zhou) | N1 | paper | 2023 | M10 L3, M11 L2 | 2026-10 |
+| [Chain-of-Thought Prompting Elicits Reasoning in Large Language Models](https://arxiv.org/abs/2201.11903) (Wei et al.) | N1 | paper | 2022 | M10 L3, M11 L1 | 2026-10 |
+| [Lost in the Middle, How Language Models Use Long Contexts](https://arxiv.org/abs/2307.03172) (Liu, Lin, Hewitt, Paranjape, Bevilacqua, Petroni, Liang) | N1 | paper | 2023 | M10 L4, M15 L3 | 2026-10 |
+| [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171) (Wang, Wei, Schuurmans, Le, Chi, Narang, Chowdhery, Zhou) | N1 | paper | 2022 | M11 L1 | 2026-10 |
+| [Self-Refine: Iterative Refinement with Self-Feedback](https://arxiv.org/abs/2303.17651) (Madaan et al.) | N1 | paper | 2023 | M11 L2 | 2026-10 |
+| [ReWOO: Decoupling Reasoning from Observations for Efficient Augmented Language Models](https://arxiv.org/abs/2305.18323) (Xu, Peng, Lei, Mukherjee, Liu, Xu) | N1 | paper | 2023 | M11 L3 | 2026-10 |
+| [An LLM Compiler for Parallel Function Calling](https://arxiv.org/abs/2312.04511) (Kim, Moon, Tabrizi, Lee, Mahoney, Keutzer, Gholami) | N1 | paper | 2023 | M11 L3 | 2026-10 |
+| [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system) (Anthropic) | N2 | blog | 2025 | M12 L1, M12 L2, M12 L4, M15 L1, M15 L3, M17 L3 | 2026-10 |
+| [Don't Build Multi-Agents](https://cognition.com/blog/dont-build-multi-agents) (Walden Yan (Cognition)) | N2 | blog | 2025 | M12 L1, M12 L2, M12 L4, M15 L3 | 2026-10 |
+| [Why Do Multi-Agent LLM Systems Fail?](https://arxiv.org/abs/2503.13657) (Cemri et al.) | N1 | paper | 2025 | M12 L1, M12 L4 | 2026-10 |
+| [AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation](https://arxiv.org/abs/2308.08155) (Wu, Bansal, Zhang et al.) | N1 | paper | 2023 | M12 L2 | 2026-10 |
+| [Handoffs (OpenAI Agents SDK)](https://openai.github.io/openai-agents-python/handoffs/) (OpenAI) | N1 | docs | 2026 | M12 L2 | 2026-10 |
+| [Improving Factuality and Reasoning in Language Models through Multiagent Debate](https://arxiv.org/abs/2305.14325) (Du, Li, Torralba, Tenenbaum, Mordatch) | N1 | paper | 2023 | M12 L3 | 2026-10 |
+| [CAMEL: Communicative Agents for Mind Exploration of Large Language Model Society](https://arxiv.org/abs/2303.17760) (Li, Hammoud, Itani, Khizbullin, Ghanem) | N1 | paper | 2023 | M12 L3 | 2026-10 |
+| [MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework](https://arxiv.org/abs/2308.00352) (Hong et al.) | N1 | paper | 2023 | M12 L3 | 2026-10 |
+| [Communicative Agents for Software Development (ChatDev)](https://arxiv.org/abs/2307.07924) (Qian et al.) | N1 | paper | 2023 | M12 L3 | 2026-10 |
+| [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) (Park, O'Brien, Cai, Morris, Liang, Bernstein) | N1 | paper | 2023 | M12 L3, M15 L2 | 2026-10 |
+| [Model Context Protocol, Specification](https://modelcontextprotocol.io/specification/latest) (Model Context Protocol) | N1 | docs | 2026 | M13 L1, M13 L2, M13 L3 | 2026-10 |
+| [Model Context Protocol, Tools](https://modelcontextprotocol.io/specification/latest/server/tools) (Model Context Protocol) | N1 | docs | 2026 | M13 L1, M15 L1 | 2026-10 |
+| [Model Context Protocol, Transports](https://modelcontextprotocol.io/specification/latest/basic/transports) (Model Context Protocol) | N1 | docs | 2026 | M13 L1 | 2026-10 |
+| [Model Context Protocol, Authorization](https://modelcontextprotocol.io/specification/latest/basic/authorization) (Model Context Protocol) | N1 | docs | 2026 | M13 L1 | 2026-10 |
+| [Agent2Agent (A2A) Protocol, Specification](https://a2a-protocol.org/latest/specification/) (A2A Protocol) | N1 | docs | 2026 | M13 L2, M13 L3 | 2026-10 |
+| [Agent Skills (documentación de Claude)](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) (Anthropic) | N1 | docs | 2026 | M13 L2, M13 L3 | 2026-10 |
+| [LangGraph overview](https://docs.langchain.com/oss/python/langgraph/overview) (LangChain) | N1 | docs | 2026 | M14 L1, M14 L2 | 2026-10 |
+| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) (OpenAI) | N1 | docs | 2026 | M14 L1 | 2026-10 |
+| [Agent SDK overview (Claude)](https://code.claude.com/docs/en/agent-sdk/overview) (Anthropic) | N1 | docs | 2026 | M14 L1, M14 L3 | 2026-10 |
+| [Microsoft Agent Framework overview](https://learn.microsoft.com/en-us/agent-framework/overview/) (Microsoft) | N1 | docs | 2026 | M14 L1, M14 L2, M14 L3, M15 L1 | 2026-10 |
+| [CrewAI introduction](https://docs.crewai.com/en/introduction) (CrewAI) | N1 | docs | 2026 | M14 L1 | 2026-10 |
+| [Agent Development Kit (ADK)](https://adk.dev/) (Google) | N1 | docs | 2026 | M14 L1 | 2026-10 |
+| [LlamaIndex Workflows](https://developers.llamaindex.ai/python/workflows/) (LlamaIndex) | N1 | docs | 2026 | M14 L1 | 2026-10 |
+| [Pydantic AI overview](https://pydantic.dev/docs/ai/overview/) (Pydantic) | N1 | docs | 2026 | M14 L1 | 2026-10 |
+| [smolagents](https://huggingface.co/docs/smolagents/index) (Hugging Face) | N1 | docs | 2026 | M14 L1, M14 L3 | 2026-10 |
+| [LangGraph, persistencia (hilos, checkpoints y stores)](https://docs.langchain.com/oss/python/langgraph/persistence) (LangChain) | N1 | docs | 2026 | M15 L1, M15 L2 | 2026-10 |
+| [LangGraph, interrupciones](https://docs.langchain.com/oss/python/langgraph/interrupts) (LangChain) | N1 | docs | 2026 | M15 L1 | 2026-10 |
+| [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560) (Packer, Wooders, Lin, Fang, Patil, Stoica, Gonzalez) | N1 | paper | 2023 | M15 L2 | 2026-10 |
+| [Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory](https://arxiv.org/abs/2504.19413) (Chhikara, Khant, Aryan, Singh, Yadav) | N1 | paper | 2025 | M15 L2 | 2026-10 |
+| [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) (Anthropic) | N2 | blog | 2026 | M16 L1, M16 L2, M16 L3 | 2026-10 |
+| [τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains](https://arxiv.org/abs/2406.12045) (Yao, Shinn, Razavi, Narasimhan) | N1 | paper | 2024 | M16 L1, M16 L2, M16 L3 | 2026-10 |
+| [The Berkeley Function Calling Leaderboard (BFCL): From Tool Use to Agentic Evaluation of Large Language Models](https://gorilla.cs.berkeley.edu/leaderboard.html) (Patil et al. (UC Berkeley)) | N1 | docs | 2025 | M16 L1, M16 L3 | 2026-10 |
+| [Evaluating Large Language Models Trained on Code](https://arxiv.org/abs/2107.03374) (Chen et al. (OpenAI)) | N1 | paper | 2021 | M16 L2 | 2026-10 |
+| [τ²-Bench: Evaluating Conversational Agents in a Dual-Control Environment](https://arxiv.org/abs/2506.07982) (Barres, Dong, Ray, Si, Narasimhan) | N1 | paper | 2025 | M16 L2, M16 L3 | 2026-10 |
+| [SWE-bench: Can Language Models Resolve Real-World GitHub Issues?](https://arxiv.org/abs/2310.06770) (Jimenez, Yang, Wettig, Yao, Pei, Press, Narasimhan) | N1 | paper | 2023 | M16 L3 | 2026-10 |
+| [SWE-bench Verified](https://www.swebench.com/verified.html) (SWE-bench team, in collaboration with OpenAI) | N1 | docs | 2024 | M16 L3 | 2026-10 |
+| [GAIA: a benchmark for General AI Assistants](https://arxiv.org/abs/2311.12983) (Mialon, Fourrier, Swift, Wolf, LeCun, Scialom) | N1 | paper | 2023 | M16 L3 | 2026-10 |
+| [WebArena: A Realistic Web Environment for Building Autonomous Agents](https://arxiv.org/abs/2307.13854) (Zhou, Xu, Zhu et al.) | N1 | paper | 2023 | M16 L3 | 2026-10 |
+| [OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments](https://arxiv.org/abs/2404.07972) (Xie et al.) | N1 | paper | 2024 | M16 L3 | 2026-10 |
+| [Terminal-Bench](https://www.tbench.ai/) (Stanford University, Laude Institute) | N1 | docs | 2025 | M16 L3 | 2026-10 |
+| [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai) (OpenTelemetry project) | N1 | docs | 2026 | M16 L3, M17 L3 | 2026-10 |
+| [Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173) (Greshake, Abdelnabi, Mishra, Endres, Holz, Fritz) | N1 | paper | 2023 | M17 L1 | 2026-10 |
+| [The lethal trifecta for AI agents](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/) (Simon Willison) | N2 | blog | 2025 | M17 L1, M17 L2 | 2026-10 |
+| [Defeating Prompt Injections by Design](https://arxiv.org/abs/2503.18813) (Debenedetti, Shumailov, Fan, Hayes, Carlini et al.) | N1 | paper | 2025 | M17 L1 | 2026-10 |
+| [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) (OWASP GenAI Security Project) | N1 | docs | 2025 | M17 L1, M17 L2, M17 L3 | 2026-10 |
+| [OWASP’s 2026 LLM Top 10: Incident Data Meets Judgment](https://labs.cloudsecurityalliance.org/research/csa-research-note-owasp-llm-top10-2026-incident-weighted-202/) (Cloud Security Alliance) | N2 | blog | 2026 | M17 L1, M17 L3 | 2026-10 |
+| [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) (OWASP GenAI Security Project) | N1 | docs | 2025 | M17 L1, M17 L2 | 2026-10 |
+| [Beyond permission prompts: making Claude Code more secure and autonomous](https://www.anthropic.com/engineering/claude-code-sandboxing) (Anthropic) | N2 | blog | 2025 | M17 L2 | 2026-10 |

@@ -1,0 +1,95 @@
+lesson: m14-frameworks/03-cuando-no-usar-framework
+questions:
+  - id: m14-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué aconseja Anthropic sobre el uso de frameworks de agentes?'
+    options:
+      - 'Usar siempre el más completo.'
+      - 'Empezar usando directamente las APIs de los modelos, porque los frameworks pueden ocultar prompts y respuestas y dificultar la depuración.'
+      - 'No usar nunca ninguno.'
+      - 'Usar solo frameworks de código cerrado.'
+    answer: [1]
+    explanation: 'Muchos patrones se implementan con pocas líneas; conviene entender el código subyacente antes de delegarlo en una abstracción.'
+    ref: '#intuición-el-mejor-framework-puede-ser-ninguno'
+
+  - id: m14-03-q2
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué incluye el esqueleto de agente sin framework de la lección? Marca todo lo correcto.'
+    options:
+      - 'Errores de herramientas devueltos como observaciones.'
+      - 'Máximo de pasos y presupuesto de tokens.'
+      - 'Reintento ante fallos del modelo.'
+      - 'Una traza estructurada de cada evento.'
+    answer: [0, 1, 2, 3]
+    explanation: 'Con unas treinta líneas cubre lo esencial para producción, y todo es visible y depurable.'
+    ref: '#lo-que-cabe-en-poco-código'
+
+  - id: m14-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál de estas piezas es una razón legítima para adoptar un framework o una librería de infraestructura?'
+    options:
+      - 'Evitar escribir un bucle de treinta líneas.'
+      - 'La ejecución duradera con reanudación tras reinicios y aprobaciones humanas de larga duración.'
+      - 'Que el logotipo sea conocido.'
+      - 'Que el nombre sea corto.'
+    answer: [1]
+    explanation: 'La persistencia, la reanudación y el humano en el bucle son difíciles de reescribir correctamente; el bucle básico no.'
+    ref: '#lo-que-sí-conviene-no-reescribir'
+
+  - id: m14-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el ejemplo, ¿qué ocurre cuando la herramienta recibe el tipo de cliente «autonomo», que no existe?'
+    options:
+      - 'El programa se detiene con una excepción.'
+      - 'Se captura el error, se devuelve al modelo como observación y el bucle continúa; el modelo se corrige en el paso siguiente.'
+      - 'Se ignora el paso sin registrar nada.'
+      - 'Se reinicia el agente desde cero.'
+    answer: [1]
+    explanation: 'La traza muestra el primer paso con ok False y el segundo con ok True: el error se trata como información para el modelo.'
+    ref: '#lo-que-cabe-en-poco-código'
+
+  - id: m14-03-q5
+    type: single
+    difficulty: 3
+    prompt: '¿Cuál es el camino gradual recomendado?'
+    options:
+      - 'Framework completo desde el primer día.'
+      - 'Función o llamada única, workflow en código, agente propio y, solo si hace falta, framework o librerías por piezas.'
+      - 'Agente multiagente, luego workflow, luego función.'
+      - 'No hay camino: todo se decide al azar.'
+    answer: [1]
+    explanation: 'Cada salto se justifica por una necesidad concreta (pasos variables, reanudación, aprobaciones, concurrencia, trazas integradas).'
+    ref: '#una-ruta-gradual'
+
+  - id: m14-03-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué reglas ayudan a adoptar un framework sin quedar atado a él? Marca todas las correctas.'
+    options:
+      - 'Leer el prompt final y la traza de un caso real antes de comprometerse.'
+      - 'Envolver el framework en una interfaz propia.'
+      - 'Fijar versiones y actualizar con evaluación.'
+      - 'Escribir la lógica de negocio dentro de las clases del framework.'
+    answer: [0, 1, 2]
+    explanation: 'Mantener el dominio fuera del framework y una interfaz propia facilita el cambio. Mezclar la lógica de negocio con el framework lo dificulta.'
+    ref: '#cómo-adoptar-un-framework-sin-que-te-adopte-él-a-ti'
+
+  - id: m14-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una librería de infraestructura suelta (por ejemplo, de ejecución duradera o de trazas) puede usarse sin adoptar un framework completo.'
+    answer: [0]
+    explanation: 'Es verdadero. Adoptar por piezas reduce el acoplamiento y evita las abstracciones que no necesitas.'
+    ref: '#una-ruta-gradual'
+
+  - id: m14-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Construir un framework propio genérico casi siempre compensa porque se adapta a cualquier proyecto futuro.'
+    answer: [1]
+    explanation: 'Es falso. Es una tentación frecuente y rara vez compensa: conviene construir lo que tu producto necesita ahora y revisar la decisión periódicamente.'
+    ref: '#errores-comunes-en-producción'

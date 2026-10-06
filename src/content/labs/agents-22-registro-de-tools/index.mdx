@@ -1,0 +1,68 @@
+---
+title: Registro de herramientas con validación de argumentos
+description: Implementa un registro de herramientas que describe cada una con un JSON Schema, valida los argumentos que propone el modelo antes de ejecutar y devuelve los errores como observaciones comprensibles.
+part: agentes
+module: m10-fundamentos-agentes
+difficulty: 2
+estimatedMinutes: 35
+concepts:
+  - tool calling
+  - JSON Schema
+  - validación de argumentos
+  - errores como observaciones
+packages: []
+hints:
+  - 'Guarda en un diccionario `nombre -> (función, ToolSpec)`: los diccionarios de Python conservan el orden de inserción, que es el que pide `specs`.'
+  - 'Los obligatorios primero: recorre `schema.get("required", [])` y añade un error por cada uno que no esté en `args`. Después recorre `args` y comprueba si cada clave está declarada en `properties`.'
+  - 'Cuidado: en Python `isinstance(True, int)` es `True`. Para `integer` y `number` descarta también los booleanos con `not isinstance(v, bool)`.'
+  - 'En `call`, valida primero; solo si no hay errores ejecuta `func(**args)` dentro de un `try`. El mensaje de excepción es `f"{type(e).__name__}: {e}"`.'
+relatedLessons:
+  - m10-fundamentos-agentes/02-bucle-react-y-herramientas
+  - m00-fundamentos-llm/05-tool-calling
+---
+
+## Objetivo
+
+Cuando un modelo «llama a una herramienta», en realidad **propone** un nombre y unos argumentos en JSON. Esa propuesta puede ser incorrecta: un argumento que falta, un número escrito como texto, un valor fuera de los permitidos. Ejecutarla sin comprobar puede romper el agente, o algo peor. El **registro de herramientas** es la capa que (1) describe las herramientas al modelo con un esquema, (2) **valida** lo que el modelo propone y (3) devuelve los errores como **observación** para que el modelo pueda corregirse.
+
+## Esquema simplificado
+
+Cada herramienta lleva un esquema como el de la API de tool calling:
+
+```python
+{"type": "object",
+ "properties": {"valor": {"type": "number"}, "unidad": {"type": "string", "enum": ["km", "mi"]}},
+ "required": ["valor", "unidad"]}
+```
+
+Tipos admitidos: `string`, `integer`, `number`, `boolean`, `array` y `object`. Se admite `enum` y no se permiten argumentos no declarados.
+
+## Qué tienes que hacer
+
+Implementa la clase `ToolRegistry`:
+
+- `register(name, func, description, parameters)`: guarda la herramienta; si el nombre ya existe lanza `ValueError`.
+- `specs()`: lista de `ToolSpec` (`ragkit.agents`) en orden de registro, lo que se le presenta al modelo.
+- `validate(name, args)`: lista de errores (vacía si todo es correcto). Los mensajes son **exactos**:
+  - `herramienta desconocida: <nombre>`
+  - `falta el argumento obligatorio: <arg>`
+  - `argumento no esperado: <arg>`
+  - `el argumento '<arg>' debe ser <tipo>`
+  - `el argumento '<arg>' debe ser uno de <lista del enum>`
+
+  Primero los obligatorios que faltan (en el orden de `required`) y después, en el orden de `args`, los demás. Un booleano **no** es un `integer` ni un `number`.
+- `call(name, args)`: valida y ejecuta con `func(**args)`. Con errores de validación devuelve `{"ok": False, "error": "; ".join(errores)}`; si la función lanza una excepción, `{"ok": False, "error": "<Tipo>: <mensaje>"}`; si todo va bien, `{"ok": True, "result": valor}`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+registro.call("sumar", {"a": 2, "b": 3})   # {'ok': True, 'result': 5}
+registro.call("sumar", {"a": "2"})
+# {'ok': False, 'error': "falta el argumento obligatorio: b; el argumento 'a' debe ser integer"}
+```
+
+<Callout type="nota" title="Los errores son para el modelo">
+
+El mensaje de error no es para el programador: es lo que el modelo leerá en la siguiente vuelta del bucle. Un mensaje concreto («el argumento 'a' debe ser integer») permite que el agente se corrija solo; «Error 500» no.
+
+</Callout>

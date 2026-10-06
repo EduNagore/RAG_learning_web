@@ -1,0 +1,206 @@
+---
+title: Criterios para elegir un framework de agentes
+description: Un método para decidir con requisitos explícitos (control del flujo, persistencia, arranque, acoplamiento, multiagente), una matriz ponderada con análisis de sensibilidad para no engañarse con puntuaciones, y una lista de pruebas rápidas para verificar lo que dice la documentación.
+module: m14-frameworks
+order: 2
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Traducir las necesidades de un proyecto en criterios ponderados y puntuar enfoques con una matriz de decisión.
+  - Aplicar un análisis de sensibilidad para saber si el ganador es robusto o depende de un peso.
+  - Diseñar pruebas rápidas de verificación (spikes) para los criterios que la documentación no aclara.
+  - Planificar la portabilidad (qué capas separar para poder cambiar de framework).
+prerequisites:
+  - m14-frameworks/01-panorama-de-frameworks
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: Microsoft Agent Framework overview
+    url: https://learn.microsoft.com/en-us/agent-framework/overview/
+    type: docs
+    authors: Microsoft
+    year: 2026
+  - title: LangGraph overview
+    url: https://docs.langchain.com/oss/python/langgraph/overview
+    type: docs
+    authors: LangChain
+    year: 2026
+---
+
+## Intuición: la decisión es de requisitos, no de preferencias
+
+«¿Qué framework es mejor?» no tiene respuesta: depende de lo que necesites. Un prototipo de una semana, un proceso de larga duración con aprobaciones humanas, una plataforma que quiere permitir a otros equipos construir agentes y un sistema con veinte agentes cooperando tienen necesidades muy distintas. La decisión sensata empieza por **escribir los requisitos**, ponderarlos y **comprobar la robustez** de la conclusión, no por leer comparativas.
+
+Esta lección propone un método en cuatro pasos: **criterios**, **puntuación ponderada**, **sensibilidad** y **verificación con pruebas rápidas**.
+
+## Cómo funciona
+
+### Paso 1: criterios que importan
+
+Los criterios que suelen decidir son, de más a menos «técnicos»:
+
+| Criterio | Pregunta clave |
+| --- | --- |
+| **Control del flujo** | ¿Necesito decidir yo los pasos (grafo, reglas) o dejo que el modelo dirija? |
+| **Persistencia y reanudación** | ¿El proceso dura minutos o días? ¿Debe sobrevivir a reinicios y esperar aprobaciones? |
+| **Humano en el bucle** | ¿Hay acciones que exigen aprobación, pausas o intervención? |
+| **Multiagente** | ¿Hay varios agentes con roles o traspasos? ¿De qué topología? |
+| **Modelos y proveedores** | ¿Debo poder cambiar de proveedor? ¿Uso modelos locales? |
+| **Protocolos** | ¿Necesito MCP, A2A, skills? |
+| **Observabilidad y evaluación** | ¿Qué trazas ofrece? ¿Puedo exportarlas a mi sistema? |
+| **Lenguaje y ecosistema** | ¿Python, TypeScript, .NET, Java, Go? ¿Qué equipo lo mantendrá? |
+| **Rapidez de arranque** | ¿Cuánto tarda un prototipo útil? |
+| **Acoplamiento y portabilidad** | ¿Cuánto cuesta migrar si el framework cambia o desaparece? |
+| **Madurez y soporte** | ¿Estabilidad de la API, ritmo de cambios, comunidad, licencia? |
+| **Seguridad y despliegue** | ¿Ejecución aislada, permisos, dónde y cómo se despliega? |
+
+No hace falta usar todos: elige los **cinco o seis** que de verdad condicionan tu caso y descarta el resto.
+
+### Paso 2: una matriz ponderada
+
+Se asigna a cada criterio un **peso** según el proyecto (por ejemplo, de 1 a 5) y a cada opción una **puntuación** por criterio; la nota de una opción es la media ponderada. El código siguiente compara cuatro **enfoques genéricos** (no productos) con **puntuaciones ilustrativas inventadas para el ejemplo**, y cuatro perfiles de equipo con pesos distintos. Su finalidad es mostrar cómo **cambia el ganador con los requisitos** y cómo medir la **sensibilidad**.
+
+```python
+# Puntuaciones ILUSTRATIVAS (1 a 5) de cuatro enfoques genéricos; no son mediciones de ningún producto.
+CRITERIOS = ("control del flujo", "persistencia y reanudación", "rapidez de arranque", "bajo acoplamiento", "multiagente")
+ENFOQUES = {
+    "grafo explícito":        (5, 5, 2, 2, 3),
+    "primitivas ligeras":     (3, 3, 5, 3, 3),
+    "roles y equipos":        (3, 2, 4, 2, 5),
+    "bucle propio (sin framework)": (4, 2, 3, 5, 2),
+}
+EQUIPOS = {
+    "prototipo de una semana": (1, 1, 5, 2, 1),
+    "proceso largo con aprobaciones": (4, 5, 1, 2, 2),
+    "equipo con muchos agentes": (1, 2, 2, 1, 5),
+    "plataforma que no quiere atarse": (3, 3, 1, 5, 2),
+}
+
+
+def puntuar(pesos):
+    total = sum(pesos)
+    return {n: round(sum(p * s for p, s in zip(pesos, notas)) / total, 2) for n, notas in ENFOQUES.items()}
+
+
+for equipo, pesos in EQUIPOS.items():
+    resultado = puntuar(pesos)
+    ganador = max(resultado, key=resultado.get)
+    margen = sorted(resultado.values(), reverse=True)
+    print(f"{equipo:<33} gana «{ganador}» ({margen[0]}) frente a {margen[1]} del segundo")
+
+
+def robustez(pesos):
+    """Cuántas de las 10 perturbaciones de un peso (±1, mínimo 1) cambian al ganador."""
+    base = max(puntuar(pesos), key=puntuar(pesos).get)
+    cambios = 0
+    for i in range(len(pesos)):
+        for delta in (-1, 1):
+            nuevos = list(pesos)
+            nuevos[i] = max(1, nuevos[i] + delta)
+            resultado = puntuar(nuevos)
+            cambios += max(resultado, key=resultado.get) != base
+    return cambios
+
+
+print()
+for equipo, pesos in EQUIPOS.items():
+    print(f"{equipo:<33} el ganador cambia en {robustez(pesos)} de 10 perturbaciones de un peso")
+```
+
+Salida (determinista):
+
+```text
+prototipo de una semana           gana «primitivas ligeras» (4.0) frente a 3.4 del segundo
+proceso largo con aprobaciones    gana «grafo explícito» (4.07) frente a 3.14 del segundo
+equipo con muchos agentes         gana «roles y equipos» (3.82) frente a 3.36 del segundo
+plataforma que no quiere atarse   gana «bucle propio (sin framework)» (3.57) frente a 3.43 del segundo
+
+prototipo de una semana           el ganador cambia en 0 de 10 perturbaciones de un peso
+proceso largo con aprobaciones    el ganador cambia en 0 de 10 perturbaciones de un peso
+equipo con muchos agentes         el ganador cambia en 0 de 10 perturbaciones de un peso
+plataforma que no quiere atarse   el ganador cambia en 2 de 10 perturbaciones de un peso
+```
+
+- **El ganador depende del perfil:** con los mismos enfoques y puntuaciones, cada equipo obtiene un resultado distinto. No existe «el mejor».
+- **El margen importa tanto como el ganador:** en el último perfil gana el bucle propio por **0,14 puntos** (3,57 frente a 3,43), y bastan dos pequeñas variaciones de un peso para que cambie. Una conclusión así es **frágil**: no la tomes como decisión, tómala como señal de que hace falta más información (probar, reducir incertidumbre sobre los criterios dominantes).
+- **Las puntuaciones son el punto débil de cualquier matriz:** son subjetivas y, si te las inventas para justificar una preferencia, la matriz solo la pone en números. Por eso el paso 4 consiste en **sustituir opiniones por pruebas** en los criterios que más pesan.
+
+Un consejo práctico para fijar los pesos: reparte el equipo en una sesión corta una lista de criterios y pídele que **ordene** por importancia y justifique los dos primeros y los dos últimos. Los desacuerdos sobre los pesos son información valiosa: suelen esconder suposiciones distintas sobre el futuro del proyecto (¿lo usarán otros equipos?, ¿durará años?, ¿habrá cambios de proveedor?). Resolverlos antes de puntuar evita discusiones tardías sobre «el framework» que en realidad son discusiones sobre los requisitos. Y si dos criterios te parecen igual de importantes pero se contradicen (arranque rápido frente a bajo acoplamiento), anota expresamente la decisión de prioridad: te servirá cuando cambien las circunstancias.
+
+### Paso 3: sensibilidad
+
+Antes de decidir, comprueba dos cosas: **¿cuánto se separan los dos primeros?** (si la diferencia es menor que el error razonable de tus puntuaciones, es un empate) y **¿qué criterio, si cambiara su peso o su puntuación, cambiaría el resultado?** Ese criterio es el que merece una prueba.
+
+### Paso 4: verificar con pruebas rápidas (*spikes*)
+
+Un *spike* es un prototipo acotado (medio día a dos días) que responde **una pregunta** de la lista de criterios con tu caso real. Ejemplos:
+
+- **Reanudación:** ejecutar un agente que espera una aprobación, **reiniciar el proceso** y comprobar que continúa donde estaba.
+- **Control:** reproducir un flujo de tres ramas con reintentos y verificar que puedes **ver y cambiar** los prompts y el orden de ejecución.
+- **Trazas:** ejecutar una tarea de diez pasos y comprobar que **exportas** las trazas a tu herramienta de observabilidad con los campos que necesitas.
+- **Proveedores:** cambiar el modelo por otro de otro proveedor y medir qué se rompe.
+- **Protocolos:** conectar un servidor MCP de tu organización y comprobar la gestión de errores y de permisos.
+- **Portabilidad:** reescribir el mismo agente (el bucle y dos herramientas) en otro framework y medir **cuánto código es específico** del primero.
+
+Registra los resultados con la fecha y la versión: serán tu evidencia, y sirven de base para revisar la decisión.
+
+### Diseñar para poder cambiar
+
+Dado el ritmo de cambio del ecosistema, conviene que cambiar de framework sea una **tarea de días y no de meses**. Estrategias:
+
+- **Separa el dominio de la orquestación:** las herramientas (funciones puras con esquema), los prompts versionados, los esquemas de datos y el conjunto de evaluación **no deben depender** del framework.
+- **Envuelve lo específico:** una capa fina («puertos y adaptadores») entre tu lógica y el framework para el bucle, la persistencia y las trazas.
+- **Estándares en las fronteras:** MCP para las herramientas, OpenTelemetry para las trazas, JSON Schema para los esquemas: portables entre frameworks.
+- **Fija versiones y lee los cambios:** actualiza de forma deliberada, con la evaluación como red de seguridad.
+- **Evalúa fuera del framework:** tu conjunto de pruebas debe poder ejecutarse contra cualquier implementación del agente.
+
+<Snapshot date="2026-10">
+
+Los criterios de esta lección son estables; lo que cambia es **cómo puntúa cada herramienta** en ellos, y lo hace con rapidez (versiones nuevas, fusiones de proyectos, cambios de licencia, nuevas integraciones de protocolos). Cualquier puntuación que hagas es válida **en una fecha y para una versión**: guárdala con ambas y revísala cuando se cumpla el plazo de la decisión (por ejemplo, cada seis meses) o cuando cambie un requisito.
+
+</Snapshot>
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Matriz ponderada | Explicita requisitos y supuestos | Puntuaciones subjetivas; falsa precisión |
+| Análisis de sensibilidad | Detecta decisiones frágiles | Requiere decidir qué perturbar |
+| Spikes de verificación | Evidencia con tu caso real | Cuestan días; hay que acotarlos |
+| Capa de portabilidad | Facilita cambiar de framework | Código extra que mantener |
+| Elegir pronto y no revisar | Menos fricción | Deuda si el ecosistema o los requisitos cambian |
+
+## Errores comunes en producción
+
+- **Puntuar para justificar una preferencia previa.** La matriz solo pone números a una decisión ya tomada.
+- **Ignorar el margen.** Un 3,57 frente a 3,43 no es una victoria; es un empate técnico que pide más información.
+- **Decidir sin probar los criterios críticos.** La documentación dice lo que el framework hace en el caso feliz, no cómo se comporta con tu carga y tus fallos.
+- **Elegir por el lenguaje o por quien lo conoce, sin mirar los requisitos.** Puede ser un criterio legítimo, pero conviene que sea explícito.
+- **No guardar la fecha ni la versión de la decisión.** Dentro de un año nadie sabrá por qué se eligió.
+- **Mezclar lógica de negocio con el framework.** Cambiar de herramienta se convierte en una reescritura.
+- **No definir una prueba de evaluación independiente del framework.** Sin ella, no puedes comparar implementaciones.
+- **Olvidar el coste de salida.** Pregunta de antemano cuánto cuesta dejar el framework.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo eligiríais un framework de agentes para este proyecto?"_ Pista: requisitos ponderados (control, persistencia, humano en el bucle, multiagente, proveedores, protocolos, observabilidad, equipo), matriz con sensibilidad y spikes para los criterios dominantes.
+- _"¿Cómo sabes si tu decisión es robusta?"_ Pista: análisis de sensibilidad (perturbar pesos y puntuaciones) y margen entre los dos primeros.
+- _"¿Cómo reduces el riesgo de quedar atado a un framework?"_ Pista: separar dominio (herramientas, prompts, esquemas, evaluación) de la orquestación, estándares en las fronteras (MCP, OpenTelemetry), versiones fijadas y capa de adaptación.
+- _"¿Qué pruebas harías antes de comprometerte?"_ Pista: reanudación tras reinicio, control y visibilidad de prompts, exportación de trazas, cambio de proveedor y portabilidad del mismo agente a otro framework.
+
+</Callout>
+
+<KeyTakeaways>
+
+- La elección es de **requisitos**: elige cinco o seis criterios que condicionen tu caso, pondéralos y puntúa enfoques con una matriz.
+- El **ganador cambia con el perfil** del equipo; y un margen pequeño (0,14 en el ejemplo, frágil ante 2 de 10 perturbaciones) significa **empate técnico**, no victoria.
+- Sustituye opiniones por **pruebas rápidas** en los criterios dominantes (reanudación, control, trazas, proveedores, protocolos, portabilidad).
+- **Diseña para poder cambiar:** separa dominio y orquestación, usa estándares en las fronteras, fija versiones y evalúa fuera del framework.
+- Guarda la **fecha y la versión** de la decisión y revísala periódicamente.
+
+</KeyTakeaways>

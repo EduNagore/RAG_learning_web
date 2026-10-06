@@ -1,0 +1,99 @@
+lesson: m14-frameworks/02-criterios-de-eleccion
+questions:
+  - id: m14-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Por dónde debe empezar la elección de un framework de agentes?'
+    options:
+      - 'Por el que tenga más estrellas en GitHub.'
+      - 'Por escribir y ponderar los requisitos del proyecto.'
+      - 'Por el último anunciado.'
+      - 'Por el que use el modelo más grande.'
+    answer: [1]
+    explanation: 'La decisión es de requisitos: control del flujo, persistencia, humano en el bucle, multiagente, proveedores, protocolos, observabilidad, equipo y portabilidad.'
+    ref: '#intuición-la-decisión-es-de-requisitos-no-de-preferencias'
+
+  - id: m14-02-q2
+    type: code-output
+    difficulty: 2
+    prompt: 'Con pesos (4, 1) y puntuaciones (5, 2) para dos criterios, ¿cuál es la nota ponderada?'
+    code: |-
+      pesos = (4, 1)
+      notas = (5, 2)
+      print(round(sum(p * n for p, n in zip(pesos, notas)) / sum(pesos), 2))
+    options:
+      - '3.5'
+      - '4.4'
+      - '3.0'
+      - '22.0'
+    answer: [1]
+    explanation: 'La media ponderada es (4·5 + 1·2) / (4 + 1) = 22 / 5 = 4,4: el criterio con más peso domina el resultado.'
+    ref: '#paso-2-una-matriz-ponderada'
+
+  - id: m14-02-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el ejemplo, la plataforma que no quiere atarse eligió el bucle propio por 3,57 frente a 3,43, y el ganador cambiaba en 2 de 10 perturbaciones. ¿Cómo se interpreta?'
+    options:
+      - 'Es una victoria clara del bucle propio.'
+      - 'Es un empate técnico y una decisión frágil: hace falta más información o una prueba antes de decidir.'
+      - 'Que las matrices ponderadas no sirven nunca.'
+      - 'Que hay un error de cálculo.'
+    answer: [1]
+    explanation: 'Un margen pequeño y sensible a los pesos no sustenta una decisión. Se deben probar los criterios dominantes en lugar de apoyarse en puntuaciones subjetivas.'
+    ref: '#paso-2-una-matriz-ponderada'
+
+  - id: m14-02-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué es un spike en este contexto?'
+    options:
+      - 'Un tipo de gráfico de Mermaid.'
+      - 'Un prototipo acotado que responde una pregunta concreta de la lista de criterios con el caso real.'
+      - 'Un fallo del framework.'
+      - 'Un modelo de lenguaje pequeño.'
+    answer: [1]
+    explanation: 'Sirve para sustituir opiniones por evidencia, por ejemplo comprobando que un agente reanuda tras un reinicio.'
+    ref: '#paso-4-verificar-con-pruebas-rápidas-spikes'
+
+  - id: m14-02-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué estrategias facilitan cambiar de framework en el futuro? Marca todas las correctas.'
+    options:
+      - 'Mantener herramientas, prompts versionados, esquemas y evaluación independientes del framework.'
+      - 'Usar estándares en las fronteras (MCP, OpenTelemetry, JSON Schema).'
+      - 'Fijar versiones y actualizar de forma deliberada con la evaluación como red de seguridad.'
+      - 'Mezclar la lógica de negocio con las clases del framework para ir más rápido.'
+    answer: [0, 1, 2]
+    explanation: 'Separar dominio y orquestación y usar estándares portables convierte el cambio en una tarea de días. Mezclar la lógica con el framework la convierte en una reescritura.'
+    ref: '#diseñar-para-poder-cambiar'
+
+  - id: m14-02-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué ocurre si inventas las puntuaciones de la matriz para justificar una preferencia previa?'
+    options:
+      - 'La matriz se vuelve más precisa.'
+      - 'La matriz solo pone en números la preferencia, sin aportar evidencia.'
+      - 'El análisis de sensibilidad lo corrige automáticamente.'
+      - 'No tiene ninguna consecuencia.'
+    answer: [1]
+    explanation: 'Las puntuaciones son el punto débil de cualquier matriz. Por eso los criterios dominantes deben verificarse con pruebas rápidas.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m14-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una puntuación de un framework es válida para siempre, así que basta con hacerla una vez.'
+    answer: [1]
+    explanation: 'Es falso. Es válida para una fecha y una versión; conviene guardarlas y revisar la decisión de forma periódica o cuando cambie un requisito.'
+    ref: '#paso-3-sensibilidad'
+
+  - id: m14-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una prueba rápida de reanudación consiste en ejecutar un agente que espera una aprobación, reiniciar el proceso y comprobar que continúa donde estaba.'
+    answer: [0]
+    explanation: 'Es verdadero. Verifica directamente la persistencia y la ejecución duradera, algo que la documentación suele describir solo en el caso feliz.'
+    ref: '#paso-4-verificar-con-pruebas-rápidas-spikes'

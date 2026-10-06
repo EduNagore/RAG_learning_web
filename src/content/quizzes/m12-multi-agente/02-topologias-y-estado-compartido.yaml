@@ -1,0 +1,98 @@
+lesson: m12-multi-agente/02-topologias-y-estado-compartido
+questions:
+  - id: m12-02-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué distingue a un handoff de la delegación de un supervisor?'
+    options:
+      - 'En un handoff el agente cede el control de la conversación al otro; el supervisor conserva el control y recoge los resultados.'
+      - 'En un handoff no interviene ningún agente.'
+      - 'El supervisor nunca delega.'
+      - 'No hay ninguna diferencia.'
+    answer: [0]
+    explanation: 'El handoff traspasa la conversación (típico del triaje). El supervisor delega partes y combina las respuestas.'
+    ref: '#handoffs-traspasos'
+
+  - id: m12-02-q2
+    type: single
+    difficulty: 2
+    prompt: 'Según la documentación del SDK de agentes de OpenAI, ¿cómo ve un modelo un handoff?'
+    options:
+      - 'Como una herramienta (por ejemplo, transfer_to_refund_agent).'
+      - 'Como un mensaje del sistema oculto.'
+      - 'Como un archivo de configuración.'
+      - 'No lo ve: es transparente.'
+    answer: [0]
+    explanation: 'Los handoffs se representan como herramientas para el LLM. Un filtro de entrada controla qué historial ve el agente receptor.'
+    ref: '#handoffs-traspasos'
+
+  - id: m12-02-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es el principal riesgo de una red entre pares sin reglas de turno?'
+    options:
+      - 'Que los agentes nunca hablen.'
+      - 'Que las conversaciones divaguen y no converjan, con canales que crecen como n(n−1)/2.'
+      - 'Que el supervisor falle.'
+      - 'Que no se puedan usar herramientas.'
+    answer: [1]
+    explanation: 'Sin coordinador, el comportamiento es difícil de predecir y de acotar. Hacen falta reglas de turno y de parada estrictas.'
+    ref: '#red-entre-pares-peer-to-peer'
+
+  - id: m12-02-q4
+    type: code-output
+    difficulty: 2
+    prompt: 'Con el modelo de la lección, ¿cuántos mensajes genera una red entre pares de 4 agentes en 2 rondas?'
+    code: |-
+      k, rondas = 4, 2
+      print(rondas * k * (k - 1))
+    options:
+      - '8'
+      - '12'
+      - '24'
+      - '16'
+    answer: [2]
+    explanation: 'Cada ronda, cada agente emite a los otros 3: 4 · 3 = 12 mensajes por ronda, 24 en dos rondas.'
+    ref: '#un-cálculo-mensajes-por-topología-y-tokens-por-tipo-de-estado'
+
+  - id: m12-02-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el cálculo, leer el estado compartido completo costó 22 200 tokens frente a 6 000 con paso de mensajes. ¿Qué compromiso refleja?'
+    options:
+      - 'Que el paso de mensajes siempre es mejor.'
+      - 'Que el estado compartido da más contexto y menos malentendidos pero cuesta más y expone más datos; el paso de mensajes es barato pero exige mensajes completos.'
+      - 'Que el estado compartido no cuesta tokens.'
+      - 'Que ambos cuestan lo mismo.'
+    answer: [1]
+    explanation: 'Es el compromiso central. En la práctica se usa un estado estructurado (campos concretos) o resúmenes para los agentes que no necesitan los detalles.'
+    ref: '#estado-compartido-o-paso-de-mensajes'
+
+  - id: m12-02-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué protecciones conviene aplicar a cualquier topología multiagente? Marca todas las correctas.'
+    options:
+      - 'Máximo de turnos y de mensajes.'
+      - 'Detección de bucles (mismo agente o traspaso repetido sin cambio de estado).'
+      - 'Validación del nombre de agente elegido por el supervisor.'
+      - 'Dar a todos los agentes todos los permisos para que no se bloqueen.'
+    answer: [0, 1, 2]
+    explanation: 'Los límites de turnos, la detección de bucles y la validación de nombres son protecciones básicas. Cada agente debe tener solo los permisos que necesita.'
+    ref: '#cómo-elegir-y-cómo-controlar'
+
+  - id: m12-02-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una pizarra (blackboard) necesita reglas explícitas de parada, porque sin coordinador central nadie decide cuándo se ha terminado.'
+    answer: [0]
+    explanation: 'Es verdadero. Se usan criterios como consenso, solución completa o quiescencia, más un tope de rondas.'
+    ref: '#pizarra-blackboard'
+
+  - id: m12-02-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'En un handoff conviene traspasar siempre el historial completo al agente receptor.'
+    answer: [1]
+    explanation: 'Es falso. Traspasarlo todo gasta tokens y puede filtrar datos; traspasar nada deja al receptor a ciegas. Se filtra qué contexto recibe.'
+    ref: '#errores-comunes-en-producción'

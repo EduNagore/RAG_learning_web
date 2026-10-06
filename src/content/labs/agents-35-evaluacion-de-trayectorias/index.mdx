@@ -1,0 +1,48 @@
+---
+title: Evaluación de agentes, pass@k, pass^k y trayectorias
+description: Implementa las métricas de fiabilidad pass@k y pass^k a partir de varios intentos por tarea y una función que puntúa la trayectoria de llamadas a herramientas de un agente frente a la esperada.
+part: agentes
+module: m16-evaluacion-agentes
+difficulty: 3
+estimatedMinutes: 40
+concepts:
+  - pass@k
+  - pass^k
+  - evaluación de trayectorias
+  - fiabilidad
+packages: []
+hints:
+  - 'Usa `math.comb`. Para `pass_at_k`, si `n - c < k` devuelve `1.0` antes de dividir; si no, `1 - comb(n - c, k) / comb(n, k)`.'
+  - '`pass_hat_k` es `comb(c, k) / comb(n, k)`; `math.comb(c, k)` devuelve 0 si `c < k`, así que no necesita caso especial.'
+  - 'En `aggregate`, para cada tarea `n = len(trials)` y `c = sum(trials)`; suma las tres métricas y divide entre el número de tareas.'
+  - 'En `grade_trajectory`, recorre `expected` en orden y, para cada una, busca el primer índice de `steps` que no esté usado y cumpla. Guarda los índices; `in_order` es `indices == sorted(indices)`.'
+relatedLessons:
+  - m16-evaluacion-agentes/02-fiabilidad-pass-k-y-trayectorias
+---
+
+## Objetivo
+
+Un agente no se evalúa con una sola ejecución: es no determinista y la misma tarea puede salir bien una vez y mal la siguiente. Tampoco basta con mirar el resultado final: dos agentes pueden llegar al mismo resultado con trayectorias muy distintas (una limpia y otra con diez llamadas inútiles, o una que ejecutó una acción peligrosa y luego la «deshizo»). Implementas las dos piezas básicas de un harness de evaluación: las métricas de **fiabilidad** sobre varios intentos y la **puntuación de una trayectoria** frente a las llamadas esperadas.
+
+## Qué tienes que hacer
+
+Completa cuatro funciones:
+
+- `pass_at_k(n, c, k)`: probabilidad de que **al menos uno** de `k` intentos acierte, dados `n` intentos con `c` éxitos. Mide **capacidad**: «¿puede hacerlo si le dejo intentarlo?».
+- `pass_hat_k(n, c, k)`: probabilidad de que **los `k` intentos acierten**. Es la métrica pass^k de τ-bench; mide **fiabilidad**: «¿lo hace siempre?». Ambas lanzan `ValueError` si `k` o `c` están fuera de rango.
+- `aggregate(runs, k)`: media de `pass@1`, `pass@k` y `pass^k` sobre todas las tareas (`runs` mapea tarea → lista de booleanos).
+- `grade_trajectory(steps, expected)`: cuántas llamadas esperadas cumple la trayectoria (`matched`), `recall`, `precision` y si se cumplieron en el orden esperado (`in_order`).
+
+## Un ejemplo para comprobar a mano
+
+Con `n = 5` intentos y `c = 2` éxitos: `pass@3 = 1 - C(3,3)/C(5,3) = 0.9` (con tres intentos casi seguro que sale una vez) pero `pass^2 = C(2,2)/C(5,2) = 0.1` (que salga bien **dos veces seguidas** es improbable). Una misma tarea puede parecer resuelta o inservible según qué métrica mires.
+
+```python
+print(round(pass_at_k(5, 2, 3), 2), round(pass_hat_k(5, 2, 2), 2))   # 0.9 0.1
+```
+
+<Callout type="nota" title="Por qué importa la fiabilidad">
+
+Un agente que resuelve una tarea el 60 % de las veces tiene un `pass@1` del 60 %, pero en una conversación de soporte que debe salir bien **ocho veces seguidas** su fiabilidad es una fracción minúscula. Para un producto, la métrica relevante suele ser la de consistencia, no la de capacidad.
+
+</Callout>

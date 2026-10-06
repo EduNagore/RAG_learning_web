@@ -1,0 +1,98 @@
+lesson: m10-fundamentos-agentes/01-que-es-un-agente
+questions:
+  - id: m10-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Cuál es la diferencia esencial entre un workflow y un agente según Anthropic?'
+    options:
+      - 'Los workflows no usan herramientas y los agentes sí.'
+      - 'En un workflow el código predefinido orquesta al modelo; en un agente el modelo dirige dinámicamente su proceso y sus herramientas.'
+      - 'Los agentes siempre usan varios modelos.'
+      - 'Los workflows no usan LLM.'
+    answer: [1]
+    explanation: 'Ambos pueden usar herramientas. La diferencia es quién decide el camino en tiempo de ejecución: el código (workflow) o el modelo (agente).'
+    ref: '#intuición-quién-decide-el-siguiente-paso'
+
+  - id: m10-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué recomienda la guía de Anthropic sobre cuándo usar un agente?'
+    options:
+      - 'Usarlo siempre, porque son más potentes.'
+      - 'Empezar por soluciones simples y usar agentes solo cuando lo simple se queda corto, sobre todo en problemas abiertos de pasos impredecibles.'
+      - 'No usarlo nunca en producción.'
+      - 'Usarlo solo para clasificación de texto.'
+    answer: [1]
+    explanation: 'Los sistemas agénticos suelen intercambiar latencia y coste por mejor rendimiento; solo compensa cuando lo simple no basta.'
+    ref: '#el-espectro-de-autonomía'
+
+  - id: m10-01-q3
+    type: code-output
+    difficulty: 2
+    prompt: 'Un agente acierta cada paso con probabilidad 0,9 y la tarea necesita 5 pasos independientes. ¿Qué imprime este código?'
+    code: |-
+      p, n = 0.9, 5
+      print(f"{p**n:.1%}")
+    options:
+      - '90.0%'
+      - '59.0%'
+      - '45.0%'
+      - '99.9%'
+    answer: [1]
+    explanation: '0,9 elevado a 5 es 0,59049, es decir, un 59,0 %. Los errores se acumulan de forma multiplicativa.'
+    ref: '#el-precio-de-la-autonomía'
+
+  - id: m10-01-q4
+    type: single
+    difficulty: 3
+    prompt: 'En el ejemplo, 20 pasos con 1 000 tokens iniciales y 500 más por vuelta costaban 5,75 veces lo que 20 llamadas independientes de 1 000 tokens. ¿Por qué?'
+    options:
+      - 'Porque el agente usa un modelo más caro.'
+      - 'Porque en cada vuelta se reenvía todo el historial acumulado, así que el coste de entrada crece más rápido que linealmente.'
+      - 'Porque las herramientas cobran por llamada.'
+      - 'Porque los tokens de salida son más caros.'
+    answer: [1]
+    explanation: 'El historial crece en cada paso y se reenvía completo, lo que da un crecimiento cuadrático del coste de entrada. Por eso la gestión del contexto es central en agentes.'
+    ref: '#el-precio-de-la-autonomía'
+
+  - id: m10-01-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué condiciones favorecen usar un agente en lugar de un workflow? Marca todas las correctas.'
+    options:
+      - 'Los pasos no se pueden enumerar de antemano.'
+      - 'El valor de resolver la tarea compensa decenas de llamadas al modelo.'
+      - 'Existe una forma de verificar el resultado (tests, reglas, revisión).'
+      - 'Los pasos son siempre los mismos y están bien definidos.'
+    answer: [0, 1, 2]
+    explanation: 'La autonomía compensa en problemas abiertos, con valor suficiente y verificación posible. Si los pasos son fijos y conocidos, un workflow es más barato, rápido y previsible.'
+    ref: '#cuándo-conviene-un-agente'
+
+  - id: m10-01-q6
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un sistema que usa herramientas dentro de un flujo de pasos fijado por código sigue siendo un workflow, no un agente.'
+    answer: [0]
+    explanation: 'Es verdadero. Lo que define a un agente es que el modelo decide dinámicamente el camino, no que use herramientas.'
+    ref: '#intuición-quién-decide-el-siguiente-paso'
+
+  - id: m10-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Anthropic aconseja empezar siempre por un framework de agentes para evitar escribir el bucle a mano.'
+    answer: [1]
+    explanation: 'Es falso. Aconseja empezar usando directamente las APIs de los modelos y entender el código subyacente, porque los frameworks pueden ocultar prompts y respuestas y dificultar la depuración.'
+    ref: '#los-frameworks-con-cuidado'
+
+  - id: m10-01-q8
+    type: single
+    difficulty: 3
+    prompt: '¿Qué mecanismo mitiga mejor la acumulación de errores en agentes de muchos pasos?'
+    options:
+      - 'Aumentar la temperatura del modelo.'
+      - 'Añadir verificación, reintentos y supervisión humana en puntos clave, además de mejorar el modelo.'
+      - 'Eliminar las herramientas.'
+      - 'Quitar el límite de pasos.'
+    answer: [1]
+    explanation: 'Con una fiabilidad por paso alta pero no perfecta, la tarea completa falla con frecuencia. Los mecanismos de recuperación (verificar, reintentar, escalar) rompen la cadena de errores.'
+    ref: '#el-precio-de-la-autonomía'

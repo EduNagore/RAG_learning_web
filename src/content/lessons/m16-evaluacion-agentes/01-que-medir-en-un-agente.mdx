@@ -1,0 +1,197 @@
+---
+title: Qué medir en un agente, resultado, trayectoria y llamadas
+description: Por qué evaluar un agente es más difícil que evaluar un modelo, qué miden el éxito de la tarea, la evaluación de trayectorias y la precisión de las llamadas a herramientas, y qué tipos de graders existen.
+module: m16-evaluacion-agentes
+order: 1
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Explicar por qué un agente no se evalúa solo con su respuesta final y qué distingue el resultado en el entorno de lo que el agente dice.
+  - Distinguir éxito de tarea, evaluación de trayectoria y precisión de las llamadas a herramientas, con un ejemplo de cada una.
+  - Comparar graders basados en código, en modelo y humanos, y elegir cuál usar en cada caso.
+  - Diseñar un conjunto de tareas de evaluación para un agente, con criterios de éxito comprobables.
+prerequisites:
+  - m10-fundamentos-agentes/02-bucle-react-y-herramientas
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: Demystifying evals for AI agents
+    url: https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+    type: blog
+    authors: Anthropic
+    year: 2026
+  - title: "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains"
+    url: https://arxiv.org/abs/2406.12045
+    type: paper
+    authors: Yao, Shinn, Razavi, Narasimhan
+    year: 2024
+  - title: "The Berkeley Function Calling Leaderboard (BFCL): From Tool Use to Agentic Evaluation of Large Language Models"
+    url: https://gorilla.cs.berkeley.edu/leaderboard.html
+    type: docs
+    authors: Patil et al. (UC Berkeley)
+    year: 2025
+relatedLabs:
+  - agents-35-evaluacion-de-trayectorias
+---
+
+## Intuición: el agente dice «hecho», pero ¿lo hizo?
+
+Evaluar un modelo de lenguaje suele ser comparar una salida con una referencia. Evaluar un **agente** es otra cosa: el agente **actúa** en un entorno (llama a herramientas, modifica archivos, envía correos, reembolsa pedidos) y su mensaje final es solo una parte de lo que ha hecho. Un agente puede **decir** «reembolso emitido» sin haberlo emitido, o emitirlo **y además** borrar una cuenta por el camino. Si solo lees el mensaje final, los dos casos se ven iguales.
+
+La guía de ingeniería de Anthropic sobre evaluación de agentes lo expresa con dos definiciones que conviene tener claras: la **transcripción** (o traza, o trayectoria) es el registro completo de un intento (salidas, llamadas a herramientas, razonamiento y resultados intermedios) y el **resultado** (*outcome*) es el **estado final del entorno**, que es distinto de lo que el agente dice. Un agente de reservas puede decir «reserva hecha» y el resultado es si **existe** la reserva en la base de datos.
+
+## Cómo funciona
+
+### El vocabulario de una evaluación
+
+Las definiciones de la guía de Anthropic, que usaremos en todo el módulo:
+
+- **Tarea** (o caso de prueba): una prueba con entradas definidas y criterios de éxito.
+- **Intento** (*trial*): cada ejecución de una tarea. Se hacen **varios intentos** porque la salida del modelo varía; de ahí salen las métricas de la lección siguiente.
+- **Grader:** la lógica que puntúa algún aspecto del comportamiento del agente. Una tarea puede tener varios, cada uno con sus aserciones.
+- **Transcripción:** el registro completo de un intento.
+- **Resultado:** el estado final del entorno al terminar el intento.
+
+### Tres cosas que se pueden medir
+
+1. **Éxito de la tarea (resultado).** ¿Se consiguió el objetivo en el entorno? Es lo que más importa al usuario y lo más difícil de falsear: se comprueba **mirando el entorno**, no leyendo la respuesta (¿existe el reembolso? ¿pasan los tests? ¿está el archivo en su sitio?).
+2. **Trayectoria.** ¿Cómo se llegó? Mide si se llamó a las herramientas adecuadas, en un orden razonable, sin pasos de más ni acciones prohibidas y con un coste aceptable. Dos agentes con el mismo resultado pueden tener trayectorias muy distintas en seguridad, coste y latencia.
+3. **Precisión de las llamadas a herramientas.** ¿Eligió la herramienta correcta y con los **argumentos** correctos? Es el nivel más fino y es el que miden benchmarks como la *Berkeley Function Calling Leaderboard* (BFCL), que evalúa la capacidad de llamar a funciones con exactitud y ha evolucionado desde la comprobación con árboles de sintaxis (AST) hasta la interacción multi-turno y la evaluación agéntica.
+
+### Un experimento: lo que ve y lo que no ve cada métrica
+
+Cuatro agentes de juguete resuelven la misma tarea («reembolsa el pedido 7»), todos terminan diciendo «Hecho: reembolso emitido». El entorno aplica las llamadas y devolvemos el estado final. Medimos tres cosas: si el **resultado** es correcto (los reembolsos del entorno son exactamente `[7]`), si hubo **llamadas prohibidas** y si **buscó el pedido antes** de reembolsar.
+
+```python
+PROHIBIDAS = {"borrar_cuenta"}
+
+
+def ejecutar(pasos):
+    """Entorno de juguete: aplica las llamadas y devuelve el estado final."""
+    estado = {"reembolsos": [], "cuenta_activa": True}
+    for paso in pasos:
+        if paso["tool"] == "reembolsar":
+            estado["reembolsos"].append(paso["args"]["id"])
+        if paso["tool"] == "borrar_cuenta":
+            estado["cuenta_activa"] = False
+    return estado
+
+
+def evaluar(pasos, mensaje_final):
+    estado = ejecutar(pasos)
+    resultado_ok = estado["reembolsos"] == [7]  # el resultado REAL en el entorno
+    herramientas = [p["tool"] for p in pasos]
+    return {
+        "dice_que_acabó": "hecho" in mensaje_final.lower(),
+        "resultado_ok": resultado_ok,
+        "llamadas": len(pasos),
+        "prohibidas": sorted(PROHIBIDAS & set(herramientas)),
+        "buscó_antes": herramientas[:1] == ["buscar_pedido"],
+    }
+
+
+def llamada(tool, **args):
+    return {"tool": tool, "args": args}
+
+
+agentes = {
+    "A limpio": ([llamada("buscar_pedido", id=7), llamada("reembolsar", id=7)], "Hecho: reembolso emitido."),
+    "B con efecto colateral": (
+        [llamada("buscar_pedido", id=7), llamada("reembolsar", id=7), llamada("borrar_cuenta")],
+        "Hecho: reembolso emitido.",
+    ),
+    "C lo da por hecho": ([llamada("buscar_pedido", id=7)], "Hecho: reembolso emitido."),
+    "D sin comprobar": ([llamada("reembolsar", id=7)], "Hecho: reembolso emitido."),
+}
+
+print(f"{'agente':<24}{'dice hecho':<12}{'resultado':<11}{'llamadas':<10}{'prohibidas':<16}buscó antes")
+for nombre, (pasos, mensaje) in agentes.items():
+    r = evaluar(pasos, mensaje)
+    print(
+        f"{nombre:<24}{str(r['dice_que_acabó']):<12}{str(r['resultado_ok']):<11}{r['llamadas']:<10}"
+        f"{','.join(r['prohibidas']) or '-':<16}{r['buscó_antes']}"
+    )
+```
+
+Salida (determinista):
+
+```text
+agente                  dice hecho  resultado  llamadas  prohibidas      buscó antes
+A limpio                True        True       2         -               True
+B con efecto colateral  True        True       3         borrar_cuenta   True
+C lo da por hecho       True        False      1         -               True
+D sin comprobar         True        True       1         -               False
+```
+
+Qué enseña cada fila:
+
+- **Los cuatro «dicen hecho».** Leer el mensaje final no distingue nada.
+- **C falla de verdad** (no hay reembolso) aunque lo afirma: solo el **resultado en el entorno** lo detecta. Es el caso de un agente que alucina que ha terminado.
+- **B tiene el resultado correcto pero una acción prohibida.** Un grader de **solo resultado** lo aprobaría; la **trayectoria** revela un efecto colateral grave. Hay acciones que ningún resultado final justifica.
+- **D acierta sin buscar el pedido antes.** Hoy funciona; es un fallo latente (¿y si el pedido no existiera o ya estuviera reembolsado?). Comprobar el **proceso** detecta fragilidades que el resultado no ve.
+- **Ninguna métrica basta sola:** el resultado mide si se logró, la trayectoria mide cómo y a qué coste, y las llamadas miden la exactitud de cada paso.
+
+Cuidado con convertir esto en una regla rígida: exigir que el agente siga **exactamente** una trayectoria penaliza soluciones válidas distintas. La guía de Anthropic advierte de que los graders demasiado rígidos castigan caminos legítimos que el diseñador no anticipó; por eso se prefiere comprobar **restricciones** (no usar tal herramienta, buscar antes de actuar) y el **resultado**, más que una secuencia única.
+
+### Tipos de graders
+
+| Grader | Cómo puntúa | Fortalezas | Debilidades |
+| --- | --- | --- | --- |
+| **Código** | Coincidencia de cadenas, tests binarios, análisis estático, comprobación del estado final | Rápido, objetivo y reproducible | Frágil ante variaciones válidas |
+| **Modelo** (LLM-as-judge) | Rúbricas y aserciones en lenguaje natural | Flexible, maneja matices | No determinista y requiere calibración con humanos |
+| **Humano** | Revisión de expertos | Estándar de oro | Caro y lento |
+
+La regla práctica es **usar el grader más simple que sea fiable**: código siempre que el éxito se pueda comprobar mirando el entorno; modelo para aspectos subjetivos (tono, completitud) con una rúbrica clara y calibrada; humano para calibrar a los otros y revisar casos dudosos.
+
+### Cómo diseñar el conjunto de tareas
+
+- **Empieza con pocas tareas, pero reales.** Un conjunto de 20 a 50 tareas sacadas de fallos reales suele dar más información que mil sintéticas. (Es una pauta de práctica, no una cifra normativa.)
+- **Criterios de éxito comprobables.** Cada tarea debe tener un resultado que un grader pueda verificar sin ambigüedad: si dos expertos no se ponen de acuerdo sobre si pasó, la tarea está mal definida.
+- **Tareas positivas y negativas.** Incluye casos en los que el agente **debe abstenerse** (rechazar, escalar, pedir confirmación).
+- **Evaluaciones de capacidad y de regresión.** Las de capacidad empiezan con una tasa de éxito baja y miden hacia dónde puedes mejorar; las de regresión mantienen una tasa cercana al 100 % y detectan que no empeoras. Una evaluación saturada al 100 % ya no da señal de mejora.
+- **Lee las transcripciones.** Es la práctica que más se recomienda: revisar si los fallos son errores genuinos o soluciones válidas penalizadas por un grader demasiado estricto.
+
+### De las evaluaciones antes del despliegue a la vigilancia después
+
+Un conjunto de tareas fijo responde a «¿mejora o empeora esta versión?» antes de desplegar. No sustituye a lo que pasa en producción, donde llegan entradas que nadie previó. Por eso las dos prácticas se complementan: las **evaluaciones sin conexión** protegen cada cambio (de modelo, de prompt, de herramientas) con tareas conocidas y repetibles, y la **observabilidad en producción** (trazas de cada ejecución, muestreo para revisión humana, alertas por señales como bucles o costes anómalos) descubre los fallos nuevos. El ciclo sano es convertir cada fallo real descubierto en producción en **una tarea nueva** del conjunto de evaluación, de modo que el mismo error no pueda volver sin que alguien lo note. Un conjunto que nunca incorpora fallos reales envejece y acaba midiendo un problema que ya no es el tuyo.
+
+Y conviene vigilar un riesgo sutil: cuanto más optimizas contra un conjunto concreto de tareas, más se parece la mejora a un **sobreajuste** al evaluador. Guarda siempre un subconjunto de tareas que **no uses para iterar** y consúltalo solo para confirmar, como harías con un conjunto de test en aprendizaje automático.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Solo resultado | Simple, no penaliza caminos válidos | No detecta efectos colaterales ni fragilidad |
+| Resultado más restricciones de trayectoria | Detecta lo peligroso sin imponer un único camino | Hay que decidir y mantener las restricciones |
+| Trayectoria exacta | Reproducible | Penaliza soluciones válidas distintas |
+| Grader de modelo | Flexible | Ruido y sesgos; necesita calibración |
+| Muchos intentos por tarea | Mide variabilidad | Coste de ejecución |
+
+## Errores comunes en producción
+
+- **Creer lo que dice el agente.** Evalúa el estado del entorno, no el texto de la respuesta.
+- **Evaluar solo el resultado.** Un agente que cumple el objetivo con una acción prohibida pasa la prueba.
+- **Exigir una trayectoria única.** Penaliza caminos legítimos y empuja a sobreajustar el agente al evaluador.
+- **Un solo intento por tarea.** Con un agente no determinista, un intento afortunado no demuestra nada (siguiente lección).
+- **Graders de modelo sin calibrar.** Sin comparar con humanos no sabes si miden lo que crees.
+- **No leer las transcripciones.** Sin leerlas no sabes si el fallo es del agente o del evaluador.
+- **Tareas ambiguas.** Si el criterio de éxito es discutible, la métrica es ruido.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo evalúas un agente?"_ Pista: tareas con criterios comprobables, varios intentos, resultado en el entorno más restricciones de trayectoria, graders de código antes que de modelo, y lectura de transcripciones.
+- _"¿Por qué no basta con mirar la respuesta final?"_ Pista: el agente puede afirmar algo que no hizo, o conseguirlo con una acción indeseada; el resultado es el estado del entorno.
+- _"¿Qué diferencia hay entre evaluar el resultado y la trayectoria?"_ Pista: el resultado dice si se logró; la trayectoria dice cómo, con qué coste y con qué efectos colaterales.
+- _"¿Cuándo usarías un LLM como juez?"_ Pista: aspectos subjetivos, con rúbrica clara y calibración frente a humanos; no para lo que se pueda comprobar con código.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Un agente **actúa**: evalúa el **resultado en el entorno**, no lo que dice.
+- Tres niveles: **éxito de la tarea**, **trayectoria** (cómo, coste, efectos colaterales) y **precisión de las llamadas** a herramientas.
+- En el experimento los cuatro agentes decían «hecho»; solo el entorno reveló que C no había hecho nada, y solo la trayectoria que B había borrado una cuenta.
+- Usa el **grader más simple que sea fiable** (código, luego modelo calibrado, luego humano) y comprueba **restricciones**, no una trayectoria única.
+- **Lee las transcripciones**: distingue fallos del agente de fallos del evaluador.
+
+</KeyTakeaways>

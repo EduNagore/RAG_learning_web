@@ -1,0 +1,235 @@
+---
+title: El bucle del agente, ReAct y el diseño de herramientas
+description: Cómo funciona por dentro el bucle de un agente (mensajes, llamadas a herramientas, observaciones, condiciones de parada), por qué los errores deben volver al modelo como observaciones y cómo diseñar herramientas que el modelo use bien.
+module: m10-fundamentos-agentes
+order: 2
+level: intermedio
+estimatedMinutes: 18
+objectives:
+  - Describir paso a paso un ciclo del bucle del agente y qué mensajes se añaden al historial.
+  - Implementar un bucle con herramientas, validación de argumentos y límite de pasos.
+  - Explicar por qué un error de herramienta debe devolverse como observación en lugar de lanzarse.
+  - Aplicar principios de diseño de herramientas (interfaz agente-ordenador) para reducir errores del modelo.
+prerequisites:
+  - m10-fundamentos-agentes/01-que-es-un-agente
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: "ReAct: Synergizing Reasoning and Acting in Language Models"
+    url: https://arxiv.org/abs/2210.03629
+    type: paper
+    authors: Yao, Zhao, Yu, Du, Shafran, Narasimhan, Cao
+    year: 2022
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+  - title: Tool use with Claude (documentación)
+    url: https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+relatedLabs:
+  - agents-22-registro-de-tools
+  - agents-23-react
+---
+
+import AgentLoopStepper from '../../../components/widgets/AgentLoopStepper';
+
+## Intuición: un modelo que pide, un programa que ejecuta
+
+Un modelo de lenguaje solo produce texto. No puede consultar una base de datos ni calcular un envío. Lo que sí puede hacer es **pedir** que se ejecute una herramienta: devuelve, en lugar de una respuesta, una petición estructurada («llama a `coste_envio` con `modo="expres"` y `kilos=8`»). **Tu programa** ejecuta la función, y **devuelve el resultado al modelo** como un mensaje más. El modelo lo lee y decide: ¿ya puedo responder, o necesito otra herramienta?
+
+Ese ciclo es todo el agente. Lo que lo hace potente es que el resultado de cada acción **cambia lo que el modelo sabe** y, por tanto, lo que decide hacer después. Es la idea de ReAct (Yao et al., 2022): intercalar razonamiento y acciones para que el razonamiento refine el plan mientras las acciones reúnen información del mundo.
+
+## Cómo funciona
+
+### Anatomía de una vuelta
+
+El historial es una lista de mensajes. Una vuelta del bucle hace esto:
+
+1. **Llamar al modelo** con el historial y la descripción de las herramientas disponibles.
+2. **Mirar la respuesta.** Si no pide ninguna herramienta, es la respuesta final y el bucle termina.
+3. Si pide herramientas, **añadir al historial el mensaje del asistente** con esas peticiones (el modelo debe ver lo que pidió).
+4. **Ejecutar** cada herramienta pedida. Hay modelos que piden varias a la vez; son independientes y pueden ejecutarse en paralelo.
+5. **Añadir un mensaje de resultado** por cada ejecución, vinculado a la petición por su identificador.
+6. **Volver al paso 1.**
+
+<Diagram
+  caption="Una vuelta del bucle: el modelo propone, el programa ejecuta y el resultado vuelve como observación."
+  code={`sequenceDiagram
+  participant U as Usuario
+  participant A as Programa (bucle)
+  participant M as Modelo
+  participant T as Herramienta
+  U->>A: pregunta
+  loop hasta respuesta final o límite de pasos
+    A->>M: historial + herramientas disponibles
+    M-->>A: petición de herramienta (nombre y argumentos)
+    A->>T: ejecuta con los argumentos
+    T-->>A: resultado o error
+    A->>A: añade petición y resultado al historial
+  end
+  M-->>A: respuesta final sin peticiones
+  A-->>U: respuesta`}
+/>
+
+Recorre un bucle completo paso a paso, incluido el caso de un error recuperable y el de una herramienta caída que acaba en una guarda de bucle:
+
+<AgentLoopStepper client:visible />
+
+Hay cuatro **condiciones de parada** que debes tener siempre: el modelo responde sin pedir herramientas (éxito), se alcanza el **máximo de pasos**, se agota un **presupuesto** de tokens o de tiempo, o interviene una **persona** (confirmación o cancelación). Sin ellas, un agente que no converge consume sin límite.
+
+### Los errores son observaciones
+
+Cuando una herramienta falla (argumento inválido, recurso inexistente, excepción), tienes dos opciones: dejar que la excepción rompa el programa, o **convertirla en un texto** y devolvérselo al modelo como resultado. La segunda es casi siempre la correcta: el modelo puede **leer el error y corregirse**. Lo que no puede hacer es leer una traza de pila de tu servidor ni un «Error 500».
+
+El código siguiente implementa el bucle con una herramienta de coste de envío (con **precios ficticios**), validación mínima de argumentos y un `MockLLM` guionizado. En la primera ejecución el «modelo» se equivoca pasando los kilos como texto, recibe el error y se corrige; en la segunda insiste en un modo que no existe y el error de la herramienta también vuelve como observación.
+
+```python
+import json
+
+from ragkit.llm import Message, MockLLM
+
+PRECIOS = {"estandar": 4.95, "expres": 9.95}
+
+
+def coste_envio(modo, kilos):
+    """Herramienta: coste de un envío (precios ficticios, por paquete)."""
+    if modo not in PRECIOS:
+        raise ValueError(f"modo desconocido: {modo}")
+    return round(PRECIOS[modo] + 0.5 * max(0, kilos - 5), 2)
+
+
+HERRAMIENTAS = {
+    "coste_envio": (coste_envio, {"modo": str, "kilos": (int, float)}),
+}
+
+
+def ejecutar(nombre, args):
+    """Ejecuta una herramienta y devuelve SIEMPRE un texto: el resultado o un error legible."""
+    if nombre not in HERRAMIENTAS:
+        return f"error: la herramienta '{nombre}' no existe"
+    funcion, tipos = HERRAMIENTAS[nombre]
+    for clave, tipo in tipos.items():
+        if clave not in args:
+            return f"error: falta el argumento '{clave}'"
+        if not isinstance(args[clave], tipo):
+            return f"error: '{clave}' debe ser {getattr(tipo, '__name__', 'numérico')}"
+    try:
+        return json.dumps(funcion(**args))
+    except Exception as e:  # noqa: BLE001
+        return f"error: {type(e).__name__}: {e}"
+
+
+def agente(llm, pregunta, max_pasos=6):
+    mensajes = [Message("user", pregunta)]
+    for paso in range(1, max_pasos + 1):
+        respuesta = llm.generate(mensajes, tools=list(HERRAMIENTAS))
+        if not respuesta.tool_calls:
+            return paso, respuesta.text
+        mensajes.append(Message("assistant", respuesta.text, tool_calls=respuesta.tool_calls))
+        for llamada in respuesta.tool_calls:
+            observacion = ejecutar(llamada.name, llamada.arguments)
+            print(f"  paso {paso}: {llamada.name}({llamada.arguments}) -> {observacion}")
+            mensajes.append(Message("tool", observacion, tool_call_id=llamada.id))
+    return max_pasos, None
+
+
+# Un modelo guionizado: primero se equivoca (kilos como texto), lee el error y se corrige.
+llm = MockLLM(
+    script=[
+        {"tool": "coste_envio", "args": {"modo": "expres", "kilos": "8"}},
+        {"tool": "coste_envio", "args": {"modo": "expres", "kilos": 8}},
+        "Un envío exprés de 8 kg cuesta 11.45 euros.",
+    ]
+)
+pasos, texto = agente(llm, "¿Cuánto cuesta enviar 8 kg en exprés?")
+print(f"respuesta tras {pasos} pasos: {texto}")
+
+# Si el modelo insiste en un modo inexistente, el error también vuelve como observación.
+llm = MockLLM(script=[{"tool": "coste_envio", "args": {"modo": "dron", "kilos": 2}}, "No existe ese modo."])
+print(agente(llm, "¿Y por dron?"))
+```
+
+Salida (determinista):
+
+```text
+  paso 1: coste_envio({'modo': 'expres', 'kilos': '8'}) -> error: 'kilos' debe ser numérico
+  paso 2: coste_envio({'modo': 'expres', 'kilos': 8}) -> 11.45
+respuesta tras 3 pasos: Un envío exprés de 8 kg cuesta 11.45 euros.
+  paso 1: coste_envio({'modo': 'dron', 'kilos': 2}) -> error: ValueError: modo desconocido: dron
+(2, 'No existe ese modo.')
+```
+
+Tres cosas a notar. **Primera:** hacen falta **3 llamadas al modelo** para una pregunta que un programador resolvería con una sola función; el agente se justifica cuando el camino no se conoce de antemano. **Segunda:** el modelo del ejemplo está **guionizado**: en la realidad un modelo no siempre se corrige y puede repetir el mismo error; por eso el límite de pasos es obligatorio. **Tercera:** el error de la herramienta contiene **información útil para el modelo** («debe ser numérico», «modo desconocido: dron»), no un código críptico.
+
+### Diseñar herramientas: la interfaz agente-ordenador
+
+Anthropic recomienda dedicar a las herramientas el mismo esfuerzo que a una interfaz de usuario y lo llama **interfaz agente-ordenador** (*agent-computer interface*). Sus pautas, junto con las de su guía de ingeniería de contexto:
+
+- **Descripciones claras y completas:** qué hace la herramienta, cuándo usarla, qué devuelve, con ejemplos de uso y casos límite. El modelo elige herramientas leyendo sus descripciones.
+- **Autocontenidas, robustas ante errores y extremadamente claras sobre su uso previsto.** Evita conjuntos inflados de herramientas con funciones solapadas o puntos de decisión ambiguos: si una persona no sabe cuál usar, el modelo tampoco.
+- **A prueba de errores** (*poka-yoke*): diseña los argumentos para que sea difícil usarlos mal. Por ejemplo, exigir rutas absolutas en lugar de relativas si el directorio de trabajo cambia; usar enumeraciones en vez de texto libre.
+- **Formatos fáciles para el modelo:** evita formatos que obliguen a contar líneas o a escapar mucho; prefiere los que se parecen a texto que el modelo ha visto abundantemente.
+- **Resultados compactos:** devuelve lo necesario, no volcados enormes; cada token del resultado se reenvía en todas las vueltas siguientes.
+- **Probar con el modelo real:** ejecuta muchos ejemplos, mira dónde se equivoca y ajusta la herramienta, no solo el prompt.
+
+La validación de argumentos con un esquema (lo que construyes en el laboratorio `agents-22-registro-de-tools`) es la red de seguridad de estas pautas: aun con una buena descripción, el modelo propondrá a veces argumentos inválidos.
+
+### Razonar antes de actuar, y llamadas en paralelo
+
+En ReAct original el modelo escribe un **razonamiento** («necesito el coste y después compararlo con el plazo») antes de cada acción. Hoy muchos modelos pueden razonar internamente y ofrecen un modo de pensamiento ampliado, pero el principio práctico se mantiene: **dar al modelo espacio para planificar entre acciones** mejora las decisiones, y **conservar esos razonamientos en la traza** ayuda a depurar por qué eligió una herramienta. Si el modelo pide varias herramientas independientes en una misma respuesta (por ejemplo, consultar el plazo y el precio a la vez), ejecútalas en paralelo para ahorrar latencia, pero devuelve **todos** los resultados antes de la siguiente llamada al modelo y respeta el orden o los identificadores de las peticiones. Y si dos herramientas dependen una de otra, el modelo debe pedirlas en vueltas distintas: tu código no debe adivinar dependencias.
+
+<Snapshot date="2026-10">
+
+El formato exacto de las llamadas a herramientas (nombres de campos, cómo se vinculan las peticiones con los resultados, si se admiten varias a la vez, modos de forzar o prohibir herramientas, salidas estructuradas) varía entre proveedores y cambia con las versiones. Los conceptos de esta lección (petición, ejecución, observación) son estables; para el formato concreto consulta la documentación de uso de herramientas de tu proveedor (por ejemplo, la de Claude citada en las fuentes).
+
+</Snapshot>
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Pocas herramientas bien descritas | El modelo elige con acierto | Menos capacidades por agente |
+| Muchas herramientas | Más capacidades | Confusión, descripciones solapadas, más tokens por vuelta |
+| Devolver errores como observación | El agente se autocorrige | Puede insistir en el error: límite de pasos |
+| Validación estricta con esquema | Evita ejecuciones inválidas | Mantener los esquemas al día |
+| Herramientas en paralelo | Menos latencia | Hay que asegurar que son independientes |
+| Resultados completos | El modelo ve todo | Contexto y coste crecen |
+
+## Errores comunes en producción
+
+- **Dejar que una excepción de la herramienta rompa el bucle.** El agente muere donde podría haberse corregido.
+- **Mensajes de error opacos.** «Error 500» no ayuda al modelo; «el argumento 'fecha' debe tener formato AAAA-MM-DD» sí.
+- **No limitar los pasos.** El agente repite la misma llamada fallida una y otra vez.
+- **Olvidar el mensaje del asistente en el historial.** El modelo no ve lo que pidió y pierde la correspondencia con los resultados.
+- **Herramientas con descripciones vagas o solapadas.** El modelo elige la equivocada o duda.
+- **Resultados enormes.** Un volcado de 50 000 caracteres se reenvía en cada vuelta y degrada la atención.
+- **Ejecutar sin validar.** Un argumento inesperado puede borrar, enviar o gastar algo que no debía.
+- **Confiar en el modelo para los permisos.** Los permisos se aplican en la herramienta con la identidad del usuario, no con un «por favor».
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"Explica el bucle de un agente."_ Pista: llamar al modelo con historial y herramientas; si pide herramientas, ejecutarlas y añadir peticiones y resultados al historial; repetir hasta respuesta final, máximo de pasos, presupuesto o intervención humana.
+- _"¿Qué haces cuando falla una herramienta?"_ Pista: convertir el error en una observación legible y devolverla al modelo para que se corrija, con límite de pasos para evitar bucles.
+- _"¿Cómo diseñarías herramientas para un agente?"_ Pista: pocas, con propósito claro, descripciones con ejemplos y casos límite, argumentos a prueba de errores, resultados compactos y pruebas con el modelo real.
+- _"¿Qué es ReAct?"_ Pista: intercalar razonamiento y acciones; el razonamiento refina el plan y las acciones aportan información externa.
+
+</Callout>
+
+<KeyTakeaways>
+
+- El modelo **pide**, tu programa **ejecuta** y el resultado vuelve como **observación**: ese ciclo es el agente (patrón ReAct).
+- Tras una petición de herramientas, añade al historial **la petición y cada resultado**; el modelo necesita ver ambos.
+- Ten siempre **condiciones de parada**: respuesta final, máximo de pasos, presupuesto, intervención humana.
+- Los **errores se devuelven como observaciones legibles** para que el modelo se corrija.
+- Trata el diseño de herramientas como una **interfaz agente-ordenador**: claras, pocas, a prueba de errores, con resultados compactos y validadas con esquema.
+
+</KeyTakeaways>

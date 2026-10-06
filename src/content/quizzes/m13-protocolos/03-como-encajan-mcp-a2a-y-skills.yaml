@@ -1,0 +1,98 @@
+lesson: m13-protocolos/03-como-encajan-mcp-a2a-y-skills
+questions:
+  - id: m13-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué relación tienen MCP y A2A?'
+    options:
+      - 'Compiten: solo uno puede usarse.'
+      - 'Son complementarios: MCP conecta un agente con herramientas y datos, y A2A conecta agentes entre sí.'
+      - 'A2A reemplaza a MCP.'
+      - 'MCP es una versión antigua de A2A.'
+    answer: [1]
+    explanation: 'Resuelven problemas de capas distintas. Un agente remoto de A2A usará a su vez sus propias herramientas, quizá por MCP.'
+    ref: '#intuición-tres-capas-no-tres-competidores'
+
+  - id: m13-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué diferencia conceptual hay entre una herramienta MCP y un agente A2A?'
+    options:
+      - 'Una herramienta es una función que el modelo invoca; un agente A2A es un sistema autónomo que recibe una tarea, puede tardar o pedir más información y cuyo funcionamiento interno no se ve.'
+      - 'No hay ninguna diferencia.'
+      - 'La herramienta es siempre asíncrona y el agente siempre síncrono.'
+      - 'El agente A2A no puede devolver resultados.'
+    answer: [0]
+    explanation: 'Por eso A2A habla de tareas con ciclo de vida (incluidos estados interrumpidos) y MCP de llamadas a herramientas.'
+    ref: '#qué-resuelve-cada-capa-y-qué-no'
+
+  - id: m13-03-q3
+    type: code-output
+    difficulty: 2
+    prompt: 'Con 10 aplicaciones y 50 servicios, ¿cuántas piezas hacen falta con integraciones a medida (N×M) y con un protocolo común (N+M)?'
+    code: |-
+      aplicaciones, servicios = 10, 50
+      print(aplicaciones * servicios, aplicaciones + servicios)
+    options:
+      - '60 500'
+      - '500 60'
+      - '50 10'
+      - '500 500'
+    answer: [1]
+    explanation: 'Sin estándar, cada aplicación necesita una integración con cada servicio: 10·50 = 500. Con un protocolo, cada una se escribe una vez: 10+50 = 60.'
+    ref: '#una-regla-de-decisión-y-la-opción-ninguna'
+
+  - id: m13-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'Tu aplicación necesita convertir kilos a libras. ¿Qué mecanismo recomienda la lección?'
+    options:
+      - 'Un servidor MCP.'
+      - 'Un agente A2A dedicado.'
+      - 'Una función local: no hace falta ningún protocolo.'
+      - 'Una skill de 5 000 tokens.'
+    answer: [2]
+    explanation: 'Añadir un protocolo a una función de una sola aplicación añade un proceso, una superficie de seguridad y latencia sin beneficio.'
+    ref: '#una-regla-de-decisión-y-la-opción-ninguna'
+
+  - id: m13-03-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué fronteras de confianza aparecen al componer MCP, A2A y skills? Marca todas las correctas.'
+    options:
+      - 'Las descripciones y los resultados de herramientas MCP son datos no fiables.'
+      - 'Un agente remoto A2A es un tercero: lo que devuelve es contenido externo y lo que le envías sale de tu perímetro.'
+      - 'Una skill es código e instrucciones con los permisos del agente: hay que auditarla.'
+      - 'Todo componente que cumpla un estándar es de confianza.'
+    answer: [0, 1, 2]
+    explanation: 'Cumplir un protocolo asegura que las piezas se hablen, no que sean fiables. Cada frontera es un sitio donde puede entrar una inyección o producirse una fuga.'
+    ref: '#fronteras-de-confianza'
+
+  - id: m13-03-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Cómo debe viajar la identidad del usuario a través de las capas?'
+    options:
+      - 'Reenviando el mismo token a todos los servicios.'
+      - 'De forma explícita y limitada: tokens emitidos para cada destinatario, sin reenviar tokens ajenos, para que cada capa aplique los permisos del usuario.'
+      - 'No hace falta: el agente tiene permisos totales.'
+      - 'Dentro del prompt del modelo.'
+    answer: [1]
+    explanation: 'Reenviar un token a otros servicios rompe la validación de destinatario y abre el ataque del adjunto confundido; las capas deben aplicar los permisos del usuario, no los del agente.'
+    ref: '#fronteras-de-confianza'
+
+  - id: m13-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Un estándar de interoperabilidad garantiza que el resultado de un sistema de agentes sea correcto.'
+    answer: [1]
+    explanation: 'Es falso. Asegura que las piezas se comuniquen, no que lo hagan bien: sigue haciendo falta evaluar.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m13-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Con una sola aplicación y un solo servicio, adoptar un protocolo común puede ser solo una capa adicional sin beneficio.'
+    answer: [0]
+    explanation: 'Es verdadero. La ventaja de un estándar crece con la escala (N×M frente a N+M); a escala mínima, solo añade complejidad.'
+    ref: '#una-regla-de-decisión-y-la-opción-ninguna'

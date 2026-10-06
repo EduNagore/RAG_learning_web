@@ -1,0 +1,210 @@
+---
+title: Memoria a largo plazo (MemGPT, Mem0 y agentes generativos)
+description: Cómo dotar a un agente de memoria que persiste entre sesiones (extraer, consolidar y recuperar hechos), qué proponen MemGPT, Mem0 y los agentes generativos, qué problemas plantea (conflictos, obsolescencia, privacidad) y cómo evaluarla.
+module: m15-memoria-estado
+order: 2
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Distinguir el contexto, el estado de un hilo y la memoria a largo plazo, y los tipos de contenido que se guardan en ella.
+  - Describir las ideas de MemGPT (contexto virtual por niveles), Mem0 (extraer, consolidar y recuperar) y los agentes generativos (flujo de memoria, reflexión, planificación).
+  - Implementar una memoria con consolidación y comprobar por qué una memoria que solo añade devuelve datos obsoletos.
+  - Aplicar principios de privacidad, borrado y evaluación a la memoria de un agente.
+prerequisites:
+  - m15-memoria-estado/01-checkpointing-y-ejecucion-duradera
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: "MemGPT: Towards LLMs as Operating Systems"
+    url: https://arxiv.org/abs/2310.08560
+    type: paper
+    authors: Packer, Wooders, Lin, Fang, Patil, Stoica, Gonzalez
+    year: 2023
+  - title: "Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory"
+    url: https://arxiv.org/abs/2504.19413
+    type: paper
+    authors: Chhikara, Khant, Aryan, Singh, Yadav
+    year: 2025
+  - title: "Generative Agents: Interactive Simulacra of Human Behavior"
+    url: https://arxiv.org/abs/2304.03442
+    type: paper
+    authors: Park, O'Brien, Cai, Morris, Liang, Bernstein
+    year: 2023
+  - title: LangGraph, persistencia (hilos, checkpoints y stores)
+    url: https://docs.langchain.com/oss/python/langgraph/persistence
+    type: docs
+    authors: LangChain
+    year: 2026
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+relatedLabs:
+  - agents-30-grafo-con-checkpoints
+---
+
+## Intuición: el asistente que se acuerda de ti
+
+Un asistente que cada mañana pregunta de nuevo tu nombre, tu idioma y qué plan tienes es molesto. Uno que recuerda que te mudaste a Valencia, que prefieres respuestas breves y que cambiaste de plan el mes pasado es útil. Esa continuidad entre **sesiones** es la **memoria a largo plazo**, y es distinta de lo que viste hasta ahora:
+
+| | Qué es | Dónde vive | Duración |
+| --- | --- | --- | --- |
+| **Contexto** | Lo que el modelo ve en esta llamada | La ventana de contexto | Una llamada |
+| **Estado de un hilo** | El progreso de una tarea o conversación (checkpoints) | El almacén de checkpoints | Mientras dure el hilo |
+| **Memoria a largo plazo** | Hechos, preferencias y experiencias reutilizables entre hilos | Un *store*: base de datos, vectores, ficheros | Meses o años |
+
+La memoria a largo plazo plantea tres preguntas de ingeniería: **qué guardar** (extraer lo importante), **cómo mantenerlo** (consolidar: actualizar, fusionar, olvidar) y **cómo recuperarlo** (traer solo lo relevante al contexto en cada momento).
+
+## Cómo funciona
+
+### MemGPT: contexto virtual por niveles
+
+MemGPT (Packer et al., 2023) parte del límite de las ventanas de contexto y propone la **gestión de contexto virtual**, una técnica inspirada en los **sistemas jerárquicos de memoria de los sistemas operativos**: se mueve información entre niveles de memoria (rápida y pequeña frente a lenta y grande), como la paginación del sistema operativo, de modo que el modelo parece disponer de más contexto del que cabe en su ventana. Incorpora además mecanismos de **interrupción** para gestionar el flujo de control entre el sistema y el usuario. Los autores lo evalúan en **análisis de documentos** que exceden la ventana del modelo y en **chat de varias sesiones**, donde el agente puede «recordar, reflexionar y evolucionar dinámicamente» a lo largo de interacciones prolongadas. La idea que ha perdurado: **el propio agente gestiona su memoria con herramientas** (leer, escribir y buscar en un almacén externo), como en las notas estructuradas de la lección de context engineering.
+
+### Mem0: extraer, consolidar y recuperar
+
+Mem0 (Chhikara et al., 2025) es una arquitectura centrada en la memoria que **extrae, consolida y recupera de forma dinámica la información relevante de las conversaciones en curso**, con una variante que usa **representaciones en grafo** para capturar las relaciones entre elementos. En el benchmark LOCOMO (preguntas sobre conversaciones largas: de un salto, temporales, de varios saltos y de dominio abierto), sus autores reportan una mejora relativa del 26 % en la métrica LLM-como-juez frente a OpenAI, una latencia p95 un 91 % menor y un ahorro de más del 90 % del coste en tokens frente a meter todo el historial en el contexto; la variante con grafo mejora en torno a un 2 % más. Son resultados de sus autores y de su benchmark: mide con tus datos.
+
+Los tres verbos son el patrón:
+
+1. **Extraer:** a partir de una conversación, un modelo identifica los hechos que merecen guardarse («vive en Valencia», «plan Empresa», «prefiere español»), no la transcripción.
+2. **Consolidar:** al llegar un hecho nuevo, se compara con los existentes: **añadir** si es nuevo, **actualizar** si sustituye a otro («se mudó a Valencia» reemplaza a «vive en Madrid»), **ignorar** si es redundante o **eliminar** si se retira.
+3. **Recuperar:** ante una consulta, traer al contexto los pocos recuerdos relevantes (por similitud, recencia, importancia), no todos.
+
+### Agentes generativos: flujo de memoria, reflexión y planificación
+
+Park et al. (2023), en su simulación de una población de agentes, combinan un **flujo de memoria** con el registro completo de las experiencias en lenguaje natural, una **reflexión** que sintetiza esas memorias en conclusiones de nivel superior y una **planificación** que las recupera dinámicamente para decidir la conducta. Es el origen de dos ideas muy usadas: guardar **observaciones brutas** y, aparte, **resúmenes o conclusiones** derivados de ellas, y recuperar con una mezcla de criterios (lo relevante, lo reciente, lo importante).
+
+### Un experimento: por qué consolidar
+
+El código simula cinco hechos aprendidos del usuario en seis sesiones, dos de los cuales se **actualizan** más tarde (ciudad y plan). Compara una memoria que **solo añade** con otra que **consolida por clave** (el hecho nuevo sustituye al antiguo) y cuenta cuántas de dos consultas traen un dato **obsoleto** entre los dos primeros resultados. Después compara los tokens de contexto del historial completo con los de la memoria (supuestos explícitos).
+
+```python
+from ragkit.text import tokenize
+
+# Hechos que un asistente va aprendiendo del usuario a lo largo de varias sesiones: (sesión, clave, texto)
+HECHOS = [
+    (1, "ciudad", "El usuario vive en Madrid"),
+    (1, "idioma", "Prefiere respuestas en español"),
+    (2, "plan", "Tiene el plan Básico de Nimbus"),
+    (4, "ciudad", "El usuario se ha mudado a Valencia"),
+    (6, "plan", "Ha cambiado al plan Empresa de Nimbus"),
+]
+PREGUNTAS = ["¿en qué ciudad vive el usuario?", "¿qué plan de Nimbus tiene?"]
+OBSOLETOS = {"El usuario vive en Madrid", "Tiene el plan Básico de Nimbus"}
+
+
+class MemoriaSoloAnadir:
+    """Guarda todo; no resuelve conflictos."""
+
+    def __init__(self):
+        self.items = []
+
+    def guardar(self, sesion, clave, texto):
+        self.items.append((sesion, clave, texto))
+
+    def buscar(self, pregunta, k=1):
+        q = set(tokenize(pregunta))
+        puntuados = [(len(q & set(tokenize(t))), s, t) for s, c, t in self.items]
+        return [t for p, _, t in sorted(puntuados, reverse=True)[:k] if p > 0]
+
+
+class MemoriaConsolidada(MemoriaSoloAnadir):
+    """Una entrada por clave: el hecho nuevo sustituye al antiguo."""
+
+    def guardar(self, sesion, clave, texto):
+        self.items = [i for i in self.items if i[1] != clave] + [(sesion, clave, texto)]
+
+
+for clase in (MemoriaSoloAnadir, MemoriaConsolidada):
+    memoria = clase()
+    for hecho in HECHOS:
+        memoria.guardar(*hecho)
+    contaminadas = sum(any(t in OBSOLETOS for t in memoria.buscar(p, k=2)) for p in PREGUNTAS)
+    print(f"{clase.__name__:<20} entradas: {len(memoria.items)}  consultas que traen un dato obsoleto: {contaminadas} de {len(PREGUNTAS)}")
+
+# Memoria frente a historial completo: tokens de contexto por consulta.
+turnos, tokens_turno, tokens_hecho, recuperados = 120, 150, 15, 3
+print(f"historial completo: {turnos * tokens_turno:,} tokens | memoria (top-{recuperados}): {recuperados * tokens_hecho} tokens")
+```
+
+Salida (determinista):
+
+```text
+MemoriaSoloAnadir    entradas: 5  consultas que traen un dato obsoleto: 2 de 2
+MemoriaConsolidada   entradas: 3  consultas que traen un dato obsoleto: 0 de 2
+historial completo: 18,000 tokens | memoria (top-3): 45 tokens
+```
+
+- **Sin consolidar, las dos consultas traen un dato obsoleto** junto al actual («vive en Madrid» y «se ha mudado a Valencia»). Al modelo le toca adivinar cuál manda, o responde con el dato viejo. Con la memoria consolidada, la entrada antigua desaparece (3 entradas en lugar de 5) y ninguna consulta se contamina.
+- **Consolidar por clave es la versión más simple:** en la práctica la «clave» hay que **deducirla** (a menudo con un modelo) y los hechos tienen matices: no todo conflicto se resuelve sustituyendo. Un cambio de ciudad reemplaza; un nuevo gusto («también le gusta el té») añade; una corrección («no, vive en Sevilla») anula. Por eso la consolidación es el paso delicado.
+- **La ventaja en tokens es enorme** con estos supuestos (120 turnos de 150 tokens frente a tres hechos de 15 tokens: 18 000 frente a 45), y es la lógica que hay detrás de las cifras de ahorro que reportan sistemas como Mem0. Pero un ahorro del 99 % no vale nada si el recuerdo recuperado es el equivocado: **mide la calidad de la recuperación**, no solo el coste.
+
+<Snapshot date="2026-10">
+
+El área de memoria de agentes cambia muy rápido: aparecen servicios gestionados y librerías (con variantes como memorias en grafo, memorias temporales o procedimentales), los frameworks incorporan *stores* y APIs de memoria propias y los resultados de los benchmarks (LOCOMO y otros) se actualizan con cada versión y se discuten entre grupos. Las cifras de esta lección son las que reportan los autores de cada artículo en su configuración. Antes de adoptar un producto de memoria, evalúalo con conversaciones de tu dominio y comprueba sus garantías de privacidad, borrado y exportación.
+
+</Snapshot>
+
+### Qué guardar y qué no
+
+- **Hechos estables y útiles:** preferencias, datos del perfil que el usuario ha dado, decisiones tomadas, restricciones.
+- **Experiencias y lecciones:** qué funcionó y qué falló en tareas anteriores (como las lecciones de Reflexion).
+- **Resúmenes** de conversaciones largas.
+- **No guardes** lo efímero (el resultado de una búsqueda de hoy), lo sensible sin necesidad (salud, datos financieros) ni lo que el usuario pidió no recordar. **Menos es más:** cada recuerdo es un coste de almacenamiento, un riesgo de privacidad y una oportunidad de recuperar algo equivocado.
+
+### Privacidad, control y seguridad
+
+La memoria persistente convierte a un asistente en un **almacén de datos personales**. Requisitos de diseño:
+
+- **Transparencia y control:** el usuario puede **ver, corregir y borrar** lo que se recuerda; el borrado alcanza a la copia, los índices y los resúmenes derivados.
+- **Aislamiento por usuario o inquilino:** la memoria de una persona no puede aparecer en la de otra (permisos, claves de partición).
+- **Procedencia:** guarda de dónde viene cada recuerdo (qué conversación, cuándo) para poder auditar y corregir.
+- **Retención:** caducidad por defecto de lo no esencial.
+- **Defensa frente a envenenamiento:** un documento o una conversación maliciosa pueden **inyectar «recuerdos» falsos** que influyan en sesiones futuras: trata los recuerdos extraídos de contenido externo como no fiables y no los uses para tomar acciones sensibles sin verificación.
+
+### Cómo evaluarla
+
+Una memoria se evalúa con preguntas sobre conversaciones previas: **recuperación** (¿trae el recuerdo correcto?), **actualización** (¿devuelve el dato actual tras un cambio?), **olvido** (¿no devuelve lo borrado?), **abstención** (¿sabe decir que no recuerda algo?) y **coste y latencia** frente al historial completo. Construye casos con cambios, contradicciones y borrados: son los que rompen las implementaciones ingenuas, como la de solo añadir del experimento.
+
+## Trade-offs
+
+| Estrategia | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Historial completo en contexto | Máxima información, sin lógica de memoria | Coste, *context rot* y límite de ventana |
+| Resumen continuo | Simple y barato | Pierde detalles; los errores se acumulan |
+| Memoria que solo añade | Fácil; no pierde nada | Contradicciones y datos obsoletos |
+| Memoria consolidada | Un dato vigente por tema | La consolidación puede equivocarse |
+| Memoria gestionada por el agente (MemGPT) | Flexible; el agente decide qué recordar | Coste de llamadas de gestión; errores del agente |
+| Memoria en grafo | Captura relaciones | Más complejidad y coste de construcción |
+
+## Errores comunes en producción
+
+- **Guardar transcripciones en lugar de hechos.** Crece sin control y es difícil de recuperar.
+- **No consolidar.** El agente responde con datos obsoletos o contradictorios.
+- **Recuperar demasiado.** Traer veinte recuerdos «por si acaso» vuelve a llenar el contexto.
+- **Sin borrado real.** El usuario pide olvidar algo y sigue en un índice, un resumen o una copia.
+- **Memoria compartida entre usuarios.** Una fuga de privacidad directa.
+- **Confiar en recuerdos extraídos de contenido externo.** Pueden ser inyecciones persistentes.
+- **No evaluar la actualización.** Se prueba la recuperación y nunca el cambio de un dato.
+- **Memoria sin procedencia.** No se puede auditar por qué el agente «sabe» algo.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué diferencia hay entre el estado de un hilo y la memoria a largo plazo?"_ Pista: el estado (checkpoints) sigue una tarea o conversación; la memoria guarda hechos y experiencias reutilizables entre hilos en un store.
+- _"¿Cómo diseñarías la memoria de un asistente?"_ Pista: extraer hechos, consolidar (añadir, actualizar, ignorar, eliminar), recuperar solo lo relevante, con procedencia, aislamiento por usuario, borrado y evaluación.
+- _"¿Qué propone MemGPT?"_ Pista: gestión de contexto virtual inspirada en la memoria jerárquica de un sistema operativo; el agente mueve información entre niveles mediante herramientas.
+- _"¿Qué riesgos tiene la memoria persistente?"_ Pista: datos personales, fugas entre usuarios, recuerdos obsoletos, envenenamiento por contenido externo y borrado incompleto.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Contexto**, **estado de un hilo** y **memoria a largo plazo** son capas distintas; la última guarda hechos y experiencias entre sesiones en un store.
+- El patrón es **extraer, consolidar y recuperar**; **MemGPT** propone contexto virtual por niveles gestionado por el agente, **Mem0** reporta −91 % de latencia p95 y >90 % de ahorro de tokens frente al historial completo, y los **agentes generativos** añaden reflexión.
+- **Consolidar importa:** la memoria que solo añade trajo un dato obsoleto en 2 de 2 consultas; la consolidada, en 0.
+- El ahorro de tokens no sustituye a medir la **calidad de lo recuperado**.
+- La memoria es un almacén de datos personales: **control del usuario, aislamiento, borrado real, procedencia y desconfianza** de lo que viene de contenido externo.
+
+</KeyTakeaways>

@@ -1,0 +1,62 @@
+---
+title: Servidor MCP de juguete (JSON-RPC)
+description: Implementa el núcleo de un servidor del Model Context Protocol sobre mensajes JSON-RPC 2.0 (initialize, ping, tools/list y tools/call), distinguiendo errores de protocolo de errores de ejecución de una herramienta.
+part: agentes
+module: m13-protocolos
+difficulty: 3
+estimatedMinutes: 45
+concepts:
+  - MCP
+  - JSON-RPC 2.0
+  - tools/list y tools/call
+  - errores de protocolo y de herramienta
+packages: []
+hints:
+  - 'Primero `json.loads` dentro de un `try`; si falla, devuelve el error -32700 con `id` `None`. Después comprueba que es un `dict` con `jsonrpc == "2.0"` y `method` de tipo texto; si no, -32600 con el `id` del mensaje cuando lo traiga.'
+  - 'Una notificación es un mensaje válido SIN la clave `"id"` (ojo: `"id": 0` sí es una petición). Procésala si quieres, pero devuelve `None`.'
+  - 'Para `tools/call` separa dos casos: una herramienta inexistente es un error de protocolo (-32602); un argumento obligatorio ausente o una excepción de la función son un RESULTADO con `"isError": True`.'
+  - 'Construye cada respuesta como diccionario y conviértela a texto con `json.dumps(...)` al final (usa `ensure_ascii=False` si quieres conservar los acentos).'
+relatedLessons:
+  - m13-protocolos/01-tool-calling-y-mcp
+---
+
+## Objetivo
+
+El **Model Context Protocol (MCP)** estandariza cómo una aplicación con un LLM (el *host*) se conecta a servicios que le ofrecen contexto y herramientas (los *servidores*). Por debajo es **JSON-RPC 2.0**: mensajes JSON con `method`, `params` e `id`. Vas a implementar el núcleo de un servidor: recibir una línea de texto con un mensaje, y devolver la respuesta correcta, incluidos los errores. Es lo que hay detrás de cualquier servidor MCP real, sin el transporte (stdio o HTTP), que solo mueve estas mismas líneas.
+
+## Qué tienes que hacer
+
+Completa `MCPServer.handle_line(line)`, que recibe **una línea de texto** y devuelve la respuesta como **texto JSON** (o `None` si era una notificación). El registro de herramientas (`add_tool`) ya está resuelto.
+
+**Errores de protocolo** (la respuesta lleva `"error": {"code", "message"}`):
+
+| Situación | Código | Mensaje | `id` |
+| --- | --- | --- | --- |
+| JSON inválido | -32700 | `Parse error` | `None` |
+| No es un objeto, `jsonrpc` distinto de `"2.0"` o `method` que no es texto | -32600 | `Invalid Request` | el del mensaje si lo trae; si no, `None` |
+| Método desconocido | -32601 | `Method not found: <método>` | el de la petición |
+| `tools/call` con una herramienta que no existe | -32602 | `Unknown tool: <nombre>` | el de la petición |
+
+**Métodos** (la respuesta lleva `"result"`):
+
+- `initialize`: `{"protocolVersion": <el de params>, "capabilities": {"tools": {"listChanged": false}}, "serverInfo": {"name", "version"}}`.
+- `ping`: `{}`.
+- `tools/list`: `{"tools": [{"name", "description", "inputSchema"}, ...]}` en orden de registro.
+- `tools/call`: con `params = {"name", "arguments"}`. Si va bien, `{"content": [{"type": "text", "text": str(valor)}], "isError": false}`. Si faltan argumentos obligatorios del esquema o la función lanza una excepción, **no es un error de protocolo**: se devuelve un resultado con `"isError": true` y el texto `falta el argumento obligatorio: <arg>` o `<Tipo>: <mensaje>`. Así el modelo puede leerlo y corregirse.
+
+Una **notificación** es un mensaje válido **sin `id`** (por ejemplo, `notifications/initialized`): no se responde.
+
+## Un ejemplo para comprobar a mano
+
+```python
+peticion = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "sumar", "arguments": {"a": 2, "b": 3}}}
+servidor.handle_line(json.dumps(peticion))
+# '{"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "5"}], "isError": false}}'
+```
+
+<Callout type="nota" title="Dos clases de error, dos destinatarios">
+
+Un error de protocolo (método inexistente, petición mal formada) indica un fallo del **cliente** que el modelo difícilmente puede arreglar. Un error de ejecución de una herramienta (fecha en el pasado, recurso no encontrado) es información útil **para el modelo**: por eso viaja dentro de un resultado normal con `isError`. La especificación de MCP recomienda precisamente entregar estos últimos al modelo para que se autocorrija.
+
+</Callout>

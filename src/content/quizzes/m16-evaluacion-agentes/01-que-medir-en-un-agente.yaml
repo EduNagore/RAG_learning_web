@@ -1,0 +1,95 @@
+lesson: m16-evaluacion-agentes/01-que-medir-en-un-agente
+questions:
+  - id: m16-01-q1
+    type: single
+    difficulty: 1
+    prompt: 'En la evaluación de agentes, ¿qué es el resultado (outcome)?'
+    options:
+      - 'El mensaje final que escribe el agente.'
+      - 'El estado final del entorno al terminar el intento, que es distinto de lo que el agente dice.'
+      - 'El número de herramientas llamadas.'
+      - 'La puntuación del grader de modelo.'
+    answer: [1]
+    explanation: 'El resultado se comprueba en el entorno (¿existe la reserva?, ¿pasan los tests?), no leyendo la respuesta del agente.'
+    ref: '#intuición-el-agente-dice-hecho-pero-lo-hizo'
+
+  - id: m16-01-q2
+    type: single
+    difficulty: 2
+    prompt: 'En el experimento, el agente C decía «Hecho: reembolso emitido» pero solo había buscado el pedido. ¿Qué lo detecta?'
+    options:
+      - 'Leer su mensaje final.'
+      - 'Comprobar el estado del entorno: no hay ningún reembolso.'
+      - 'Contar los caracteres de la respuesta.'
+      - 'Ninguna métrica puede detectarlo.'
+    answer: [1]
+    explanation: 'Los cuatro agentes afirmaban haber terminado; solo el resultado en el entorno distingue el que realmente lo hizo.'
+    ref: '#un-experimento-lo-que-ve-y-lo-que-no-ve-cada-métrica'
+
+  - id: m16-01-q3
+    type: single
+    difficulty: 3
+    prompt: 'El agente B logró el reembolso pero también borró una cuenta. ¿Qué enseña este caso?'
+    options:
+      - 'Que un grader de solo resultado lo aprobaría y la trayectoria revela un efecto colateral grave.'
+      - 'Que la trayectoria nunca importa.'
+      - 'Que borrar cuentas es una buena práctica.'
+      - 'Que el resultado era incorrecto.'
+    answer: [0]
+    explanation: 'El resultado era correcto, así que solo mirar el resultado lo daría por bueno. Hay acciones que ningún resultado final justifica y solo la trayectoria las ve.'
+    ref: '#un-experimento-lo-que-ve-y-lo-que-no-ve-cada-métrica'
+
+  - id: m16-01-q4
+    type: multiple
+    difficulty: 2
+    prompt: '¿Qué tres niveles de medida se distinguen en la lección? Marca todos los correctos.'
+    options:
+      - 'Éxito de la tarea (resultado).'
+      - 'Trayectoria (cómo, coste, efectos colaterales).'
+      - 'Precisión de las llamadas a herramientas (herramienta y argumentos).'
+      - 'Número de parámetros del modelo.'
+    answer: [0, 1, 2]
+    explanation: 'Resultado, trayectoria y precisión de las llamadas son niveles complementarios; el tamaño del modelo no es una métrica de evaluación del agente.'
+    ref: '#tres-cosas-que-se-pueden-medir'
+
+  - id: m16-01-q5
+    type: single
+    difficulty: 3
+    prompt: '¿Por qué conviene comprobar restricciones de trayectoria en lugar de exigir una secuencia exacta de llamadas?'
+    options:
+      - 'Porque las secuencias exactas son más baratas.'
+      - 'Porque una secuencia exacta penaliza soluciones válidas distintas que el diseñador no anticipó.'
+      - 'Porque las restricciones no se pueden automatizar.'
+      - 'Porque el agente siempre sigue el mismo camino.'
+    answer: [1]
+    explanation: 'Comprobar restricciones (no usar una herramienta, buscar antes de actuar) y el resultado detecta lo peligroso sin imponer un único camino.'
+    ref: '#un-experimento-lo-que-ve-y-lo-que-no-ve-cada-métrica'
+
+  - id: m16-01-q6
+    type: single
+    difficulty: 2
+    prompt: '¿Qué tipo de grader conviene usar cuando el éxito se puede comprobar mirando el estado del entorno?'
+    options:
+      - 'Un grader de código: es rápido, objetivo y reproducible.'
+      - 'Siempre un humano.'
+      - 'Un LLM como juez sin rúbrica.'
+      - 'Ninguno.'
+    answer: [0]
+    explanation: 'La regla práctica es usar el grader más simple que sea fiable; el de modelo se reserva para aspectos subjetivos y necesita calibración con humanos.'
+    ref: '#tipos-de-graders'
+
+  - id: m16-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una evaluación de regresión debería mantener una tasa de éxito cercana al 100 % para detectar que la nueva versión no empeora.'
+    answer: [0]
+    explanation: 'Es verdadero. Las evaluaciones de capacidad empiezan con tasas bajas y miden progreso; las de regresión mantienen casi el 100 % y detectan retrocesos.'
+    ref: '#cómo-diseñar-el-conjunto-de-tareas'
+
+  - id: m16-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Cuando un fallo real se descubre en producción, lo adecuado es añadirlo como tarea al conjunto de evaluación.'
+    answer: [0]
+    explanation: 'Es verdadero. Así el mismo error no puede volver sin que alguien lo note y el conjunto de evaluación sigue midiendo problemas reales.'
+    ref: '#de-las-evaluaciones-antes-del-despliegue-a-la-vigilancia-después'

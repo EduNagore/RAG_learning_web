@@ -1,0 +1,188 @@
+---
+title: Debate, roles y procedimientos operativos (CAMEL, MetaGPT, ChatDev, Generative Agents)
+description: Los grandes diseños de colaboración entre agentes de la literatura (debate entre modelos, role-playing con inception prompting, SOPs de MetaGPT y ChatDev, agentes generativos con memoria) y lo que enseñan sobre qué estructura aporta valor y cuánto cuesta.
+module: m12-multi-agente
+order: 3
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Describir el debate multiagente, el role-playing de CAMEL, los SOP de MetaGPT, la cadena de ChatDev y los agentes generativos.
+  - Explicar qué problema ataca cada diseño (factualidad, cooperación autónoma, alucinaciones en cascada, comportamiento social) y sus límites.
+  - Calcular el coste en tokens de un debate y aplicar el patrón de artefactos estructurados con puertas de validación entre roles.
+  - Decidir cuándo una estructura de roles o de debate compensa frente a un agente único.
+prerequisites:
+  - m12-multi-agente/02-topologias-y-estado-compartido
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: Improving Factuality and Reasoning in Language Models through Multiagent Debate
+    url: https://arxiv.org/abs/2305.14325
+    type: paper
+    authors: Du, Li, Torralba, Tenenbaum, Mordatch
+    year: 2023
+  - title: "CAMEL: Communicative Agents for Mind Exploration of Large Language Model Society"
+    url: https://arxiv.org/abs/2303.17760
+    type: paper
+    authors: Li, Hammoud, Itani, Khizbullin, Ghanem
+    year: 2023
+  - title: "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework"
+    url: https://arxiv.org/abs/2308.00352
+    type: paper
+    authors: Hong et al.
+    year: 2023
+  - title: Communicative Agents for Software Development (ChatDev)
+    url: https://arxiv.org/abs/2307.07924
+    type: paper
+    authors: Qian et al.
+    year: 2023
+  - title: "Generative Agents: Interactive Simulacra of Human Behavior"
+    url: https://arxiv.org/abs/2304.03442
+    type: paper
+    authors: Park, O'Brien, Cai, Morris, Liang, Bernstein
+    year: 2023
+relatedLabs:
+  - agents-29-blackboard
+---
+
+## Intuición: ideas de 2023 que siguen organizando el campo
+
+Entre 2023 y 2024 se publicaron los trabajos que fijaron el vocabulario de los sistemas multiagente: debates entre modelos, equipos con roles de empresa, agentes que simulan una sociedad. Muchos de sus resultados son de modelos más débiles que los actuales y de benchmarks concretos, y las propias lecciones del módulo (el coste, los fallos) matizan su entusiasmo. Aun así, conviene conocerlos porque cada uno encarna una **idea de diseño reutilizable**: *«varias perspectivas mejoran la factualidad»*, *«un rol claro focaliza al modelo»*, *«un procedimiento estándar reduce los errores en cascada»*, *«la memoria con reflexión da coherencia»*.
+
+## Cómo funciona
+
+### Debate multiagente
+
+Du et al. (2023) proponen que **varias instancias de un modelo propongan y debatan sus respuestas y razonamientos durante varias rondas** hasta llegar a una respuesta común final. Según su resumen, el método mejora el razonamiento matemático y estratégico en varias tareas, aumenta la validez factual del contenido y reduce alucinaciones y respuestas falaces; además funciona con modelos de caja negra ya existentes y con el mismo procedimiento en todas las tareas.
+
+La idea es una versión interactiva de la votación: en cada ronda, cada agente ve las respuestas de los demás y puede corregir la suya. Limitaciones prácticas: **coste** (cada ronda cada agente lee a todos los demás) y **conformidad** (los agentes pueden converger a la respuesta equivocada, sobre todo si uno es persuasivo). Y es una idea muy próxima a la de *self-consistency* de la lección de paralelización, con intercambio entre muestras.
+
+### Role-playing: CAMEL
+
+CAMEL (Li et al., 2023) estudia la **cooperación autónoma** de agentes mediante *role-playing*: dos agentes asumen roles (por ejemplo, un «asistente» programador y un «usuario» experto en bolsa) y se guían mediante ***inception prompting*** para completar una tarea de forma coherente con la intención humana y **sin intervención continua** de una persona. Los autores lo usan también para **generar conversaciones** que sirvan para estudiar el comportamiento multiagente. La lección de diseño: un rol claro, con objetivo y límites, centra el comportamiento del modelo; el riesgo, que los agentes se desvíen de la tarea o se atasquen en un intercambio de cortesías.
+
+### Procedimientos operativos estándar: MetaGPT y ChatDev
+
+**MetaGPT** (Hong et al., 2023) codifica **procedimientos operativos estándar (SOP)** en secuencias de prompts, en un paradigma de **cadena de montaje**: roles especializados (producto, arquitectura, ingeniería, pruebas) con **pericia de dominio** que **verifican los resultados intermedios**. Su argumento es que las cadenas de LLM sufren **alucinaciones en cascada** y que un flujo estructurado, con artefactos definidos (un documento de requisitos, un diseño), produce soluciones más coherentes que un simple diálogo encadenado. **ChatDev** (Qian et al., 2023) organiza agentes que colaboran a lo largo de las fases clásicas de un desarrollo en cascada (diseño, programación, pruebas) mediante una **cadena de chat** (*de qué hablar*) y una técnica de **des-alucinación comunicativa** (*cómo hablar*).
+
+Lo transferible es **la forma de la colaboración**: en lugar de charlar en texto libre, los roles **entregan artefactos estructurados con campos obligatorios** y entre rol y rol hay **puertas de validación** (como las del encadenado). El código siguiente lo ilustra con tres roles y un `MockLLM`: el diseñador entrega primero un artefacto incompleto, la puerta lo rechaza con un mensaje concreto y el segundo intento pasa. También calcula el **coste en tokens de un debate**.
+
+```python
+import json
+
+from ragkit.llm import Message, MockLLM
+
+# 1) Coste de un debate: cada agente lee las respuestas de los demás de la ronda anterior.
+agentes, rondas, tokens_pregunta, tokens_respuesta = 3, 3, 200, 300
+entrada = agentes * tokens_pregunta  # ronda 1: solo la pregunta
+entrada += (rondas - 1) * agentes * (tokens_pregunta + (agentes - 1) * tokens_respuesta)
+salida = rondas * agentes * tokens_respuesta
+una_llamada = tokens_pregunta + tokens_respuesta
+print(f"debate de {agentes} agentes y {rondas} rondas: {entrada:,} tokens de entrada + {salida:,} de salida")
+print(f"una sola llamada: {una_llamada} tokens -> el debate cuesta {(entrada + salida) / una_llamada:.1f}x")
+
+# 2) Un procedimiento operativo estándar (SOP): cada rol entrega un artefacto con campos obligatorios.
+CAMPOS = {
+    "analista": {"requisitos", "criterios_de_aceptacion"},
+    "disenador": {"componentes", "interfaces"},
+    "programador": {"codigo", "tests"},
+}
+
+
+def puerta(rol, texto):
+    """Valida el artefacto de un rol antes de pasarlo al siguiente."""
+    try:
+        artefacto = json.loads(texto)
+    except json.JSONDecodeError:
+        return None, "no es JSON válido"
+    faltan = CAMPOS[rol] - artefacto.keys()
+    return (artefacto, None) if not faltan else (None, f"faltan campos: {sorted(faltan)}")
+
+
+llm = MockLLM(
+    script=[
+        '{"requisitos": ["consultar pedidos"], "criterios_de_aceptacion": ["responde en 2 s"]}',
+        '{"componentes": ["api"]}',  # el diseñador se olvida de las interfaces
+        '{"componentes": ["api"], "interfaces": ["GET /pedidos"]}',  # reintento con el error como contexto
+        '{"codigo": "def pedidos(): ...", "tests": ["test_pedidos"]}',
+    ]
+)
+for rol in ("analista", "disenador", "programador"):
+    for intento in (1, 2):
+        texto = llm.generate([Message("user", f"actúa como {rol}")]).text
+        artefacto, error = puerta(rol, texto)
+        print(f"{rol:<12} intento {intento}: {'OK' if artefacto else 'RECHAZADO (' + error + ')'}")
+        if artefacto:
+            break
+```
+
+Salida (determinista):
+
+```text
+debate de 3 agentes y 3 rondas: 5,400 tokens de entrada + 2,700 de salida
+una sola llamada: 500 tokens -> el debate cuesta 16.2x
+analista     intento 1: OK
+disenador    intento 1: RECHAZADO (faltan campos: ['interfaces'])
+disenador    intento 2: OK
+programador  intento 1: OK
+```
+
+- **Un debate de 3 agentes y 3 rondas cuesta 16,2 veces una sola llamada** con estos supuestos (200 tokens de pregunta y 300 por respuesta). Hay que ver si la mejora de factualidad compensa; con modelos recientes, una llamada con razonamiento extendido o una votación pueden dar un resultado similar por menos.
+- **La puerta atrapó la omisión del diseñador** (`interfaces`) antes de que el programador construyera sobre un diseño incompleto: es el mecanismo contra las **alucinaciones en cascada** que busca MetaGPT, y es **barato** (un chequeo de campos).
+- Los scripts del `MockLLM` están escritos a mano: demuestran el mecanismo, no la calidad de un sistema real.
+
+### Generative Agents: memoria, reflexión y planificación
+
+Park et al. (2023) crearon agentes que **simulan comportamiento humano creíble** en un entorno tipo *The Sims* («Smallville», con veinticinco agentes): se levantan, preparan comida, trabajan, forman relaciones y conversan. Su arquitectura tiene tres piezas: un **flujo de memoria** con el registro completo de las experiencias del agente en lenguaje natural, una **reflexión** que sintetiza esas memorias en conclusiones de más alto nivel, y una **planificación** que las recupera de forma dinámica para decidir la conducta. Con ellas, los agentes mostraron dinámicas sociales emergentes: organizaron de forma autónoma una fiesta de San Valentín con asistencia coordinada. Es un trabajo de simulación, no de productividad, pero su legado es la **arquitectura de memoria con recuperación y reflexión**, que reaparece en los agentes con memoria a largo plazo del módulo de memoria y estado.
+
+### Cómo aplicar estas ideas hoy
+
+Con los modelos actuales, lo que mejor se conserva de estos trabajos no son las arquitecturas completas sino sus **ingredientes sueltos**. Un revisor independiente con una rúbrica explícita (la versión ligera del debate) se integra bien en un evaluador-optimizador. Los **artefactos estructurados con puertas de validación** funcionan en cualquier cadena, con o sin roles. Un **rol bien definido** en el prompt de un subagente (objetivo, formato de salida, límites) es la versión útil del role-playing. Y una **memoria con recuperación** que registra decisiones y se puede consultar es la herencia de los agentes generativos. Lo que conviene evitar es reproducir de forma literal un «equipo de empresa» de diez agentes: cada rol añadido es un coste de coordinación que debe justificarse con una mejora medida en tu conjunto de pruebas. La regla de siempre: empieza con un agente, añade un ingrediente cada vez y comprueba en cada paso si la métrica sube por encima del coste.
+
+### ¿Qué estructura aporta valor?
+
+| Idea | Aporta cuando… | Riesgo |
+| --- | --- | --- |
+| Debate | Hay un hecho o un cálculo verificable y los modelos aportan perspectivas distintas | Coste alto; conformidad hacia la respuesta errónea |
+| Roles (CAMEL) | Un rol claro focaliza al modelo | Desvío o conversaciones vacías |
+| SOP con artefactos y puertas | Hay un proceso con entregables definidos | Rigidez; mantener los esquemas |
+| Memoria con reflexión | Coherencia a largo plazo en simulaciones o asistentes | Coste de memoria; reflexiones erróneas que se acumulan |
+
+## Trade-offs
+
+| Diseño | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Debate | Más factualidad en algunos benchmarks | ≈16× tokens en el ejemplo; puede converger al error |
+| Role-playing autónomo | Poca intervención humana | Sin criterios de parada se desvía o se atasca |
+| SOP con artefactos | Reduce errores en cascada con puertas baratas | Requiere diseñar los procesos y esquemas |
+| Chat libre entre roles | Flexible | Alucinaciones en cascada; difícil de verificar |
+| Memoria con reflexión | Comportamiento coherente | Costes de almacenamiento y recuperación |
+
+## Errores comunes en producción
+
+- **Debatir sin necesidad.** Para una pregunta que una llamada resuelve bien, el debate multiplica el coste sin beneficio.
+- **Agentes que se dan la razón.** Sin diversidad (modelos o instrucciones distintas), la conformidad anula el debate.
+- **Roles sin límites ni criterio de parada.** Se pierden turnos en cortesías o se desvía la tarea.
+- **Comunicar en texto libre un entregable.** Define artefactos con esquema y valídalos entre roles.
+- **Puertas que solo validan la forma.** Comprobar que existe el campo no garantiza que su contenido sea correcto; añade comprobaciones de contenido o revisión.
+- **Citar resultados de 2023 como si fueran actuales.** Los modelos y las expectativas han cambiado: mide con tus datos.
+- **Memoria que acumula reflexiones erróneas.** Una conclusión falsa guardada contamina decisiones futuras; hay que poder revisarla y borrarla.
+- **Copiar la estructura de una empresa sin necesidad.** Un organigrama de agentes que replica una empresa es complejidad gratuita si el problema no lo requiere.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es el debate multiagente y qué riesgos tiene?"_ Pista: varias instancias proponen y debaten respuestas en rondas hasta un acuerdo; mejora la factualidad en algunos casos; coste alto y riesgo de conformidad hacia el error.
+- _"¿Qué aporta MetaGPT?"_ Pista: SOPs codificados en prompts con roles de cadena de montaje que verifican resultados intermedios, para reducir las alucinaciones en cascada.
+- _"¿Cómo evitarías errores en cascada entre agentes?"_ Pista: artefactos estructurados con campos obligatorios y puertas de validación entre pasos, con reintento citando el error.
+- _"¿Qué son los generative agents?"_ Pista: agentes con flujo de memoria, reflexión y planificación que simulan comportamiento social creíble (Smallville).
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Debate** (Du et al.): rondas de propuesta y crítica entre instancias; mejora la factualidad en benchmarks pero cuesta ≈16× en el ejemplo y puede converger al error.
+- **CAMEL**: role-playing con *inception prompting* para cooperación autónoma. **MetaGPT/ChatDev**: roles con SOP y artefactos para frenar las alucinaciones en cascada.
+- Lo transferible: **artefactos estructurados + puertas de validación** baratas entre roles.
+- **Generative Agents**: memoria, reflexión y planificación para comportamiento coherente; precursor de las memorias de agentes actuales.
+- Son ideas de 2023: úsalas como patrones de diseño y **mide su beneficio y su coste** con tus datos.
+
+</KeyTakeaways>

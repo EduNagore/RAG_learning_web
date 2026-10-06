@@ -1,0 +1,95 @@
+lesson: m16-evaluacion-agentes/03-benchmarks-trazas-y-harness
+questions:
+  - id: m16-03-q1
+    type: single
+    difficulty: 2
+    prompt: '¿Qué es SWE-bench Verified?'
+    options:
+      - 'Un benchmark de preguntas generales con navegación web.'
+      - 'Un subconjunto de 500 instancias de SWE-bench filtradas por humanos para asegurar enunciados claros, tests correctos y tareas resolubles.'
+      - 'Un benchmark de uso de ordenadores de escritorio.'
+      - 'Una librería de trazas.'
+    answer: [1]
+    explanation: 'Se creó con OpenAI para que los resultados reflejen la capacidad real y no problemas mal especificados del conjunto original.'
+    ref: '#mapa-de-benchmarks'
+
+  - id: m16-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué aporta τ-bench frente a un benchmark de llamadas a funciones aisladas?'
+    options:
+      - 'Mide conversaciones con un usuario simulado, herramientas de dominio y reglas de política, y define la métrica de fiabilidad pass^k.'
+      - 'Mide solo la velocidad.'
+      - 'Mide solo la precisión de la sintaxis.'
+      - 'Evalúa la generación de imágenes.'
+    answer: [0]
+    explanation: 'τ-bench evalúa la interacción herramienta-agente-usuario con política; τ²-bench añade control dual del entorno.'
+    ref: '#mapa-de-benchmarks'
+
+  - id: m16-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué benchmark evalúa agentes multimodales que usan un ordenador real (escritorio, archivos, varias aplicaciones)?'
+    options:
+      - 'GAIA.'
+      - 'OSWorld.'
+      - 'BFCL.'
+      - 'SWE-bench.'
+    answer: [1]
+    explanation: 'OSWorld propone 369 tareas en entornos reales de Ubuntu, Windows y macOS. WebArena se limita a sitios web.'
+    ref: '#mapa-de-benchmarks'
+
+  - id: m16-03-q4
+    type: single
+    difficulty: 3
+    prompt: 'Una nota de prensa dice que un modelo resuelve el 70 % de un benchmark. ¿Qué debes preguntar antes de fiarte?'
+    options:
+      - 'Solo cuántos parámetros tiene.'
+      - 'La versión del benchmark, el arnés, cuántos intentos se usaron, si está saturado o contaminado y si se parece a tu problema.'
+      - 'Nada, la cifra es suficiente.'
+      - 'Solo la fecha.'
+    answer: [1]
+    explanation: 'La cifra solo tiene sentido con su versión, arnés y número de intentos; y un benchmark orienta, pero no sustituye tu evaluación.'
+    ref: '#cómo-leer-un-resultado-de-benchmark'
+
+  - id: m16-03-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento, el entorno compartido entre intentos daba 10 de 10 éxitos frente a 6 de 10 con un entorno limpio. ¿Por qué?'
+    options:
+      - 'Porque el agente mejora con la práctica.'
+      - 'Porque el primer éxito dejó el reembolso en el entorno y los intentos siguientes pasaban sin hacer nada.'
+      - 'Porque la semilla era distinta.'
+      - 'Porque el grader estaba roto.'
+    answer: [1]
+    explanation: 'Misma semilla y mismo agente: solo cambió el aislamiento. Un entorno que conserva estado contamina los intentos y falsea las métricas.'
+    ref: '#un-harness-propio-entornos-aislados-y-trazas'
+
+  - id: m16-03-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué conviene registrar en la traza de cada intento? Marca todo lo correcto.'
+    options:
+      - 'La lista de pasos con llamadas a herramientas, argumentos y resultados.'
+      - 'Tokens y latencia por paso.'
+      - 'Errores y el estado final del entorno.'
+      - 'Solo el mensaje final del agente.'
+    answer: [0, 1, 2]
+    explanation: 'Con la traza completa se puede reproducir y diagnosticar un fallo y recalcular métricas sin volver a ejecutar el agente.'
+    ref: '#qué-registrar-en-una-traza'
+
+  - id: m16-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Las cifras de los artículos originales de los benchmarks reflejan el estado actual de los modelos.'
+    answer: [1]
+    explanation: 'Es falso. Son el punto de partida histórico; los benchmarks se saturan y cambian de versión, así que hay que consultar la tabla oficial vigente.'
+    ref: '#mapa-de-benchmarks'
+
+  - id: m16-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Las trazas de un agente pueden contener datos personales de usuarios y requieren protección.'
+    answer: [0]
+    explanation: 'Es verdadero. Aplican las mismas obligaciones de protección y retención que cualquier registro de usuarios.'
+    ref: '#errores-comunes-en-producción'

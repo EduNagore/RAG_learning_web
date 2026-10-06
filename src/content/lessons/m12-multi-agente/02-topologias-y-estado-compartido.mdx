@@ -1,0 +1,216 @@
+---
+title: Topologías multiagente y estado compartido
+description: Las cinco topologías habituales (supervisor, red entre pares, handoffs, pizarra y pipeline), cuándo conviene cada una, el compromiso entre estado compartido y paso de mensajes, y cómo se controla el flujo.
+module: m12-multi-agente
+order: 2
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Describir las topologías supervisor, red entre pares, handoffs, blackboard y pipeline con sus ventajas y riesgos.
+  - Comparar el número de mensajes de cada topología y el coste de leer un estado compartido frente a pasar mensajes.
+  - Explicar cómo se modelan los handoffs en una API de agentes y qué información debe recibir el agente destino.
+  - Elegir una topología y las protecciones de control (turnos máximos, detección de bucles, agente por defecto).
+prerequisites:
+  - m12-multi-agente/01-cuando-si-y-cuando-no
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation"
+    url: https://arxiv.org/abs/2308.08155
+    type: paper
+    authors: Wu, Bansal, Zhang et al.
+    year: 2023
+  - title: Handoffs (OpenAI Agents SDK)
+    url: https://openai.github.io/openai-agents-python/handoffs/
+    type: docs
+    authors: OpenAI
+    year: 2026
+  - title: How we built our multi-agent research system
+    url: https://www.anthropic.com/engineering/multi-agent-research-system
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: Don't Build Multi-Agents
+    url: https://cognition.com/blog/dont-build-multi-agents
+    type: blog
+    authors: Walden Yan (Cognition)
+    year: 2025
+relatedLabs:
+  - agents-28-supervisor-handoffs
+  - agents-29-blackboard
+---
+
+import TopologyExplorer from '../../../components/widgets/TopologyExplorer';
+
+## Intuición: quién habla con quién
+
+Una vez decidido que un problema merece varios agentes, la pregunta siguiente es la **topología**: la estructura de comunicación y de control. La misma plantilla de agentes dispuesta de formas distintas se comporta de forma muy diferente en coste, previsibilidad y facilidad para depurarla. Esta lección recorre cinco topologías y el compromiso de fondo entre **compartir el estado** y **pasar mensajes**.
+
+## Cómo funciona
+
+### Supervisor (jerárquica)
+
+Un agente **supervisor** recibe la tarea, decide a qué agente especializado delegar cada parte y combina las respuestas. Es el patrón orquestador-workers visto como topología permanente. Ventajas: **control centralizado**, fácil de seguir y de poner límites, y el número de canales crece de forma lineal. Inconvenientes: el supervisor es un **cuello de botella** (y un punto único de fallo) y puede decidir mal. Se puede extender a **jerarquías** de varios niveles (supervisores de supervisores) para sistemas grandes. Es la que implementas en el laboratorio de supervisor.
+
+### Red entre pares (peer-to-peer)
+
+Los agentes se comunican **directamente** entre sí, sin coordinador central, como en las conversaciones de varios agentes de **AutoGen** (Wu et al., 2023), un marco de código abierto cuyos agentes «conversables» y personalizables pueden operar con combinaciones de LLM, entradas humanas y herramientas, y cuyos patrones de conversación se programan en lenguaje natural y en código. Ventajas: **flexibilidad** y comportamiento emergente (debate, crítica mutua). Inconvenientes: canales que crecen como $n(n-1)/2$, conversaciones que **no convergen**, difícil de predecir y depurar. Requiere reglas de turno y de parada estrictas.
+
+### Handoffs (traspasos)
+
+Un agente **delega** la conversación en otro más adecuado y **pierde el control** (a diferencia del supervisor, que lo conserva). Es el patrón típico de **triaje**: un agente de recepción clasifica y traspasa a facturas, soporte técnico o ventas. En el SDK de agentes de OpenAI, los handoffs «permiten a un agente delegar tareas en otro» y **se representan para el modelo como herramientas**: un handoff a un agente llamado `Refund Agent` aparece como la herramienta `transfer_to_refund_agent`. Además, un **filtro de entrada** permite controlar **qué historial ve el agente receptor** (por ejemplo, quitando los mensajes de herramientas antes del traspaso). Esa es la decisión clave: **qué contexto se transfiere**.
+
+### Pizarra (blackboard)
+
+Los agentes **leen y escriben** en un espacio común sin hablarse directamente, y reaccionan a lo que otros publican (el laboratorio de blackboard). Encaja con problemas en los que la solución se construye por aportaciones parciales de especialistas (hipótesis, evidencias, borradores). Ventajas: **desacoplamiento** y extensibilidad (añadir un agente es leer y escribir en la pizarra). Inconvenientes: sin coordinador, hacen falta reglas de **consenso y de parada**, y el flujo de control es difícil de leer (hay que reconstruirlo de la historia de la pizarra).
+
+### Pipeline secuencial
+
+Cada agente procesa la salida del anterior en un orden fijo (investigador → redactor → revisor). Es el **encadenado** (prompt chaining) con un agente por paso. Ventajas: **simplicidad**, previsibilidad y trazabilidad. Inconvenientes: **latencia en serie** y errores que se propagan sin puertas de verificación.
+
+<Diagram
+  caption="Cuatro formas de conectar agentes: control centralizado, conversación directa, cadena y espacio compartido."
+  code={`flowchart TB
+  subgraph Supervisor
+    S((Supervisor)) --> A1[Agente A]
+    S --> A2[Agente B]
+    S --> A3[Agente C]
+  end
+  subgraph Pares
+    P1[Agente 1] --- P2[Agente 2]
+    P2 --- P3[Agente 3]
+    P3 --- P1
+  end
+  subgraph Pipeline
+    L1[Investiga] --> L2[Redacta] --> L3[Revisa]
+  end
+  subgraph Pizarra
+    B1[Agente X] --> BB[(Pizarra)]
+    B2[Agente Y] --> BB
+    BB --> B1
+    BB --> B2
+  end`}
+/>
+
+Compara las topologías con el explorador: cambia el número de agentes y fíjate en cuántos canales hay que diseñar y vigilar en cada caso.
+
+<TopologyExplorer client:visible />
+
+### Estado compartido o paso de mensajes
+
+Hay dos formas de pasar la información entre agentes:
+
+- **Estado compartido:** todos leen y escriben en una estructura común (historial, datos). Cada agente tiene **más contexto**, lo que reduce los malentendidos (el principio de Cognition de compartir las trazas completas), pero el contexto que cada uno lee **crece** con cada turno y se expone a todos información que quizá no necesiten ni deban ver.
+- **Paso de mensajes:** cada agente recibe solo lo que le envían. Es **más barato** y aísla el contexto, pero depende de que el emisor incluya todo lo necesario: un mensaje incompleto provoca decisiones sobre hechos que el receptor no tiene, el origen de los conflictos que describe Cognition.
+
+### Un cálculo: mensajes por topología y tokens por tipo de estado
+
+El código cuenta los mensajes que genera cada topología con 4 agentes y 2 rondas, con modelos **simplificados** y explícitos, y los tokens que leen los agentes en 12 turnos con estado compartido frente a paso de mensajes (300 tokens por mensaje y 200 de tarea, supuestos).
+
+```python
+def mensajes_supervisor(k):
+    """k agentes de trabajo: el supervisor asigna (1) y cada uno informa (1), más la respuesta final."""
+    return 2 * k + 1
+
+
+def mensajes_pipeline(k):
+    """k agentes en cadena: la tarea entra en el primero, k-1 traspasos y la salida del último."""
+    return 1 + (k - 1) + 1
+
+
+def mensajes_red(k, rondas):
+    """Todos hablan con todos: cada agente emite a los k-1 demás en cada ronda."""
+    return rondas * k * (k - 1)
+
+
+def mensajes_pizarra(k, rondas, publicaciones_por_agente_y_ronda=1):
+    """Cada agente publica en la pizarra; leer no cuenta como mensaje."""
+    return rondas * k * publicaciones_por_agente_y_ronda
+
+
+k, rondas = 4, 2
+print(f"topología            mensajes con {k} agentes y {rondas} rondas")
+print(f"supervisor           {mensajes_supervisor(k):>3}")
+print(f"pipeline secuencial  {mensajes_pipeline(k):>3}")
+print(f"pizarra (blackboard) {mensajes_pizarra(k, rondas):>3}")
+print(f"red entre pares      {mensajes_red(k, rondas):>3}")
+
+# Estado compartido frente a paso de mensajes: tokens que lee cada agente en 12 turnos.
+turnos, tokens_mensaje, tokens_tarea = 12, 300, 200
+compartido = sum(tokens_tarea + tokens_mensaje * t for t in range(turnos))  # lee todo el historial
+por_mensajes = turnos * (tokens_tarea + tokens_mensaje)  # lee solo el mensaje que le llega
+print(f"\ntokens leídos en {turnos} turnos: estado compartido {compartido:,} | paso de mensajes {por_mensajes:,}")
+```
+
+Salida (determinista):
+
+```text
+topología            mensajes con 4 agentes y 2 rondas
+supervisor             9
+pipeline secuencial    5
+pizarra (blackboard)   8
+red entre pares       24
+
+tokens leídos en 12 turnos: estado compartido 22,200 | paso de mensajes 6,000
+```
+
+- **La red entre pares genera 24 mensajes frente a 9 del supervisor y 5 del pipeline.** Con más agentes o rondas la diferencia se dispara. Es el precio de la flexibilidad.
+- **El estado compartido leído por completo cuesta 3,7 veces más tokens** que pasar mensajes (22 200 frente a 6 000), con estos supuestos, y la diferencia crece de forma cuadrática con los turnos. A cambio, cada agente tiene todo el contexto. La solución habitual es intermedia: **estado compartido estructurado** (campos concretos, no todo el historial) o **resúmenes** del historial para los agentes que no necesitan los detalles.
+
+### Qué debe llevar un traspaso o un mensaje entre agentes
+
+Sea cual sea la topología, la calidad de la colaboración depende de la calidad de lo que se pasa. Un buen mensaje o traspaso incluye: **el objetivo** (qué se espera que haga el receptor y cómo sabrá que terminó), **el contexto mínimo suficiente** (hechos ya establecidos, restricciones del usuario, decisiones tomadas y por qué), **lo que ya se intentó** (para no repetirlo), **el formato de la respuesta esperada** y **los límites** (herramientas permitidas, presupuesto, tiempo). Anthropic cuenta, a propósito de su sistema de investigación, que los subagentes sin instrucciones detalladas acababan duplicando trabajo o dejando huecos, y que la solución fue describir con precisión el objetivo, el formato de salida y los límites de cada tarea. Si piensas en el mensaje como en el encargo que le darías a una persona recién incorporada al equipo que no ha visto nada de la conversación, vas por buen camino.
+
+### Cómo elegir y cómo controlar
+
+| Necesito… | Topología |
+| --- | --- |
+| Control y trazabilidad, varios especialistas | Supervisor |
+| Clasificar y traspasar a un especialista | Handoffs (triaje) |
+| Pasos fijos con roles distintos | Pipeline |
+| Aportaciones parciales de especialistas a una solución común | Pizarra |
+| Debate o crítica entre agentes | Red entre pares con reglas estrictas |
+
+Protecciones para cualquiera: **máximo de turnos y de mensajes**, **detección de bucles** (el mismo agente o el mismo traspaso repetidos sin cambio del estado), **agente por defecto** o escalado a una persona cuando nadie puede resolver, **validación de nombres de agente** (un supervisor puede inventar uno), **registro** de cada traspaso con su motivo y **permisos** por agente (cada uno solo ve y hace lo necesario).
+
+## Trade-offs
+
+| Topología | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Supervisor | Control central, canales lineales | Cuello de botella y punto único de fallo |
+| Red entre pares | Flexibilidad y emergencia | Canales cuadráticos; sin convergencia garantizada |
+| Handoffs | Especialización limpia (triaje) | Qué contexto se traspasa es una decisión delicada |
+| Pizarra | Desacoplamiento y extensibilidad | Flujo difícil de seguir; hacen falta reglas de parada |
+| Pipeline | Simple y trazable | Latencia en serie y propagación de errores |
+| Estado compartido | Más contexto, menos malentendidos | Más tokens y más exposición de datos |
+| Paso de mensajes | Barato y aislado | Dependiente de que el mensaje sea completo |
+
+## Errores comunes en producción
+
+- **Red entre pares sin reglas de turno.** Las conversaciones divagan y no terminan.
+- **Handoff que traspasa todo el historial** (o ninguno). Lo primero filtra datos y gasta tokens; lo segundo deja al receptor a ciegas.
+- **Supervisor que inventa agentes.** Hay que validar el nombre elegido contra el registro.
+- **Bucles de traspasos.** A pasa a B y B a A; se detecta contando repeticiones sin cambios de estado.
+- **Pizarra sin esquema.** Las claves libres hacen que los agentes no se entiendan; define qué se publica y con qué formato.
+- **Estado compartido sin permisos.** Un agente accede a datos que no necesita.
+- **Medir solo la calidad.** Registra también mensajes, tokens y turnos por tarea: son los que dispara la topología.
+- **Elegir la topología por moda.** Un pipeline suele bastar donde se ha puesto una red.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué topologías multiagente conoces?"_ Pista: supervisor, red entre pares, handoffs, pizarra y pipeline; con su control, coste y riesgos.
+- _"¿Qué es un handoff y qué debes decidir al implementarlo?"_ Pista: delegar el control en otro agente; se modela como herramienta; decidir qué historial recibe el destino (filtro de entrada).
+- _"¿Estado compartido o paso de mensajes?"_ Pista: compartido da contexto completo pero cuesta tokens y expone datos; mensajes es barato y aísla pero exige mensajes completos; lo habitual es un estado estructurado o resúmenes.
+- _"¿Cómo evitas que un sistema multiagente entre en bucle?"_ Pista: máximo de turnos, detección de repeticiones sin cambio de estado, validación de agentes y un agente por defecto o escalado.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Cinco topologías: **supervisor** (control central), **red entre pares** (flexible, cuadrática), **handoffs** (triaje), **pizarra** (aportaciones al espacio común) y **pipeline** (cadena).
+- Un **handoff** cede el control y se modela como herramienta; lo crítico es **qué contexto se traspasa**.
+- Con 4 agentes y 2 rondas, la red entre pares generó 24 mensajes frente a 9 del supervisor y 5 del pipeline (modelo simplificado).
+- **Estado compartido** completo costó 3,7× más tokens que **paso de mensajes** (22 200 frente a 6 000 con los supuestos); un estado estructurado o resumido es el compromiso habitual.
+- Protege cualquier topología con **turnos máximos, detección de bucles, validación de agentes y escalado**.
+
+</KeyTakeaways>

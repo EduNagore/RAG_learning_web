@@ -1,0 +1,208 @@
+---
+title: A2A (Agent2Agent) y Agent Skills
+description: Cómo se descubren y colaboran agentes de distintos fabricantes con el protocolo A2A (Agent Cards, tareas, mensajes, artefactos) y cómo las Agent Skills empaquetan conocimiento procedimental que se carga bajo demanda mediante divulgación progresiva.
+module: m13-protocolos
+order: 2
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Describir los conceptos de A2A (Agent Card, Task, Message, Part, Artifact), el ciclo de vida de una tarea y sus mecanismos de actualización.
+  - Distinguir las formas de recibir resultados (consulta periódica, streaming, notificaciones push) y los enlaces de protocolo.
+  - Explicar qué es una Agent Skill, su estructura (SKILL.md y frontmatter) y la divulgación progresiva en tres niveles.
+  - Calcular el coste de contexto de un conjunto de skills y validar el frontmatter según los requisitos publicados.
+prerequisites:
+  - m13-protocolos/01-tool-calling-y-mcp
+volatility: high
+lastReviewed: 2026-10-06
+sources:
+  - title: Agent2Agent (A2A) Protocol, Specification
+    url: https://a2a-protocol.org/latest/specification/
+    type: docs
+    authors: A2A Protocol
+    year: 2026
+  - title: Agent Skills (documentación de Claude)
+    url: https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview
+    type: docs
+    authors: Anthropic
+    year: 2026
+  - title: Model Context Protocol, Specification
+    url: https://modelcontextprotocol.io/specification/latest
+    type: docs
+    authors: Model Context Protocol
+    year: 2026
+relatedLabs:
+  - agents-32-a2a-agent-cards
+---
+
+## Intuición: dos capas distintas de «saber hacer cosas»
+
+MCP conecta un agente con **herramientas y datos**. Pero hay dos necesidades más:
+
+- Que un agente pueda **colaborar con otro agente** que no conoce, construido por otro equipo o fabricante, con otro framework y sin acceso a su memoria ni a sus herramientas internas: ese es el terreno de **A2A**.
+- Que un agente cargue **conocimiento procedimental** (cómo se hace un informe, cómo se rellena un formulario) **solo cuando lo necesita**, sin llenar su contexto con instrucciones que no vienen al caso: ese es el terreno de las **Agent Skills**.
+
+Esta lección presenta ambos y, en la siguiente, verás cómo se complementan con MCP.
+
+## Cómo funciona
+
+### A2A: conceptos centrales
+
+A2A es un protocolo abierto para la comunicación entre agentes. Su especificación define estos elementos:
+
+- **Agent Card:** un documento JSON de metadatos publicado por un servidor A2A que describe la **identidad** del agente, sus **capacidades** (por ejemplo, si admite *streaming* o notificaciones push), sus **skills** (qué sabe hacer), sus **esquemas de seguridad** (cómo autenticarse) y sus **interfaces** (en qué enlaces de protocolo y direcciones atiende). Es la «tarjeta de visita» que permite **descubrir** a un agente y decidir si es el adecuado. La especificación menciona un URI conocido (*well-known*) para publicarla, pero el camino concreto depende de la implementación, y cada agente declara dónde está su tarjeta.
+- **Task (tarea):** la unidad fundamental de trabajo. Tiene un `id` generado por el servidor, un `contextId` que agrupa interacciones relacionadas, un **estado**, **artefactos** con los resultados y un **historial** de mensajes.
+- **Message:** una unidad de comunicación entre cliente y servidor, con un rol (`user` o `agent`) y una lista de **partes**.
+- **Part:** la unidad mínima de contenido: texto, un archivo (imagen, vídeo…) o un bloque de datos estructurados.
+- **Artifact:** una salida generada por el agente como resultado de una tarea (un documento, una imagen, datos estructurados), compuesta de partes.
+
+El **ciclo de vida de la tarea** pasa por estados definidos: `submitted` (recibida y en cola), `working` (en proceso), y los finales `completed`, `failed`, `canceled` y `rejected` (el agente la rechaza); más dos estados **interrumpidos** en los que la tarea espera algo del cliente: `input-required` (necesita más datos del usuario) y `auth-required` (necesita autenticación). Es la máquina de estados que implementas, simplificada, en el laboratorio.
+
+<Diagram
+  caption="Ciclo de vida simplificado de una tarea A2A: los estados finales no admiten más cambios."
+  code={`stateDiagram-v2
+  [*] --> submitted
+  submitted --> working
+  submitted --> rejected
+  working --> input_required
+  input_required --> working
+  working --> completed
+  working --> failed
+  working --> canceled
+  completed --> [*]
+  failed --> [*]
+  canceled --> [*]
+  rejected --> [*]`}
+/>
+
+### Cómo se reciben los resultados
+
+A2A contempla tres mecanismos complementarios para seguir una tarea de larga duración:
+
+1. **Consulta periódica (*polling*):** el cliente pregunta por la tarea cada cierto tiempo.
+2. **Streaming:** entrega de eventos en tiempo real, si el agente declara la capacidad de streaming.
+3. **Notificaciones push:** el servidor envía peticiones HTTP POST (webhooks) a un punto registrado por el cliente cuando cambia el estado de la tarea, si declara esa capacidad.
+
+### Enlaces de protocolo y versiones
+
+La especificación define tres enlaces principales con **equivalencia funcional**: **JSON-RPC 2.0** sobre HTTP, **gRPC** (con Protocol Buffers) y **HTTP+JSON/REST**. La versión se identifica con `Mayor.Menor`; la especificación consultada define la versión 1.0, y los clientes deben enviar la versión en una cabecera con cada petición (`A2A-Version`), mientras que los agentes deben procesar la petición con la semántica de esa versión o devolver un error de versión no soportada.
+
+### Agent Skills: conocimiento bajo demanda
+
+Una **Agent Skill**, según la documentación de Claude, es una capacidad modular que empaqueta **instrucciones, metadatos y recursos opcionales** (scripts, plantillas) que el agente usa automáticamente cuando son relevantes. Es un directorio con un archivo **`SKILL.md`** obligatorio, cuyo **frontmatter YAML** exige `name` y `description`, y que puede incluir más archivos (guías, referencias, scripts). A diferencia de un prompt (instrucciones de una conversación), las skills **se cargan bajo demanda**, por lo que no hay que repetir la misma guía en cada conversación.
+
+La clave es la **divulgación progresiva** (*progressive disclosure*): el contenido se carga por niveles.
+
+| Nivel | Cuándo se carga | Coste en tokens | Contenido |
+| --- | --- | --- | --- |
+| 1. Metadatos | Siempre, al arrancar | ≈ 100 tokens por skill | `name` y `description` del frontmatter |
+| 2. Instrucciones | Al activarse la skill | Menos de 5 000 tokens | Cuerpo de `SKILL.md` |
+| 3. Recursos y código | Solo si hacen falta | Ninguno hasta acceder | Archivos adicionales; los scripts se ejecutan y solo su salida entra en el contexto |
+
+La `description` es lo que el agente compara con la petición del usuario para decidir si activa la skill, así que debe decir **qué hace y cuándo usarla**. Requisitos publicados: `name` de hasta 64 caracteres, solo minúsculas, números y guiones, sin etiquetas XML y sin las palabras reservadas «anthropic» y «claude»; `description` no vacía, de hasta 1 024 caracteres y sin etiquetas XML.
+
+### Un cálculo y una validación
+
+El código calcula el coste de contexto de 50 skills con y sin divulgación progresiva (con las cifras de la tabla anterior) y valida tres frontmatter con los requisitos publicados.
+
+```python
+import re
+
+# 1) Coste de contexto de las skills con divulgación progresiva (cifras de la documentación de Claude).
+N = 50
+METADATOS, INSTRUCCIONES = 100, 5000  # ≈100 tokens por skill siempre cargados; < 5 000 al activarse
+print(f"{N} skills instaladas")
+print(f"  solo metadatos (siempre cargados):        {N * METADATOS:>9,} tokens")
+print(f"  metadatos + las instrucciones de 1 skill: {N * METADATOS + INSTRUCCIONES:>9,} tokens")
+print(f"  si se cargara todo sin divulgación:       {N * (METADATOS + INSTRUCCIONES):>9,} tokens (cota superior)")
+
+# 2) Validación del frontmatter de una skill según los requisitos publicados.
+RESERVADAS = ("anthropic", "claude")
+
+
+def validar_skill(nombre, descripcion):
+    errores = []
+    if len(nombre) > 64 or not re.fullmatch(r"[a-z0-9-]+", nombre):
+        errores.append("name: máximo 64 caracteres, solo minúsculas, números y guiones")
+    if any(p in nombre.lower() for p in RESERVADAS):
+        errores.append("name: contiene una palabra reservada")
+    if not descripcion or len(descripcion) > 1024:
+        errores.append("description: debe tener entre 1 y 1024 caracteres")
+    if re.search(r"<[^>]+>", nombre + descripcion):
+        errores.append("name/description: no pueden contener etiquetas XML")
+    return errores or ["válida"]
+
+
+for nombre, desc in (
+    ("pdf-processing", "Extrae texto y tablas de PDF. Úsala cuando el usuario mencione PDF o formularios."),
+    ("Claude_Helper", "Ayuda general"),
+    ("informes", "<tarea>Genera informes</tarea>"),
+):
+    print(f"{nombre:<16} -> {validar_skill(nombre, desc)}")
+```
+
+Salida (determinista):
+
+```text
+50 skills instaladas
+  solo metadatos (siempre cargados):            5,000 tokens
+  metadatos + las instrucciones de 1 skill:    10,000 tokens
+  si se cargara todo sin divulgación:         255,000 tokens (cota superior)
+pdf-processing   -> ['válida']
+Claude_Helper    -> ['name: máximo 64 caracteres, solo minúsculas, números y guiones', 'name: contiene una palabra reservada']
+informes         -> ['name/description: no pueden contener etiquetas XML']
+```
+
+- **Cincuenta skills cuestan unos 5 000 tokens de contexto permanente** (el 2 % de los 255 000 que costaría cargarlo todo), y activar una añade hasta 5 000 más. Es lo que permite **instalar muchas skills sin penalización** hasta que se usan: lo que ocupa contexto es el catálogo, no el contenido.
+- El **nivel 3** es todavía más barato: un script que valida un formulario **no entra en el contexto**; solo lo hace su salida (por ejemplo, «Validación superada»), lo que lo hace mucho más eficiente y **determinista** que pedir al modelo que genere ese código cada vez.
+- La buena `description` es la pieza crítica: si no dice cuándo usar la skill, el agente no la activará cuando toca.
+
+<Snapshot date="2026-10">
+
+El estado de ambos estándares, según su documentación consultada el 6 de octubre de 2026: la especificación de **A2A** define la versión 1.0, con tres enlaces de protocolo y los estados de tarea descritos arriba (los nombres exactos de los campos y de los estados, por ejemplo con prefijos como `TASK_STATE_`, dependen del enlace y de la versión). Las **Agent Skills** de Claude funcionan en la API (con la herramienta de ejecución de código, en un contenedor sin acceso a red y sin instalación de paquetes en tiempo de ejecución), en Claude Code (en el sistema de archivos, con acceso completo a la red del usuario) y en claude.ai (cada usuario sube las suyas); las skills **no se sincronizan** entre estas superficies. Existe también una extensión de MCP, *Skills over MCP*, para descubrirlas y consumirlas a través de MCP. Todo esto cambia con rapidez: verifica en la documentación vigente antes de depender de un detalle.
+
+</Snapshot>
+
+### Seguridad
+
+- **A2A:** la tarjeta declara **esquemas de seguridad** y los agentes deben **autenticar y autorizar** a los clientes. Un agente remoto es un **tercero no fiable** desde tu punto de vista: sus mensajes y artefactos son datos que pueden contener inyección indirecta, y la información que le envías sale de tu perímetro. Aplica mínimo privilegio y decide qué contexto compartir.
+- **Skills:** son **instrucciones y código** que el agente ejecutará. La documentación recomienda **usar solo skills de fuentes de confianza** (propias o de Anthropic), **auditar** todo su contenido (scripts, imágenes, recursos) y desconfiar de las que recuperan datos de URL externas, porque el contenido recuperado puede contener instrucciones maliciosas. Tratarlas como **instalar software**.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| A2A entre agentes de terceros | Interoperabilidad sin conocer su implementación | Confianza limitada, latencia y coste de red; contexto que sale de tu perímetro |
+| Integrar agentes en un mismo proceso | Simple, rápido, contexto compartido | Acoplado a un framework |
+| Muchas skills con metadatos | Capacidades bajo demanda con poco contexto | Descripciones deficientes impiden la activación; hay que auditar su contenido |
+| Scripts dentro de skills | Determinismo y ahorro de tokens | Entorno de ejecución restringido y superficie de seguridad |
+| Skills frente a prompts del sistema largos | No ocupan contexto hasta usarse | Gestión y versionado de las skills |
+
+## Errores comunes en producción
+
+- **Descripciones de skill vagas.** Sin «qué hace y cuándo usarla», la skill no se activa o se activa a destiempo.
+- **Instalar skills sin auditarlas.** Equivale a instalar software no revisado con acceso a tus herramientas.
+- **Suponer que las skills se comparten entre claude.ai, la API y Claude Code.** No se sincronizan; hay que gestionarlas en cada superficie.
+- **Confiar en un agente remoto como si fuera propio.** Sus respuestas son datos externos: valídalos y no ejecutes sin comprobar.
+- **Ignorar los estados interrumpidos.** Una tarea en `input-required` o `auth-required` no ha terminado ni ha fallado: hay que responder o abandonarla explícitamente.
+- **Consultar por *polling* con intervalos agresivos.** Usa streaming o notificaciones cuando el agente las ofrezca.
+- **No fijar la versión del protocolo.** Cliente y agente de versiones distintas deben negociar o fallar de forma controlada.
+- **Mezclar en una skill demasiadas cosas.** Una skill por tarea bien delimitada se descubre y se mantiene mejor.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué es A2A y en qué se diferencia de MCP?"_ Pista: A2A es comunicación entre agentes (descubrimiento por Agent Card, tareas con estados, artefactos); MCP conecta un agente con herramientas y datos.
+- _"¿Qué contiene una Agent Card?"_ Pista: identidad, capacidades (streaming, push), skills, esquemas de seguridad e interfaces/enlaces de protocolo.
+- _"Explica el ciclo de vida de una tarea A2A."_ Pista: submitted, working, y finales completed, failed, canceled, rejected; interrumpidos input-required y auth-required.
+- _"¿Qué es la divulgación progresiva en las Agent Skills?"_ Pista: tres niveles (metadatos siempre, instrucciones al activarse, recursos y scripts bajo demanda) para tener muchas skills con poco contexto.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **A2A** permite que agentes de distintos fabricantes se descubran (**Agent Card**) y colaboren con **tareas** (estados, mensajes, partes, artefactos); resultados por *polling*, streaming o push; enlaces JSON-RPC, gRPC y HTTP+JSON.
+- Estados de tarea: `submitted`, `working`, finales (`completed`, `failed`, `canceled`, `rejected`) e interrumpidos (`input-required`, `auth-required`).
+- **Agent Skills:** directorios con `SKILL.md` (`name` y `description`) y recursos opcionales, cargados por **divulgación progresiva** (≈100 tokens por skill siempre; menos de 5 000 al activarse; recursos bajo demanda).
+- 50 skills cuestan unos 5 000 tokens permanentes frente a 255 000 si se cargara todo.
+- Un agente remoto y una skill de terceros son **no fiables**: autentica, valida, audita y aplica mínimo privilegio.
+
+</KeyTakeaways>

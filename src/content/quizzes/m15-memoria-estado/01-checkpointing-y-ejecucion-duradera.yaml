@@ -1,0 +1,107 @@
+lesson: m15-memoria-estado/01-checkpointing-y-ejecucion-duradera
+questions:
+  - id: m15-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es un checkpoint en un motor de agentes con estado?'
+    options:
+      - 'Una instantánea del estado del grafo guardada en cada paso para poder reanudar.'
+      - 'Un tipo de herramienta.'
+      - 'Un prompt del sistema.'
+      - 'Una métrica de evaluación.'
+    answer: [0]
+    explanation: 'Los checkpoints permiten reanudar tras un fallo, pausar para esperar a una persona e inspeccionar o repetir desde un paso anterior.'
+    ref: '#hilos-checkpoints-y-stores'
+
+  - id: m15-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Cuál es la diferencia entre un checkpoint y un store en LangGraph?'
+    options:
+      - 'No hay diferencia.'
+      - 'El checkpoint guarda el estado de un hilo (memoria a corto plazo con ámbito de hilo); el store guarda datos de la aplicación fuera del estado del grafo, entre hilos.'
+      - 'El store es temporal y el checkpoint permanente.'
+      - 'El checkpoint solo funciona con humanos.'
+    answer: [1]
+    explanation: 'Los checkpoints siguen un hilo; el store persiste preferencias de usuario o conocimiento compartido entre varios hilos.'
+    ref: '#hilos-checkpoints-y-stores'
+
+  - id: m15-01-q3
+    type: single
+    difficulty: 2
+    prompt: 'Al reanudar tras una interrupción, ¿qué ocurre con el nodo que se pausó?'
+    options:
+      - 'Continúa justo después de la línea de la pausa.'
+      - 'Empieza otra vez desde el principio del nodo, de modo que el código anterior a la pausa se vuelve a ejecutar.'
+      - 'Se salta y pasa al siguiente.'
+      - 'Se elimina del grafo.'
+    answer: [1]
+    explanation: 'Es la regla que documenta LangGraph; por eso los efectos secundarios previos a la pausa deben ser idempotentes o ir después.'
+    ref: '#interrupciones-pausar-y-reanudar'
+
+  - id: m15-01-q4
+    type: code-output
+    difficulty: 3
+    prompt: 'Un nodo envía un correo y después se pausa. Se ejecuta una vez hasta la pausa y otra al reanudar. Sin idempotencia, ¿cuántos correos salen?'
+    code: |-
+      correos = []
+
+      def nodo(decision=None):
+          correos.append("aviso")   # efecto antes de la pausa
+          if decision is None:
+              return "pausa"
+          return "ok"
+
+      nodo()                 # primera ejecución
+      nodo(decision=True)    # reanudación
+      print(len(correos))
+    options:
+      - '0'
+      - '1'
+      - '2'
+      - '3'
+    answer: [2]
+    explanation: 'El nodo se ejecuta dos veces y el envío está antes de la pausa. Una clave de idempotencia o mover el envío después de la pausa lo dejaría en 1.'
+    ref: '#efectos-secundarios-la-trampa-de-la-repetición'
+
+  - id: m15-01-q5
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué prácticas hacen seguro un nodo con efectos externos en un grafo con pausas? Marca todas las correctas.'
+    options:
+      - 'Colocar el efecto después de la pausa.'
+      - 'Usar claves de idempotencia estables derivadas del trabajo (por ejemplo, el identificador del pedido).'
+      - 'Dividir en nodos pequeños con un único efecto cada uno.'
+      - 'Suponer que el motor garantiza exactamente una ejecución por nodo.'
+    answer: [0, 1, 2]
+    explanation: 'Los motores garantizan, como mucho, «al menos una vez». La idempotencia convierte eso en «exactamente una vez» en la práctica.'
+    ref: '#efectos-secundarios-la-trampa-de-la-repetición'
+
+  - id: m15-01-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué debe mostrar una buena solicitud de aprobación humana?'
+    options:
+      - 'Solo la pregunta «¿continuar?».'
+      - 'Qué se va a hacer con los datos concretos y opciones como editar, pedir más información o aprobar con cambios.'
+      - 'Nada: la persona debe confiar en el agente.'
+      - 'El prompt del sistema completo.'
+    answer: [1]
+    explanation: 'Un «¿continuar?» sin datos no permite decidir. Además hace falta caducidad, escalado y registro de quién aprobó qué.'
+    ref: '#humano-en-el-bucle-qué-aprobar-y-cómo'
+
+  - id: m15-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Pedir aprobación humana para absolutamente todas las acciones de un agente es la opción más segura y no tiene inconvenientes.'
+    answer: [1]
+    explanation: 'Es falso. La fatiga de aprobación hace que la gente apruebe sin leer; se reservan las pausas para acciones irreversibles, con efecto sobre terceros, de baja confianza o con datos sensibles.'
+    ref: '#humano-en-el-bucle-qué-aprobar-y-cómo'
+
+  - id: m15-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'La reanudación de un hilo puede hacerla un proceso distinto del que lo empezó, siempre que disponga del identificador del hilo y acceso al almacén de checkpoints.'
+    answer: [0]
+    explanation: 'Es verdadero. Por eso una espera por una persona no necesita mantener un proceso vivo, y se puede desplegar una versión nueva entre medias (con el estado versionado).'
+    ref: '#hilos-checkpoints-y-stores'

@@ -1,0 +1,180 @@
+---
+title: Qué es un agente, workflows frente a agentes
+description: La definición práctica de agente, la diferencia entre un workflow (código que orquesta al modelo) y un agente (el modelo dirige su propio proceso), cuándo compensa la autonomía y qué cuesta en fiabilidad, latencia y tokens.
+module: m10-fundamentos-agentes
+order: 1
+level: intermedio
+estimatedMinutes: 17
+objectives:
+  - Definir agente y distinguirlo de un workflow con las definiciones de Anthropic.
+  - Situar un sistema en el espectro de autonomía, de una llamada simple a un agente abierto.
+  - Calcular cómo se acumulan los errores y el coste de contexto a lo largo de los pasos de un agente.
+  - Decidir si un problema necesita un agente o basta una solución más simple.
+prerequisites:
+  - m00-fundamentos-llm/05-tool-calling
+  - m09-rag-produccion/03-observabilidad-y-guardrails
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: "ReAct: Synergizing Reasoning and Acting in Language Models"
+    url: https://arxiv.org/abs/2210.03629
+    type: paper
+    authors: Yao, Zhao, Yu, Du, Shafran, Narasimhan, Cao
+    year: 2022
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+relatedLabs:
+  - agents-23-react
+---
+
+## Intuición: ¿quién decide el siguiente paso?
+
+La palabra «agente» se usa para todo, desde un chatbot con una herramienta hasta un sistema que trabaja horas sin supervisión. Para razonar con precisión, la guía *Building effective agents* de Anthropic propone una distinción útil basada en **quién controla el flujo**:
+
+- **Workflows:** «sistemas donde los LLM y las herramientas se orquestan mediante rutas de código predefinidas». El programador decide los pasos y el modelo rellena cada uno.
+- **Agentes:** «sistemas donde los LLM dirigen dinámicamente sus propios procesos y el uso de herramientas, manteniendo el control sobre cómo cumplen las tareas». El modelo decide qué hacer a continuación.
+
+La diferencia no es «usa herramientas» (un workflow también las usa) sino **quién elige el camino en tiempo de ejecución**. Eso define casi todo lo demás: la flexibilidad, la previsibilidad, el coste y los riesgos.
+
+En el módulo de RAG viste esta frontera en pequeño: el pipeline fijo es un workflow, y el agente de búsqueda de la lección de Agentic RAG era un agente. Esta parte del curso la lleva más lejos.
+
+## Cómo funciona
+
+### El espectro de autonomía
+
+No es un interruptor, es una escala. De menos a más autonomía:
+
+1. **Una llamada al modelo**, optimizada con buen prompt, ejemplos y, si hace falta, recuperación. Resuelve más problemas de los que se cree.
+2. **Workflow encadenado o con rutas** (*prompt chaining*, *routing*): varios pasos, pero el recorrido lo fija el código.
+3. **Workflow dinámico** (*orchestrator-workers*, *evaluator-optimizer*): el modelo decide cómo repartir o cuándo repetir, dentro de una estructura que impone el código.
+4. **Agente:** un bucle en el que el modelo elige herramientas, observa resultados y decide cuándo terminar.
+5. **Sistema multiagente:** varios agentes que se coordinan, con topologías y protocolos (la segunda mitad de esta parte).
+
+La recomendación de Anthropic es explícita: empezar por lo simple y añadir complejidad **solo cuando lo simple se queda corto**. Escriben que los sistemas agénticos «suelen intercambiar latencia y coste por mejor rendimiento en la tarea, y conviene valorar cuándo compensa ese intercambio», y que los agentes encajan en problemas **abiertos** en los que no se pueden predecir los pasos de antemano.
+
+<Diagram
+  caption="De una llamada simple a un sistema multiagente: cada escalón cede más control al modelo y añade coste, latencia y riesgo."
+  code={`flowchart LR
+  A[Una llamada al modelo] --> B[Workflow con rutas fijas]
+  B --> C[Workflow dinámico]
+  C --> D[Agente con bucle]
+  D --> E[Sistema multiagente]`}
+/>
+
+### Los tres ingredientes de un agente
+
+Un agente, en la práctica, es un **modelo con herramientas dentro de un bucle** que termina por una condición:
+
+1. **Modelo:** razona y decide la siguiente acción.
+2. **Herramientas:** funciones con las que el agente lee o modifica el mundo (buscar, calcular, consultar una base de datos, ejecutar código).
+3. **Bucle y entorno:** en cada vuelta, el resultado de la acción vuelve al modelo como **observación**, y el ciclo se repite hasta que el modelo responde, se agota un presupuesto o interviene una persona.
+
+El patrón se conoce como **ReAct** (Yao et al., 2022): intercalar **razonamiento** y **acciones** para que el razonamiento refine el plan mientras las acciones reúnen información externa. El bucle completo, con su implementación, es el tema de la siguiente lección y del laboratorio `agents-23-react`.
+
+### El precio de la autonomía
+
+Un agente puede resolver lo que un workflow rígido no puede, pero lo paga de tres formas.
+
+**1. Los errores se acumulan.** Si cada paso acierta con probabilidad $p$ y los pasos son (aproximadamente) independientes, una tarea de $n$ pasos sale bien con probabilidad $p^n$. **2. El contexto crece** y se reenvía completo en cada vuelta, así que el coste de entrada crece más rápido que linealmente. **3. La latencia se suma**, porque las llamadas son secuenciales. El código siguiente calcula las dos primeras con números **ilustrativos** (no medidos): una fiabilidad por paso del 99, el 95 y el 90 %, y un agente cuyo contexto parte de 1 000 tokens y suma 500 por vuelta.
+
+```python
+print("fiabilidad por paso   1 paso   5 pasos  10 pasos  20 pasos")
+for p in (0.99, 0.95, 0.90):
+    print(f"{p:>18.0%}", *(f"{p**n:8.1%}" for n in (1, 5, 10, 20)))
+
+
+def tokens_de_entrada(pasos, base=1000, por_paso=500):
+    """El agente reenvía todo el historial en cada vuelta: el coste crece de forma cuadrática."""
+    return sum(base + por_paso * i for i in range(pasos))
+
+
+print("\npasos  tokens de entrada acumulados  frente a un paso por 1000 tokens")
+for n in (1, 5, 10, 20):
+    total = tokens_de_entrada(n)
+    print(f"{n:>5}  {total:>29,}  {total / (n * 1000):.2f}x")
+```
+
+Salida (determinista):
+
+```text
+fiabilidad por paso   1 paso   5 pasos  10 pasos  20 pasos
+               99%    99.0%    95.1%    90.4%    81.8%
+               95%    95.0%    77.4%    59.9%    35.8%
+               90%    90.0%    59.0%    34.9%    12.2%
+
+pasos  tokens de entrada acumulados  frente a un paso por 1000 tokens
+    1                          1,000  1.00x
+    5                         10,000  2.00x
+   10                         32,500  3.25x
+   20                        115,000  5.75x
+```
+
+- **Un 95 % por paso suena bien, pero 20 pasos acaban bien solo el 35,8 % de las veces.** Para tareas largas hace falta una fiabilidad por paso altísima o mecanismos que **recuperen** de los errores (verificación, reintentos, supervisión humana), no solo un modelo mejor.
+- **El coste de entrada de 20 pasos es 5,75 veces el de 20 llamadas independientes de 1 000 tokens**, y sigue creciendo. Por eso la gestión del contexto (resumir, descartar, aislar) es una pieza central de la ingeniería de agentes, y es el tema de la última lección de este módulo.
+- Son **modelos simplificados**: en la realidad los pasos no son independientes (un error temprano arrastra a los siguientes y un buen agente a veces se recupera), y los modelos modernos aprovechan cachés de prefijos que abaratan el reenvío del historial. Sirven para el orden de magnitud, no para predecir tu caso.
+
+### Cuándo conviene un agente
+
+Una lista de comprobación de decisión:
+
+| Pregunta | Si la respuesta es «sí» | Si es «no» |
+| --- | --- | --- |
+| ¿Se pueden enumerar los pasos de antemano? | Workflow (código fijo) | Quizá agente |
+| ¿Una buena llamada con recuperación resuelve el 90 %? | No hace falta agente | Valora más estructura |
+| ¿El valor de resolver la tarea compensa decenas de llamadas? | Agente viable | Mantén lo simple |
+| ¿Hay forma de **verificar** el resultado (tests, reglas, humano)? | Agente con bucle de verificación | Riesgo alto: autonomía limitada |
+| ¿Un error es reversible o de bajo impacto? | Más autonomía posible | Humano en el bucle |
+
+Los ejemplos clásicos de buen encaje son los **agentes de programación** (hay tests automáticos que verifican) y la **investigación abierta** (los pasos no se conocen de antemano). Los de mal encaje son tareas con pasos fijos y bien conocidos, donde un workflow es más barato, rápido y predecible.
+
+### Los frameworks: con cuidado
+
+Anthropic advierte de que los frameworks agilizan la implementación pero «pueden ocultar los prompts y respuestas subyacentes, dificultando la depuración», y aconseja **empezar usando directamente las APIs de los modelos** y entender el código que hay debajo. En este curso empiezas por el bucle desde cero, con un `MockLLM`, y los frameworks llegan después, cuando ya sabes qué hacen por ti.
+
+## Trade-offs
+
+| Enfoque | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Llamada única | Barata, rápida, predecible | Limitada a lo que cabe en un paso |
+| Workflow fijo | Previsible, depurable, fácil de evaluar | Rígido ante casos no previstos |
+| Workflow dinámico | Se adapta dentro de una estructura | Más llamadas; el reparto puede fallar |
+| Agente | Flexible en problemas abiertos | Errores acumulados, coste creciente, imprevisible |
+| Multiagente | Especialización y paralelismo | Coordinación, coste y modos de fallo propios |
+
+## Errores comunes en producción
+
+- **Construir un agente para un problema de pasos conocidos.** Un workflow sería más barato, rápido y fiable.
+- **Empezar por un framework.** Sin entender el bucle, el comportamiento y los fallos son cajas negras.
+- **No limitar el bucle.** Sin máximo de pasos, presupuesto y tiempo, un agente que no converge consume sin responder.
+- **Ignorar la acumulación de errores.** Evaluar solo el éxito de un paso esconde que la tarea completa falla con frecuencia.
+- **No verificar los resultados.** Un agente sin comprobación externa (tests, validación, revisión) puede dar por buena una salida errónea.
+- **Dar autonomía y permisos amplios a la vez.** La autonomía exige permisos mínimos y confirmación en acciones irreversibles.
+- **No medir el coste por tarea.** El gasto de un agente varía mucho entre ejecuciones; mide medias y colas.
+- **Confundir demo con producción.** Un agente que funciona en un caso de ejemplo puede fallar con frecuencia en el tráfico real.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué diferencia hay entre un workflow y un agente?"_ Pista: en un workflow el código predefinido orquesta al LLM; en un agente el LLM dirige dinámicamente su proceso y su uso de herramientas.
+- _"¿Cuándo usarías un agente y cuándo no?"_ Pista: problemas abiertos de pasos impredecibles con valor suficiente y verificación posible; no cuando los pasos son conocidos o una llamada con recuperación basta.
+- _"¿Por qué los agentes largos fallan tanto?"_ Pista: los errores se acumulan ($p^n$), el contexto crece y se degrada, y un fallo temprano arrastra al resto; se mitiga con verificación, reintentos y supervisión.
+- _"¿Qué opinas de usar un framework de agentes desde el principio?"_ Pista: conviene entender primero el bucle con las APIs directas; los frameworks pueden ocultar prompts y dificultar la depuración.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Workflow:** el código predefinido orquesta al modelo. **Agente:** el modelo dirige su proceso y sus herramientas. La diferencia es quién elige el camino.
+- La autonomía es un **espectro**; empieza por lo simple y sube solo cuando haga falta.
+- Un agente es **un modelo con herramientas dentro de un bucle** (patrón ReAct) con condición de parada.
+- Los **errores se acumulan** ($p^n$: un 95 % por paso da un 35,8 % en 20 pasos) y el **contexto cuesta cada vez más**: hacen falta verificación y gestión del contexto.
+- Entiende el bucle con las APIs directas antes de adoptar un framework.
+
+</KeyTakeaways>

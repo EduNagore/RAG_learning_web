@@ -1,0 +1,207 @@
+---
+title: Control de coste, bucles infinitos y observabilidad
+description: Por qué el coste de un agente atascado crece de forma cuadrática, qué guardas lo contienen (pasos, tokens, coste, tiempo y detección de bucles), cómo diseñar reintentos y reanudación seguros y qué observar en producción para detectar problemas antes que el usuario.
+module: m17-fiabilidad-seguridad
+order: 3
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Explicar por qué el coste de un agente atascado crece de forma cuadrática con los pasos.
+  - Elegir y combinar guardas de pasos, tokens, coste, tiempo y detección de bucles, con el motivo de parada.
+  - Diseñar reintentos con retroceso, idempotencia y reanudación sin repetir acciones.
+  - Definir qué métricas, trazas y alertas necesita un agente en producción.
+prerequisites:
+  - m17-fiabilidad-seguridad/02-sandboxing-privilegio-minimo-y-aprobacion-humana
+  - m16-evaluacion-agentes/03-benchmarks-trazas-y-harness
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: How we built our multi-agent research system
+    url: https://www.anthropic.com/engineering/multi-agent-research-system
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: OWASP Top 10 for LLM Applications 2025
+    url: https://genai.owasp.org/llm-top-10/
+    type: docs
+    authors: OWASP GenAI Security Project
+    year: 2025
+  - title: "OWASP’s 2026 LLM Top 10: Incident Data Meets Judgment"
+    url: https://labs.cloudsecurityalliance.org/research/csa-research-note-owasp-llm-top10-2026-incident-weighted-202/
+    type: blog
+    authors: Cloud Security Alliance
+    year: 2026
+  - title: OpenTelemetry GenAI semantic conventions
+    url: https://github.com/open-telemetry/semantic-conventions-genai
+    type: docs
+    authors: OpenTelemetry project
+    year: 2026
+relatedLabs:
+  - agents-33-guardas
+---
+
+## Intuición: un bucle atascado cuesta más cada vuelta
+
+Un agente es un bucle cuyo número de iteraciones decide él mismo. Cuando funciona, termina en pocos pasos. Cuando algo falla (una herramienta que siempre devuelve un error, un plan que nunca converge, un objetivo imposible), puede **seguir indefinidamente**, y lo peor es que cada vuelta es **más cara que la anterior**: en cada paso se reenvía al modelo todo el historial acumulado, de modo que el coste total crece de forma **cuadrática** con el número de pasos.
+
+Anthropic lo dice sin adornos en su guía de agentes: la autonomía implica **mayores costes y posibilidad de que los errores se acumulen**, y por eso es habitual incluir **condiciones de parada**, como un número máximo de iteraciones, para mantener el control. Y su análisis de un sistema multiagente de investigación añade un orden de magnitud: en sus medidas, los agentes usaban en torno a **4 veces** más tokens que un chat y los sistemas multiagente en torno a **15 veces** más. Con esas cifras, sin límites, un error de diseño se convierte en una factura.
+
+Para OWASP es un riesgo de seguridad con nombre propio: el **consumo no acotado** (*Unbounded Consumption*, LLM10 en la edición 2025), que cubre tanto el abuso intencionado (denegación de servicio, «denegación de cartera») como el fallo accidental.
+
+## Cómo funciona
+
+### Un experimento: lo que cuesta un agente atascado
+
+Un agente atascado llama a una herramienta que falla siempre y repite la misma llamada. Cada paso reenvía el historial completo (800 tokens de base más 150 por cada paso anterior) y genera 100 tokens. Se comparan cuatro configuraciones de guardas sobre un plan de hasta 60 pasos. Los **precios son ilustrativos** (3 USD por millón de tokens de entrada y 15 por millón de salida, ajústalos a tu proveedor) y el modelo de crecimiento es una simplificación (sin caché de prompt, que reduciría el coste de la parte repetida).
+
+```python
+BASE = 800  # tokens de sistema + herramientas + tarea
+POR_PASO = 150  # tokens que añade cada paso al historial (llamada + observación)
+SALIDA = 100  # tokens generados en cada paso
+PRECIO_ENTRADA = 3.0  # USD por millón de tokens de entrada (ILUSTRATIVO)
+PRECIO_SALIDA = 15.0  # USD por millón de tokens de salida (ILUSTRATIVO)
+
+
+def ejecutar(max_pasos=None, max_repeats=None, max_tokens=None, pasos_totales=60):
+    """Un agente atascado: la herramienta falla siempre y el agente repite la misma llamada."""
+    entrada = salida = 0
+    vistos = 0
+    motivo = "sin guarda: se agota el plan"
+    for paso in range(1, pasos_totales + 1):
+        contexto = BASE + POR_PASO * (paso - 1)  # se reenvía TODO el historial en cada paso
+        if max_pasos is not None and paso > max_pasos:
+            motivo = "max_steps"
+            break
+        entrada += contexto
+        salida += SALIDA
+        vistos += 1
+        if max_repeats is not None and vistos >= max_repeats:
+            motivo = "loop"
+            break
+        if max_tokens is not None and entrada + salida > max_tokens:
+            motivo = "max_tokens"
+            break
+    coste = entrada / 1e6 * PRECIO_ENTRADA + salida / 1e6 * PRECIO_SALIDA
+    return paso if motivo.startswith("sin") else paso - (motivo == "max_steps"), entrada + salida, coste, motivo
+
+
+print(f"{'guardas':<28}{'pasos':>6}{'tokens':>9}{'coste (USD)':>13}  motivo")
+for nombre, kwargs in (
+    ("ninguna", {}),
+    ("max_steps=20", {"max_pasos": 20}),
+    ("max_tokens=100000", {"max_tokens": 100_000}),
+    ("loop (max_repeats=3)", {"max_repeats": 3}),
+):
+    pasos, tokens, coste, motivo = ejecutar(**kwargs)
+    print(f"{nombre:<28}{pasos:>6}{tokens:>9}{coste:>13.4f}  {motivo}")
+```
+
+Salida (determinista):
+
+```text
+guardas                      pasos   tokens  coste (USD)  motivo
+ninguna                         60   319500       1.0305  sin guarda: se agota el plan
+max_steps=20                    20    46500       0.1635  max_steps
+max_tokens=100000               32   103200       0.3480  max_tokens
+loop (max_repeats=3)             3     3150       0.0130  loop
+```
+
+- **Sin guardas:** 60 pasos y 319 500 tokens. El paso 60 por sí solo envía 9 650 tokens de entrada; **los últimos pasos cuestan 12 veces lo que el primero**.
+- **Límite de pasos** (20): corta el gasto a menos de una sexta parte, pero **igualmente se pagan 20 pasos inútiles**. Es la red de seguridad general, no una detección inteligente.
+- **Presupuesto de tokens** (100 000): garantiza un techo de gasto por tarea. Se detecta **después** de la llamada que lo supera (el gasto de esa llamada ya está hecho), así que el techo real es el presupuesto más un paso.
+- **Detección de bucle** (misma llamada 3 veces): para en el paso 3 con 3 150 tokens, **unas 100 veces menos** que sin guardas. Es la guarda más barata y la más específica, porque ataca el patrón del fallo.
+- **Lo óptimo es combinarlas:** el detector de bucles para los casos típicos, el presupuesto de tokens o de coste pone el techo para los fallos que no repiten literalmente la misma llamada (por ejemplo, alternar entre dos), y el límite de pasos y el tiempo máximo cubren lo demás.
+
+### Las guardas, una por una
+
+El laboratorio 33 implementa estas cinco, con el orden de evaluación indicado y un motivo de parada explícito:
+
+| Guarda | Qué protege | Cuidado |
+| --- | --- | --- |
+| **Tiempo máximo** (`timeout`) | Tareas colgadas en herramientas lentas | Debe medirse con un reloj monótono; la herramienta también necesita su propio *timeout* |
+| **Pasos máximos** | Planes que no convergen | Elige un valor ligeramente superior al máximo de pasos legítimo de tus tareas |
+| **Tokens máximos** | Contextos que crecen y coste por tarea | Se comprueba tras la llamada: techo = presupuesto + un paso |
+| **Coste máximo** | Gasto en euros o dólares, con modelos de precios distintos | Necesita una tabla de precios mantenida |
+| **Bucle** (misma acción repetida) | Fallos que repiten literalmente | No detecta ciclos largos o variaciones sutiles de argumentos |
+
+Y tres decisiones de diseño que se olvidan:
+
+- **Límites por capas:** por **paso** (un resultado de herramienta no puede devolver 5 MB), por **tarea** (los de arriba), por **usuario** y por **día** (cuotas), y un **interruptor general** (*kill switch*) para el servicio.
+- **Parar con un estado útil.** La guarda no debe tirar el trabajo: debe dejar un resumen de lo hecho, el motivo y qué falta, y, si la tarea es reanudable, un punto de control. Anthropic cuenta que para sus agentes de larga duración construyeron sistemas capaces de **reanudar desde donde estaba el agente cuando ocurrió el error**, combinando la adaptabilidad del agente con salvaguardas deterministas como la lógica de reintentos y los puntos de control regulares.
+- **Distinguir el motivo.** Un `timeout` puede reintentarse; un `loop` casi nunca (repetir lo mismo dará lo mismo); un `max_cost` pide intervención humana o más presupuesto.
+
+### Reintentos seguros
+
+Los fallos transitorios (límite de velocidad, red) se reintentan, pero con reglas:
+
+- **Retroceso exponencial con aleatoriedad** (*jitter*) y un **máximo** de reintentos; sin ellos, muchos agentes reintentando a la vez agravan la caída.
+- **Reintenta solo lo reintentable:** un error 429 o un *timeout* de red, sí; un error de validación de argumentos, no (el modelo debe corregir la llamada, y para eso el error debe volver como observación).
+- **Idempotencia:** una acción con efectos (pagar, enviar) lleva una **clave de idempotencia** para que reintentar o reanudar no la duplique. Es la misma idea que los *checkpoints* de la parte de memoria y estado: tras reanudar, un paso puede ejecutarse otra vez.
+- **Circuit breaker:** si una herramienta falla muchas veces seguidas, deja de llamarse un rato y el agente recibe un error claro en lugar de seguir insistiendo.
+
+### Observabilidad: lo que hay que ver
+
+Los agentes fallan de formas que ninguna prueba previa cubre, por eso la observabilidad es parte del diseño. Anthropic cuenta que añadir **trazado completo en producción** les permitió **diagnosticar por qué fallaban los agentes** y corregirlos de forma sistemática (¿malas consultas?, ¿fuentes erróneas?, ¿fallos de herramientas?), y que observan **patrones de decisión y estructuras de interacción sin monitorizar el contenido de las conversaciones individuales**, para proteger la privacidad. Otro detalle de ingeniería: como los agentes son redes de *prompts*, herramientas y lógica de ejecución con **mucho estado**, usan **despliegues arcoíris** (*rainbow deployments*), que desplazan el tráfico poco a poco de la versión antigua a la nueva manteniendo ambas en marcha, para no romper los agentes que están a mitad de una tarea.
+
+Qué registrar y vigilar:
+
+| Señal | Para qué sirve |
+| --- | --- |
+| **Traza por tarea** (pasos, herramientas, argumentos, resultados, errores) | Depurar y reevaluar |
+| **Tokens y coste por tarea, por usuario y por versión** | Presupuestos, anomalías, regresiones de coste |
+| **Distribución de pasos por tarea** | Detectar tareas que se alargan de forma anómala |
+| **Motivo de parada** (`done`, `loop`, `max_steps`, `timeout`, `max_cost`) | La tasa de paradas por guarda es una métrica de salud |
+| **Tasa de error por herramienta y latencia p95** | Encontrar la herramienta que degrada todo |
+| **Aprobaciones humanas** (pedidas, concedidas, rechazadas) | Calibrar qué se pregunta y detectar fatiga |
+| **Evaluaciones en línea** (muestras revisadas, graders automáticos) | Calidad real en producción |
+
+Las alertas útiles son de **tendencia y de umbral**: el coste por tarea sube un 30 % tras un despliegue; la tasa de `loop` supera el 1 %; una herramienta tiene más de un 5 % de errores. (Son umbrales de ejemplo: calíbralos con tu histórico.)
+
+Para estandarizar los datos, el proyecto OpenTelemetry mantiene **convenciones semánticas para IA generativa** (spans, métricas y eventos, incluidas las de MCP) en un repositorio propio. Su estabilidad cambia: al consultarlo en octubre de 2026 no declaraba un estado de estabilidad concreto, así que comprueba su madurez antes de depender de él. En cualquier caso, **no guardes datos personales en las trazas sin protección** y aplica retención limitada.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Límites estrictos de pasos y tokens | Gasto acotado y previsible | Cortan tareas legítimamente largas |
+| Detección de bucles | Barata y muy eficaz en el caso típico | No ve ciclos largos |
+| Reintentos agresivos | Más tareas terminan | Tormentas de reintentos y duplicados sin idempotencia |
+| Trazas completas | Depuración y auditoría | Privacidad, almacenamiento y coste |
+| Reanudación desde checkpoints | No se pierde el trabajo | Complejidad y necesidad de idempotencia |
+| Alertas por umbral | Detección temprana | Falsas alarmas si no se calibran |
+
+## Errores comunes en producción
+
+- **Un único límite de pasos y nada más.** Pagas todos los pasos inútiles; añade detección de bucle y presupuesto.
+- **Presupuesto solo por tarea, sin cuota por usuario ni por día.** Un abusador o un fallo masivo agota el total.
+- **Olvidar que el coste crece de forma cuadrática** al reenviar el historial; sin compactación ni caché, los pasos finales dominan la factura.
+- **Reintentar errores de validación o de lógica** en lugar de devolverlos al modelo.
+- **Reintentar acciones con efectos sin idempotencia.**
+- **Parar sin dejar estado:** el usuario ve un error y se pierde el trabajo.
+- **Trazas con datos personales sin protección ni retención.**
+- **No vigilar el motivo de parada.** Una subida de `max_steps` tras un despliegue es una regresión que nadie ve.
+- **Desplegar versiones nuevas cortando las tareas en curso.**
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cómo evitas que un agente entre en un bucle infinito que gaste dinero?"_ Pista: límite de pasos, detección de la misma acción repetida, presupuesto de tokens o coste, timeout, cuotas por usuario y alertas.
+- _"¿Por qué el coste de un agente no crece linealmente con los pasos?"_ Pista: se reenvía el historial completo en cada paso, así que el coste total es cuadrático; caché y compactación lo mitigan.
+- _"¿Qué haces cuando una guarda para al agente?"_ Pista: dejar estado útil y motivo; reanudar si es posible; un `timeout` puede reintentarse, un `loop` no.
+- _"¿Qué observarías en un agente en producción?"_ Pista: trazas, tokens y coste por tarea, distribución de pasos, motivos de parada, errores y latencia por herramienta, aprobaciones, evaluaciones en línea.
+
+</Callout>
+
+<KeyTakeaways>
+
+- El coste de un agente atascado crece de forma **cuadrática**: en el experimento, 60 pasos cuestan 319 500 tokens y cortar el bucle en el paso 3 solo 3 150.
+- Combina guardas: **bucle** (la más barata y específica), **tokens o coste** (techo de gasto), **pasos** y **tiempo** (red de seguridad), con motivo de parada y estado útil.
+- Reintenta con **retroceso y límite**, solo lo reintentable y con **idempotencia**; una reanudación puede repetir pasos.
+- Observa **trazas, coste, pasos, motivos de parada, errores por herramienta y aprobaciones**; protege la privacidad en las trazas.
+- OWASP lo clasifica como **consumo no acotado**: es un riesgo de seguridad, no solo de presupuesto.
+
+</KeyTakeaways>

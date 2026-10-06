@@ -1,0 +1,58 @@
+---
+title: Supervisor multi-agente con handoffs
+description: Implementa un supervisor que reparte el trabajo entre agentes especializados con un estado compartido, permite handoffs directos entre agentes y se protege de bucles, nombres inválidos y fallos.
+part: agentes
+module: m12-multi-agente
+difficulty: 3
+estimatedMinutes: 45
+concepts:
+  - supervisor
+  - handoff
+  - estado compartido
+  - detección de bucles
+packages: []
+hints:
+  - 'Mantén una variable `forced` con el agente del handoff. Si `forced` no es `None`, úsala como nombre del turno en lugar de preguntar al supervisor y vuelve a ponerla a `None`.'
+  - 'Para `stuck` cuenta las elecciones consecutivas del supervisor: `repeats = repeats + 1 if nombre == ultimo else 1`. Detente cuando `repeats >= max_repeats`, antes de ejecutar al agente.'
+  - 'Un agente puede devolver `None`: usa `agente(state) or {}`. Los datos se fusionan con `state["data"].update(salida.get("data", {}))`.'
+  - 'Envuelve la ejecución del agente en `try/except Exception`; en el fallo añade `{"agent": ..., "message": f"error: {type(e).__name__}: {e}"}` y usa `continue`.'
+relatedLessons:
+  - m12-multi-agente/02-topologias-y-estado-compartido
+---
+
+## Objetivo
+
+En la topología **supervisor** (o jerárquica), un agente coordinador decide **a quién** pasar el trabajo en cada momento, y los agentes especializados ejecutan. Un **handoff** es una transferencia directa de control de un agente a otro («esto es de facturas, te lo paso»). Todos comparten un **estado**: lo que cada uno ve y escribe. Implementas el bucle central, con las protecciones que necesita un sistema real: no repetir al mismo agente indefinidamente, rechazar nombres inventados y no caerse si un agente falla.
+
+## Qué tienes que hacer
+
+Implementa `run_supervisor(task, supervisor, agents, max_turns=8, max_repeats=3)`:
+
+- `supervisor(state)` devuelve el nombre del siguiente agente o `"FINISH"`.
+- `agents` es un diccionario `nombre → función(state)`, que devuelve un diccionario opcional (o `None`) con `message` (texto para el historial), `data` (se **fusiona** en `state["data"]`) y `handoff` (nombre del agente que actuará **directamente** en el turno siguiente, sin consultar al supervisor).
+- El **estado compartido** es `{"task": task, "history": [{"agent", "message"}], "data": {}}`.
+
+Cada turno ejecuta un agente. El bucle se detiene con:
+
+- `"finish"`: el supervisor devuelve `FINISH`.
+- `"invalid_agent"`: el nombre elegido (por el supervisor o por un handoff) no existe en `agents`.
+- `"stuck"`: el supervisor elige el **mismo agente** `max_repeats` veces seguidas (se comprueba **antes** de ejecutarlo; los turnos por handoff no cuentan).
+- `"max_turns"`: se agotan los turnos.
+
+Si un agente lanza una excepción, se añade `{"agent": nombre, "message": "error: <Tipo>: <mensaje>"}` al historial y el bucle **continúa**. Devuelve `{"state", "turns", "stopped", "trace"}`, donde `turns` es el número de agentes ejecutados y `trace` sus nombres en orden.
+
+## Un ejemplo para comprobar a mano
+
+```python
+def supervisor(state):
+    return "investigador" if "plazo" not in state["data"] else "FINISH"
+
+agentes = {"investigador": lambda s: {"message": "encontrado", "data": {"plazo": "14 días"}}}
+run_supervisor("¿Plazo de devolución?", supervisor, agentes)["trace"]   # ['investigador']
+```
+
+<Callout type="nota" title="El estado compartido es el riesgo y la ventaja">
+
+Compartir el historial es lo que permite que un agente entienda lo que hizo el anterior; pero también hace crecer el contexto de todos y puede filtrar información a quien no debería verla. Decide qué parte del estado ve cada agente (todo, un resumen o solo su tarea). Y el control de bucles no es opcional: un supervisor que vuelve a elegir al mismo agente sin que cambie nada está atascado.
+
+</Callout>

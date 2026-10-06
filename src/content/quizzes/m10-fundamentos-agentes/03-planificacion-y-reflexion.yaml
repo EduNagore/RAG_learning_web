@@ -1,0 +1,98 @@
+lesson: m10-fundamentos-agentes/03-planificacion-y-reflexion
+questions:
+  - id: m10-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿En qué consiste Reflexion?'
+    options:
+      - 'En reentrenar el modelo con cada fallo.'
+      - 'En que el agente reflexiona con texto sobre un intento fallido y guarda esa lección en una memoria episódica para los siguientes intentos.'
+      - 'En ejecutar el mismo prompt varias veces y votar.'
+      - 'En eliminar el bucle del agente.'
+    answer: [1]
+    explanation: 'Reflexion mejora mediante retroalimentación lingüística en lugar de actualizar pesos: la lección verbal viaja en el prompt del siguiente intento.'
+    ref: '#reflexión-reflexion'
+
+  - id: m10-03-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Qué concluyen Huang et al. (2023) sobre la autocorrección sin feedback externo?'
+    options:
+      - 'Que siempre mejora la respuesta.'
+      - 'Que los LLM tienen dificultades para autocorregirse sin feedback externo y, a veces, su rendimiento empeora.'
+      - 'Que no tiene ningún efecto.'
+      - 'Que solo funciona con modelos pequeños.'
+    answer: [1]
+    explanation: 'La reflexión útil se apoya en una señal fiable del mundo (tests, herramientas, reglas, personas). La mera revisión por el propio modelo puede cambiar una respuesta correcta por una errónea.'
+    ref: '#puede-el-modelo-corregirse-solo'
+
+  - id: m10-03-q3
+    type: single
+    difficulty: 3
+    prompt: 'En el experimento con tests débiles, el bucle terminó en el primer intento con código incorrecto. ¿Qué lección ilustra?'
+    options:
+      - 'Que la reflexión nunca funciona.'
+      - 'Que el agente es tan bueno como su verificador: un evaluador incompleto da una falsa sensación de seguridad.'
+      - 'Que hay que quitar los tests.'
+      - 'Que los modelos escriben siempre código correcto.'
+    answer: [1]
+    explanation: 'Con solo dos casos de prueba, el primer intento (que ignora la regla de los siglos) pasa. Invertir en buenos verificadores es tan importante como mejorar el modelo.'
+    ref: '#un-experimento-el-verificador-decide-si-la-reflexión-ayuda'
+
+  - id: m10-03-q4
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué prácticas hacen más fiable un bucle de reflexión? Marca todas las correctas.'
+    options:
+      - 'Un verificador fuerte (tests, validadores, reglas).'
+      - 'Lecciones concretas que citen el fallo.'
+      - 'Un máximo de intentos y escalar a una persona al agotarlo.'
+      - 'Ejecutar el código generado directamente en el proceso principal para ir más rápido.'
+    answer: [0, 1, 2]
+    explanation: 'Verificación fuerte, lecciones concretas y límites con escalado son las claves. Ejecutar código generado sin sandbox es un riesgo de seguridad.'
+    ref: '#errores-comunes-en-producción'
+
+  - id: m10-03-q5
+    type: single
+    difficulty: 2
+    prompt: '¿Qué ventaja tiene un plan previo explícito frente a decidir solo la siguiente acción?'
+    options:
+      - 'Es siempre más barato.'
+      - 'Es auditable: una persona puede revisarlo o aprobarlo antes de ejecutar.'
+      - 'Nunca falla si el entorno cambia.'
+      - 'No necesita ningún modelo.'
+    answer: [1]
+    explanation: 'Un plan estructurado se puede inspeccionar y aprobar, aunque es frágil si el entorno no se comporta como se esperaba (por eso existe la replanificación).'
+    ref: '#planificación'
+
+  - id: m10-03-q6
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código sobre el segundo intento del experimento (a % 4 == 0 and a % 100 != 0)?'
+    code: |-
+      es_bisiesto = lambda a: a % 4 == 0 and a % 100 != 0
+      print([es_bisiesto(a) for a in (2024, 1900, 2000)])
+    options:
+      - '[True, False, True]'
+      - '[True, False, False]'
+      - '[True, True, True]'
+      - '[False, False, False]'
+    answer: [1]
+    explanation: '2000 es divisible entre 100, así que este intento devuelve False aunque 2000 sea bisiesto (divisible entre 400). Por eso falla con tests fuertes.'
+    ref: '#un-experimento-el-verificador-decide-si-la-reflexión-ayuda'
+
+  - id: m10-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Para que una lección de reflexión sea útil debe citar el fallo concreto (por ejemplo, el caso que no pasa el test) en lugar de ser un consejo genérico.'
+    answer: [0]
+    explanation: 'Es verdadero. «Falla con 1900: esperado False» orienta el siguiente intento; «hazlo mejor» no aporta información.'
+    ref: '#reflexión-reflexion'
+
+  - id: m10-03-q8
+    type: truefalse
+    difficulty: 3
+    prompt: 'Si un agente supera los tests que lo verifican, está garantizado que ha resuelto el problema real.'
+    answer: [1]
+    explanation: 'Es falso. Puede haber atajos que pasan los tests sin resolver el problema (reward hacking) o tests incompletos. Conviene revisar muestras a mano.'
+    ref: '#errores-comunes-en-producción'

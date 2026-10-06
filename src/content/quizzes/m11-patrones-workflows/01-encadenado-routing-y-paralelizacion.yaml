@@ -1,0 +1,98 @@
+lesson: m11-patrones-workflows/01-encadenado-routing-y-paralelizacion
+questions:
+  - id: m11-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es una puerta (gate) en un prompt chaining?'
+    options:
+      - 'Un modelo más grande que revisa todo.'
+      - 'Una comprobación programática entre pasos que verifica que el proceso va bien antes de continuar.'
+      - 'Un límite de tokens de salida.'
+      - 'Un tipo de herramienta.'
+    answer: [1]
+    explanation: 'Las puertas (formato válido, campos presentes, cita existente...) detectan fallos pronto y permiten reintentar o parar antes de que se propaguen.'
+    ref: '#prompt-chaining-encadenado'
+
+  - id: m11-01-q2
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este código sobre una cadena de 5 pasos con 90 % de fiabilidad por paso, sin puertas?'
+    code: |-
+      p, n = 0.9, 5
+      print(f"{p**n:.1%}")
+    options:
+      - '90.0%'
+      - '45.0%'
+      - '59.0%'
+      - '99.9%'
+    answer: [2]
+    explanation: '0,9 elevado a 5 es 0,59049, es decir, un 59,0 %. Las fiabilidades se multiplican a lo largo de la cadena.'
+    ref: '#prompt-chaining-encadenado'
+
+  - id: m11-01-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Cuándo encaja mejor el patrón routing?'
+    options:
+      - 'Cuando los pasos son siempre los mismos.'
+      - 'Cuando hay categorías de entrada distintas que se manejan mejor por separado y la clasificación es fiable.'
+      - 'Cuando no hay ninguna estructura en la tarea.'
+      - 'Cuando se quiere ejecutar la misma tarea varias veces.'
+    answer: [1]
+    explanation: 'El routing separa responsabilidades y permite optimizar cada ruta. Requiere un clasificador fiable y una ruta por defecto.'
+    ref: '#routing-enrutado'
+
+  - id: m11-01-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué distingue sectioning de voting?'
+    options:
+      - 'Sectioning reparte subtareas independientes para ganar latencia; voting repite la misma tarea para ganar fiabilidad.'
+      - 'Son nombres distintos de la misma técnica.'
+      - 'Sectioning usa votación y voting usa secciones.'
+      - 'Ninguno se ejecuta en paralelo.'
+    answer: [0]
+    explanation: 'Sectioning divide el trabajo en partes independientes; voting obtiene varias respuestas a la misma tarea y las combina.'
+    ref: '#paralelización'
+
+  - id: m11-01-q5
+    type: single
+    difficulty: 3
+    prompt: 'La fórmula de votación del experimento supone errores independientes. ¿Qué ocurre en la práctica?'
+    options:
+      - 'Los errores siempre son independientes.'
+      - 'Los errores de un modelo suelen estar correlados, así que votar mejora menos de lo que predice la fórmula; con un sesgo sistemático, nada.'
+      - 'Votar siempre empeora el resultado.'
+      - 'La votación solo funciona con un modelo.'
+    answer: [1]
+    explanation: 'El mismo sesgo o una pregunta ambigua provoca fallos comunes a todas las muestras. Además, con temperatura 0 las muestras coinciden y votar no aporta.'
+    ref: '#un-experimento-fiabilidad-de-las-puertas-de-la-votación-y-latencia-en-paralelo'
+
+  - id: m11-01-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué prácticas mejoran un workflow de enrutado? Marca todas las correctas.'
+    options:
+      - 'Definir una ruta por defecto para lo que no encaja.'
+      - 'Medir la precisión del clasificador.'
+      - 'Registrar qué ruta se eligió en cada consulta.'
+      - 'Confiar en que el clasificador no se equivoca nunca.'
+    answer: [0, 1, 2]
+    explanation: 'Un error de enrutado es silencioso porque el manejador equivocado responde con aplomo. Por eso se mide, se registra y se tiene una ruta de reserva.'
+    ref: '#routing-enrutado'
+
+  - id: m11-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'La paralelización por secciones reduce la latencia total al tiempo de la subtarea más lenta, pero no reduce el número de llamadas ni de tokens.'
+    answer: [0]
+    explanation: 'Es verdadero. Se ahorra tiempo, no coste; incluso puede aumentar el coste al repetir instrucciones comunes en cada llamada.'
+    ref: '#paralelización'
+
+  - id: m11-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Si todas las muestras de una votación coinciden, la respuesta es necesariamente correcta.'
+    answer: [1]
+    explanation: 'Es falso. Un sesgo sistemático del modelo puede producir el mismo error en todas las muestras: el acuerdo alto detecta dudas, no certifica aciertos.'
+    ref: '#errores-comunes-en-producción'

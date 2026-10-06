@@ -1,0 +1,194 @@
+---
+title: Prompt chaining, routing y paralelización
+description: Los tres primeros patrones de workflows agénticos, con cuándo usar cada uno, cómo las puertas de verificación aumentan la fiabilidad de una cadena y qué ahorra y qué cuesta la paralelización por secciones y por votación.
+module: m11-patrones-workflows
+order: 1
+level: intermedio
+estimatedMinutes: 18
+objectives:
+  - Describir prompt chaining, routing y paralelización (sectioning y voting) y reconocer cuándo encaja cada uno.
+  - Calcular el efecto de las puertas de verificación sobre la fiabilidad de una cadena.
+  - Calcular la probabilidad de acierto de una votación por mayoría y entender el supuesto de independencia.
+  - Elegir entre estos patrones y un agente, justificando la decisión por coste, latencia y previsibilidad.
+prerequisites:
+  - m10-fundamentos-agentes/04-memoria-y-context-engineering
+volatility: low
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: Self-Consistency Improves Chain of Thought Reasoning in Language Models
+    url: https://arxiv.org/abs/2203.11171
+    type: paper
+    authors: Wang, Wei, Schuurmans, Le, Chi, Narang, Chowdhery, Zhou
+    year: 2022
+  - title: Chain-of-Thought Prompting Elicits Reasoning in Large Language Models
+    url: https://arxiv.org/abs/2201.11903
+    type: paper
+    authors: Wei et al.
+    year: 2022
+relatedLabs:
+  - agents-24-routing
+  - agents-25-votacion
+---
+
+## Intuición: estructura antes que autonomía
+
+En la lección sobre workflows y agentes viste que la recomendación es **empezar por lo simple**. Entre una llamada única y un agente completo hay un conjunto de **patrones de workflow**, estructuras reutilizables en las que el **código** decide el flujo y el modelo rellena cada paso. Son más baratos, rápidos, previsibles y fáciles de depurar que un agente, y resuelven una enorme parte de los problemas reales. Anthropic describe cinco en *Building effective agents*; en esta lección ves los tres primeros y en la siguiente, los otros dos.
+
+La idea común es **descomponer** el problema para que cada llamada al modelo haga una tarea más sencilla y comprobable que la tarea completa.
+
+## Cómo funciona
+
+### Prompt chaining (encadenado)
+
+Se descompone una tarea en una **secuencia de pasos**, donde cada llamada procesa la salida de la anterior. Entre pasos se pueden insertar **puertas** (*gates*): comprobaciones programáticas que verifican que el proceso va bien antes de seguir (formato válido, longitud, campos presentes, que una cita exista).
+
+Cuándo encaja: la tarea se descompone limpiamente en pasos fijos y quieres **cambiar latencia por precisión** haciendo cada llamada más fácil. Ejemplos: generar un esquema y después redactar el documento a partir de él; escribir un texto y luego traducirlo; extraer datos y después validarlos y darles formato.
+
+**Por qué las puertas importan**: una cadena multiplica fiabilidades, igual que viste con los agentes. Si cada paso acierta con probabilidad $p$, una cadena de $n$ pasos acierta con $p^n$. Una puerta que **detecta** un fallo con probabilidad $d$ y permite **reintentar una vez** eleva la fiabilidad efectiva del paso a $p + (1-p) \cdot d \cdot p$.
+
+### Routing (enrutado)
+
+Se **clasifica** la entrada y se dirige a un proceso especializado: un prompt, un modelo, una herramienta o un sub-workflow distinto. Permite separar responsabilidades y optimizar cada ruta por separado, en lugar de un prompt gigante que intenta cubrir todo.
+
+Cuándo encaja: hay **categorías distintas** que se manejan mejor por separado y la **clasificación es fiable** (con un LLM o con un clasificador clásico). Ejemplos: dirigir consultas de soporte a devoluciones, envíos o facturación; enviar las preguntas fáciles a un modelo pequeño y barato y las difíciles a uno más capaz.
+
+Dos cautelas: **una ruta por defecto** para lo que no encaja (lo viste en el laboratorio) y **medir la precisión del clasificador**: un error de enrutado es silencioso, porque el manejador equivocado responde con aplomo.
+
+### Paralelización
+
+Hay dos variantes, en las que varias llamadas se ejecutan **a la vez** y sus resultados se agregan por código:
+
+- **Sectioning (por secciones):** se divide la tarea en **subtareas independientes** que se ejecutan en paralelo. Por ejemplo, revisar un documento buscando por separado errores de estilo, de contenido y de cumplimiento, o evaluar a la vez varios aspectos de una respuesta. Reduce **latencia** (el tiempo total es el de la subtarea más lenta, no la suma) y permite que cada llamada se concentre en una sola cosa.
+- **Voting (por votación):** se ejecuta **la misma tarea varias veces** para obtener resultados diversos y se combinan. Es el principio de **self-consistency** (Wang et al., 2022): en lugar de la respuesta única de una decodificación voraz, se muestrean varios caminos de razonamiento y se elige la respuesta más consistente entre ellos. Los autores reportan mejoras como +17,9 % en GSM8K, +11,0 % en SVAMP, +12,2 % en AQuA, +6,4 % en StrategyQA y +3,9 % en ARC-challenge frente a la técnica de *chain-of-thought* con decodificación voraz. Se usa también para **revisión de seguridad** (varias pasadas que buscan problemas, y se señala si alguna lo detecta) o para evaluar con umbrales de votos.
+
+<Diagram
+  caption="Los tres patrones: cadena con puertas, enrutado a manejadores y paralelización con agregación."
+  code={`flowchart TB
+  subgraph Cadena
+    A1[Paso 1] --> G1{Puerta} --> A2[Paso 2] --> G2{Puerta} --> A3[Paso 3]
+  end
+  subgraph Enrutado
+    C[Clasificador] --> H1[Manejador A]
+    C --> H2[Manejador B]
+    C --> H3[Por defecto]
+  end
+  subgraph Paralelo
+    P1[Llamada 1] --> AG[Agregación: unión o votación]
+    P2[Llamada 2] --> AG
+    P3[Llamada 3] --> AG
+  end`}
+/>
+
+### Cómo diseñar buenas puertas y buena agregación
+
+Una puerta eficaz es **barata, determinista y específica**: validar que la salida es JSON con los campos esperados, que una fecha tiene formato válido, que cada cita apunta a un documento recibido, que el texto no supera una longitud o no contiene datos prohibidos. Las comprobaciones que requieren juicio (¿es adecuado el tono?) pueden confiarse a otra llamada, pero entonces la puerta cuesta y también puede equivocarse. Lo importante es decidir de antemano **qué pasa cuando la puerta falla**: reintentar con el error como contexto, usar una versión alternativa, escalar a una persona o abortar con un mensaje claro. En la agregación paralela ocurre lo mismo: define qué hacer si una llamada falla o devuelve algo inválido (ignorarla, repetirla, abortar) y qué hacer si las respuestas **discrepan**. Un sistema sin política de desacuerdo se comporta de forma arbitraria justo en los casos que más importan.
+
+### Un experimento: fiabilidad de las puertas, de la votación y latencia en paralelo
+
+El código siguiente calcula con probabilidades **ilustrativas** (no medidas) tres cosas: la probabilidad de que la **mayoría** de $n$ muestras independientes acierte, la fiabilidad de una cadena con y sin **puertas** de verificación, y la latencia secuencial frente a paralela de tres subtareas.
+
+```python
+from math import comb
+
+
+def mayoria_correcta(p, n):
+    """Probabilidad de que la mayoría de n muestras independientes acierte (n impar)."""
+    return sum(comb(n, k) * p**k * (1 - p) ** (n - k) for k in range(n // 2 + 1, n + 1))
+
+
+print("votación con errores INDEPENDIENTES (probabilidad de acertar por mayoría)")
+print("acierto individual   n=1    n=3    n=5    n=9")
+for p in (0.6, 0.7, 0.9):
+    print(f"{p:>18.0%}", *(f"{mayoria_correcta(p, n):6.1%}" for n in (1, 3, 5, 9)))
+
+
+def paso_con_puerta(p, deteccion):
+    """Éxito de un paso con una puerta que detecta el fallo con probabilidad `deteccion` y reintenta una vez."""
+    return p + (1 - p) * deteccion * p
+
+
+print("\ncadena de pasos con y sin puertas de verificación (p = 0,9 por paso, detección 80 %)")
+print("pasos   sin puertas   con puertas")
+for n in (3, 5, 10):
+    print(f"{n:>5}   {0.9**n:11.1%}   {paso_con_puerta(0.9, 0.8) ** n:11.1%}")
+
+# Sectioning: tareas independientes en paralelo cuestan el máximo, no la suma.
+duraciones = [3.0, 2.0, 4.0]
+print("\nsecuencial:", sum(duraciones), "s | en paralelo:", max(duraciones), "s")
+```
+
+Salida (determinista):
+
+```text
+votación con errores INDEPENDIENTES (probabilidad de acertar por mayoría)
+acierto individual   n=1    n=3    n=5    n=9
+               60%  60.0%  64.8%  68.3%  73.3%
+               70%  70.0%  78.4%  83.7%  90.1%
+               90%  90.0%  97.2%  99.1%  99.9%
+
+cadena de pasos con y sin puertas de verificación (p = 0,9 por paso, detección 80 %)
+pasos   sin puertas   con puertas
+    3         72.9%         91.8%
+    5         59.0%         86.8%
+   10         34.9%         75.3%
+
+secuencial: 9.0 s | en paralelo: 4.0 s
+```
+
+- **Votar mejora mucho si los errores son independientes:** con un 70 % de acierto individual, 9 muestras dan un 90,1 %. Pero cuesta **9 veces más** y el modelo de cálculo supone **independencia**. En la práctica los errores de un modelo están **correlados** (el mismo sesgo, la misma pregunta ambigua), y votar mejora menos de lo que dice la fórmula; con un sesgo sistemático, nada.
+- **Las puertas valen oro:** con 10 pasos, la cadena sin puertas acierta el 34,9 % de las veces y con puertas del 80 % de detección, el 75,3 %. Una puerta **barata** (una expresión regular, un esquema, un test) rinde mucho más que mejorar un poco el modelo.
+- **La paralelización por secciones ahorra latencia, no coste:** 4 s en lugar de 9 s, pero el número de llamadas y de tokens es el mismo (incluso mayor, por repetir instrucciones comunes en cada una).
+
+### Cómo elegir
+
+| Situación | Patrón |
+| --- | --- |
+| Pasos fijos, cada uno más fácil que el todo | Encadenado (con puertas) |
+| Categorías de entrada distintas con tratamientos distintos | Routing |
+| Partes independientes y quieres menos latencia | Sectioning |
+| Quieres más confianza o detectar dudas en una respuesta | Voting (con acuerdo mínimo) |
+| No puedes enumerar los pasos de antemano | Workflow dinámico o agente (lecciones siguientes) |
+
+## Trade-offs
+
+| Patrón | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Encadenado | Cada paso es simple y verificable | Latencia en serie; los errores se propagan sin puertas |
+| Routing | Especialización por ruta; ahorro con modelos pequeños | Un error de clasificación es silencioso |
+| Sectioning | Menos latencia; foco por llamada | Mismo coste (o mayor); hay que agregar bien |
+| Voting | Más fiabilidad y detección de dudas | Coste × n; errores correlados limitan el beneficio |
+
+## Errores comunes en producción
+
+- **Cadenas largas sin puertas.** La fiabilidad cae de forma multiplicativa y nadie sabe en qué paso falló.
+- **Router sin ruta por defecto ni medición.** Los errores de enrutado pasan desapercibidos.
+- **Votar con muestras idénticas.** Con temperatura 0 todas las muestras coinciden: la votación no aporta; hace falta diversidad (temperatura, prompts o modelos distintos).
+- **Creer que el consenso es la verdad.** Si el modelo tiene un sesgo sistemático, todas las muestras coinciden en el error.
+- **Paralelizar tareas dependientes.** Si una subtarea necesita el resultado de otra, no es paralelizable.
+- **Ignorar los límites de tasa.** Lanzar nueve llamadas a la vez puede chocar con las cuotas del proveedor.
+- **Agregar sin criterio.** Unir resultados paralelos exige reglas claras (unión, intersección, votación, un modelo que sintetiza) y que se pruebe el caso de desacuerdo.
+- **Pasar a un agente demasiado pronto.** Si los pasos son conocidos, una cadena o un router es más barato y predecible.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué patrones de workflow conoces?"_ Pista: prompt chaining, routing, paralelización (sectioning y voting), orchestrator-workers y evaluator-optimizer.
+- _"¿Para qué sirven las puertas en un encadenado?"_ Pista: verifican la salida de cada paso con comprobaciones programáticas; con una cadena de $n$ pasos de fiabilidad $p$, aumentan la fiabilidad total al permitir detectar y reintentar.
+- _"¿Qué diferencia hay entre sectioning y voting?"_ Pista: sectioning reparte subtareas distintas e independientes para ganar latencia; voting repite la misma tarea para ganar fiabilidad.
+- _"¿Cuándo no ayuda votar?"_ Pista: con errores correlados o sesgo sistemático, y cuando las muestras no son diversas (temperatura 0).
+
+</Callout>
+
+<KeyTakeaways>
+
+- Los **workflows** (cadena, routing, paralelización) cubren muchos problemas con más previsibilidad y menos coste que un agente.
+- Las **puertas** de verificación elevan la fiabilidad de una cadena: en el ejemplo, de 34,9 % a 75,3 % a 10 pasos.
+- **Routing** necesita una ruta por defecto y medir la precisión del clasificador.
+- **Sectioning** reduce latencia (máximo, no suma); **voting** aumenta fiabilidad si los errores no están correlados (self-consistency) a un coste × n.
+- Pasa a un workflow dinámico o a un agente solo cuando los pasos no se puedan fijar de antemano.
+
+</KeyTakeaways>

@@ -1,0 +1,222 @@
+---
+title: Sandboxing, mínimo privilegio y aprobación humana
+description: Cómo limitar lo que un agente puede hacer aunque falle o lo engañen, con aislamiento de archivos y red, permisos mínimos y de corta vida, acciones reversibles frente a irreversibles y puntos de aprobación humana bien diseñados.
+module: m17-fiabilidad-seguridad
+order: 2
+level: avanzado
+estimatedMinutes: 20
+objectives:
+  - Explicar por qué el aislamiento de sistema de archivos y de red son complementarios y qué protege cada uno.
+  - Aplicar el principio de mínimo privilegio a las credenciales, herramientas y datos de un agente.
+  - Clasificar acciones como reversibles o irreversibles y decidir cuáles exigen aprobación humana.
+  - Comparar políticas de aprobación por número de preguntas y por qué las acciones dañinas llegan a un humano.
+prerequisites:
+  - m17-fiabilidad-seguridad/01-inyeccion-de-prompts-y-triada-letal
+  - m15-memoria-estado/01-checkpointing-y-ejecucion-duradera
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: "Beyond permission prompts: making Claude Code more secure and autonomous"
+    url: https://www.anthropic.com/engineering/claude-code-sandboxing
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: The lethal trifecta for AI agents
+    url: https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/
+    type: blog
+    authors: Simon Willison
+    year: 2025
+  - title: OWASP Top 10 for Agentic Applications 2026
+    url: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/
+    type: docs
+    authors: OWASP GenAI Security Project
+    year: 2025
+  - title: OWASP Top 10 for LLM Applications 2025
+    url: https://genai.owasp.org/llm-top-10/
+    type: docs
+    authors: OWASP GenAI Security Project
+    year: 2025
+relatedLabs:
+  - agents-34-defensa-inyeccion-indirecta
+---
+
+## Intuición: asume que el agente se equivocará
+
+En la lección anterior viste que no se puede garantizar que un modelo no obedezca una instrucción maliciosa. La respuesta de ingeniería es la misma que en cualquier sistema peligroso: **diseña para que, cuando falle, el daño sea pequeño**. Un cajero automático no confía en que nadie intentará abrirlo; está construido de modo que abrirlo no dé acceso al resto del banco.
+
+Para un agente eso significa tres capas que se refuerzan: **aislar** el entorno en el que ejecuta código y acciones (sandboxing), **dar solo los permisos necesarios** y solo mientras hacen falta (mínimo privilegio), y **poner a una persona** en la decisión cuando la acción es costosa o irreversible (aprobación humana). Anthropic lo plantea en su guía de agentes de forma directa: los agentes pueden pausar para pedir opinión humana en puntos de control o ante bloqueos, y recomiendan **pruebas extensas en entornos aislados, con las salvaguardas adecuadas**, porque la autonomía implica mayores costes y errores que se acumulan.
+
+## Cómo funciona
+
+### Sandboxing: archivos y red a la vez
+
+Un *sandbox* es un entorno en el que el agente puede actuar pero cuyo alcance está acotado de antemano. La explicación de Anthropic sobre el aislamiento de Claude Code distingue dos fronteras complementarias:
+
+- **Aislamiento del sistema de archivos:** el agente solo puede leer o modificar directorios concretos.
+- **Aislamiento de red:** el agente solo puede conectarse a servidores aprobados.
+
+Y explica por qué hacen falta **las dos**: sin aislamiento de red, un agente comprometido podría **exfiltrar** archivos sensibles como claves SSH; sin aislamiento del sistema de archivos, un agente comprometido podría **escapar del sandbox** y recuperar acceso a la red. Cada frontera protege a la otra. Es exactamente la lógica de la tríada: el aislamiento de red elimina el **canal externo** y el de archivos limita los **datos privados** al alcance.
+
+El mismo texto aporta un dato de experiencia de usuario: en su uso interno, el aislamiento redujo en un **84 %** los avisos de permiso. Es una cifra de un caso concreto (la propia herramienta de Anthropic) y no se puede extrapolar a cualquier sistema, pero ilustra una idea importante: **un buen sandbox permite pedir menos permisos**, porque lo que ocurre dentro ya está acotado. Menos avisos, además, significa que los que quedan se leen.
+
+Qué considerar al diseñar uno:
+
+- **Lista de destinos de red permitidos** (allow-list), no lista de bloqueo.
+- **Sistema de archivos de solo lectura** salvo un directorio de trabajo efímero.
+- **Límites de recursos** (CPU, memoria, tiempo, procesos) para contener también el coste.
+- **Entorno desechable por tarea o por intento**, lo mismo que pedías para evaluar agentes.
+- **Secretos fuera del sandbox:** ni variables de entorno con claves ni archivos de credenciales visibles para el código que ejecuta el agente.
+
+### Mínimo privilegio
+
+Cada capacidad que concedes a un agente es una capacidad que un atacante hereda si logra controlarlo. Reglas prácticas:
+
+1. **Herramientas por tarea**, no por agente: lista blanca (laboratorio 34) que se define al empezar la tarea.
+2. **Credenciales acotadas:** alcance mínimo (solo lectura si solo lee), **corta vida** (caducan en minutos u horas) y **por usuario**, para que el agente herede **los permisos de quien lo invoca** y no los de una cuenta de servicio con acceso a todo.
+3. **Datos mínimos en el contexto:** si el agente no necesita el historial completo del cliente, no se lo cargues.
+4. **Separación de agentes por nivel de confianza:** el que lee contenido de terceros no comparte contexto ni herramientas con el que tiene acceso a datos sensibles.
+5. **Registro de cada acción** (quién la pidió, con qué argumentos, qué devolvió) para poder auditarla.
+
+OWASP lo recoge en sus dos listas. En la de aplicaciones con LLM, la **agencia excesiva** (LLM06 en 2025) describe a sistemas con más capacidades y permisos de los necesarios. En la lista **OWASP Top 10 para aplicaciones agénticas 2026**, publicada en diciembre de 2025 con la colaboración de más de cien expertos, los riesgos de secuestro de objetivos, mal uso de herramientas, abuso de identidad y privilegios, ejecución inesperada de código, envenenamiento de memoria o contexto, comunicación insegura entre agentes y fallos en cascada apuntan en la misma dirección: acotar lo que un agente puede hacer y cómo se comunica. (Los nombres exactos y las definiciones están en el documento; descárgalo para citar con precisión.)
+
+### Reversible o irreversible
+
+Una pregunta que ordena casi todas las decisiones: **¿se puede deshacer?**
+
+| Tipo de acción | Ejemplos | Tratamiento recomendado |
+| --- | --- | --- |
+| Lectura sin efectos | Buscar, listar, consultar | Autónoma, con límites de volumen |
+| Escritura reversible | Crear un borrador, mover un archivo con copia, abrir un ticket | Autónoma con registro y posibilidad de revertir |
+| Escritura irreversible o costosa | Enviar un correo, pagar, borrar, publicar, desplegar | **Aprobación humana**, o confirmación de dos pasos |
+| Acción hacia el exterior con datos privados en el contexto | Cualquier canal externo tras haber leído datos sensibles | Bloqueo o aprobación explícita (lección anterior) |
+
+Técnicas que convierten acciones irreversibles en reversibles: **modo simulación** (*dry run*) que muestra qué se haría, **borrado lógico** con papelera, **claves de idempotencia** para que reintentar no duplique pagos o envíos, y **ventanas de deshacer**.
+
+### Aprobación humana bien hecha
+
+Pedir confirmación suena sencillo y se hace mal con frecuencia. Principios:
+
+- **Que el humano vea la acción exacta**, no una descripción vaga: destinatario, importe, texto, archivos afectados.
+- **Preguntar poco y bien.** Si se pregunta por todo, la persona aprueba sin leer: el control existe sobre el papel y deja de proteger.
+- **Que el agente se pueda pausar y reanudar** (ejecución duradera, lección de checkpointing): la aprobación puede tardar horas, y el estado debe conservarse sin mantener un proceso vivo.
+- **Pedir aprobación según el contexto**, no solo según la herramienta: la misma escritura puede ser trivial con un contexto limpio y peligrosa si el contexto contiene contenido de terceros.
+- **Registrar quién aprobó qué.**
+- **Dar una salida:** rechazar con un motivo, editar la acción o cancelar la tarea.
+
+El experimento siguiente cuenta, en un escenario escrito a mano, cuántas preguntas genera cada política de aprobación y si las acciones dañinas llegan a un humano. Son 40 acciones: 30 lecturas, 7 escrituras legítimas y 3 envíos al exterior provocados por una inyección. El contexto se contamina con contenido de terceros a partir de la acción 15. Es **aritmética de un escenario inventado**, no un estudio de comportamiento humano.
+
+```python
+TOTAL = 40
+ESCRITURAS = {3, 8, 12, 18, 25, 30, 37}  # escrituras legítimas (sensibles)
+ENVIOS_INYECTADOS = {20, 21, 22}  # envíos al exterior provocados por una inyección
+CONTAMINA_EN = 15  # a partir de aquí el contexto contiene contenido no fiable
+
+
+def tipo(i):
+    if i in ESCRITURAS:
+        return "escritura"
+    if i in ENVIOS_INYECTADOS:
+        return "envío"
+    return "lectura"
+
+
+def politica(nombre):
+    preguntas = malas_preguntadas = malas_ejecutadas = 0
+    for i in range(TOTAL):
+        t = tipo(i)
+        mala = t == "envío"
+        contaminado = i >= CONTAMINA_EN
+        bloqueada = nombre == "sandbox + sensibles tras contaminación" and t == "envío"  # allow-list de red
+        if bloqueada:
+            continue
+        if nombre == "nunca preguntar":
+            pregunta = False
+        elif nombre == "preguntar siempre":
+            pregunta = True
+        elif nombre == "preguntar en toda acción sensible":
+            pregunta = t != "lectura"
+        else:  # sensibles tras contaminación (con o sin sandbox)
+            pregunta = t != "lectura" and contaminado
+        preguntas += pregunta
+        malas_preguntadas += pregunta and mala
+        malas_ejecutadas += mala and not pregunta  # sin pregunta, la acción mala se ejecuta
+    return preguntas, malas_preguntadas, malas_ejecutadas
+
+
+print(f"{'política':<42}{'preguntas':>10}{'malas entre ellas':>19}{'malas sin preguntar':>21}")
+for nombre in (
+    "nunca preguntar",
+    "preguntar siempre",
+    "preguntar en toda acción sensible",
+    "sensibles tras contaminación",
+    "sandbox + sensibles tras contaminación",
+):
+    p, mp, me = politica(nombre)
+    print(f"{nombre:<42}{p:>10}{mp:>19}{me:>21}")
+```
+
+Salida (determinista):
+
+```text
+política                                   preguntas  malas entre ellas  malas sin preguntar
+nunca preguntar                                    0                  0                    3
+preguntar siempre                                 40                  3                    0
+preguntar en toda acción sensible                 10                  3                    0
+sensibles tras contaminación                       7                  3                    0
+sandbox + sensibles tras contaminación             4                  0                    0
+```
+
+- **Nunca preguntar:** cero molestias y las tres acciones dañinas se ejecutan.
+- **Preguntar siempre:** todas las acciones dañinas pasan por un humano, pero **3 de 40 preguntas** (7,5 %) son las que importan, escondidas entre 37 triviales: justo la situación en la que alguien acaba aprobando por inercia.
+- **Preguntar en las sensibles:** 10 preguntas, las 3 dañinas entre ellas (30 %).
+- **Preguntar solo en las sensibles tras contaminación:** 7 preguntas y la proporción de las dañinas sube al 43 %. Menos preguntas, más cargadas de riesgo, y por tanto más atención por pregunta.
+- **Sandbox con lista blanca de red, más lo anterior:** los envíos al exterior **no llegan a preguntarse porque no se pueden ejecutar**; quedan 4 preguntas, todas legítimas. El mejor control no es una pregunta mejor, sino **que la acción dañina sea imposible**.
+
+La lección de diseño es que la aprobación humana es el **último** control, no el primero: se reserva para acciones que sí deben poder ocurrir pero conviene revisar, y se complementa con controles técnicos que hacen imposibles las acciones que no deben ocurrir nunca.
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Sandbox estricto | Contiene el daño aunque el modelo falle | Fricción para tareas que necesitan red o archivos fuera |
+| Credenciales de corta vida | Reducen el impacto de una fuga | Complejidad de emisión y renovación |
+| Aprobar todo | Máximo control en teoría | Fatiga: se aprueba sin leer |
+| Aprobar solo lo sensible según el contexto | Menos preguntas y más atención | Exige clasificar bien las acciones |
+| Acciones reversibles | Permite autonomía con red de seguridad | Diseñar la reversión cuesta |
+| Agentes separados por nivel de confianza | Contiene la contaminación | Más piezas y más coste de coordinación |
+
+## Errores comunes en producción
+
+- **Ejecutar código del agente en el mismo proceso o máquina que los secretos.**
+- **Sandbox solo de archivos o solo de red.** Cada frontera protege a la otra.
+- **Una cuenta de servicio con permisos amplios** compartida por todos los usuarios.
+- **Credenciales sin caducidad** en variables de entorno visibles al agente.
+- **Confirmaciones genéricas** («¿continuar?») que no muestran la acción exacta.
+- **Pedir aprobación para todo**, hasta que nadie lee nada.
+- **No distinguir reversible de irreversible**, y tratar igual un borrador que un pago.
+- **Aprobación sin pausa durable:** el agente bloquea un proceso esperando y se pierde el estado si cae.
+- **No registrar quién aprobó.** Sin trazabilidad no hay auditoría.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué un sandbox necesita aislar tanto la red como el sistema de archivos?"_ Pista: sin red se pueden exfiltrar archivos; sin aislar archivos, un agente comprometido puede escapar y recuperar la red.
+- _"¿Qué es el mínimo privilegio aplicado a un agente?"_ Pista: herramientas por tarea, credenciales de alcance mínimo, corta vida y por usuario, datos mínimos en el contexto.
+- _"¿Qué acciones exigen aprobación humana?"_ Pista: las irreversibles o costosas (envíos, pagos, borrados, despliegues) y las que salen al exterior con datos privados en el contexto.
+- _"¿Qué problema tiene pedir confirmación en todo?"_ Pista: fatiga de aprobaciones; se aprueba sin leer. Mejor pocas preguntas, con la acción exacta y según el contexto.
+
+</Callout>
+
+<KeyTakeaways>
+
+- Diseña para que el fallo del agente cause **poco daño**: sandbox, mínimo privilegio y aprobación humana en capas.
+- El **aislamiento de archivos y de red** se necesitan mutuamente; Anthropic reportó una reducción del 84 % de avisos de permiso en su uso interno con sandboxing.
+- Concede **herramientas por tarea**, credenciales de **corta vida y por usuario**, y datos mínimos en el contexto.
+- Distingue acciones **reversibles e irreversibles**; reserva la aprobación humana para las costosas y hazla con la **acción exacta** a la vista.
+- En el experimento, lo mejor no fue preguntar más sino **hacer imposible** la acción dañina con una lista blanca de red.
+
+</KeyTakeaways>

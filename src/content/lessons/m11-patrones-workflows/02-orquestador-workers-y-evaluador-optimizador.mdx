@@ -1,0 +1,206 @@
+---
+title: Orquestador-workers y evaluador-optimizador
+description: Los dos patrones dinámicos de workflow (descomposición decidida por el modelo y refinamiento iterativo con evaluación), cómo ponerles límites con criterios de parada y qué coste añaden frente a patrones más simples.
+module: m11-patrones-workflows
+order: 2
+level: avanzado
+estimatedMinutes: 18
+objectives:
+  - Describir el patrón orquestador-workers y cuándo se diferencia de la paralelización simple.
+  - Describir el patrón evaluador-optimizador y su relación con Self-Refine y con la reflexión.
+  - Diseñar criterios de parada (objetivo, iteraciones, falta de mejora, presupuesto) y comparar su efecto con una simulación.
+  - Justificar el aislamiento de contexto que ofrecen los workers frente a un único agente.
+prerequisites:
+  - m11-patrones-workflows/01-encadenado-routing-y-paralelizacion
+volatility: low
+lastReviewed: 2026-10-06
+sources:
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Schluntz, Zhang (Anthropic)
+    year: 2024
+  - title: "Self-Refine: Iterative Refinement with Self-Feedback"
+    url: https://arxiv.org/abs/2303.17651
+    type: paper
+    authors: Madaan et al.
+    year: 2023
+  - title: Large Language Models Cannot Self-Correct Reasoning Yet
+    url: https://arxiv.org/abs/2310.01798
+    type: paper
+    authors: Huang, Chen, Mishra, Zheng, Yu, Song, Zhou
+    year: 2023
+  - title: Effective context engineering for AI agents
+    url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+    type: blog
+    authors: Rajasekaran, Dixon, Ryan, Hadfield (Anthropic)
+    year: 2025
+relatedLabs:
+  - agents-26-orquestador-workers
+  - agents-27-evaluador-optimizador
+---
+
+## Intuición: cuando los pasos no se conocen o la primera versión no basta
+
+Los patrones de la lección anterior fijan la estructura de antemano. Hay dos situaciones en las que eso se queda corto sin llegar a necesitar un agente completo:
+
+- **No sabes cuántas subtareas ni cuáles** hasta ver la entrada («modifica todos los archivos afectados por este cambio»). El modelo debe **decidir la descomposición**, pero el resto del flujo sigue en tu código: **orquestador-workers**.
+- **La primera respuesta rara vez es la mejor**, y tienes criterios claros para juzgarla: **evaluador-optimizador**, un bucle de generar, criticar y mejorar.
+
+Ambos son **workflows dinámicos**: el modelo toma una decisión de control (qué subtareas, cuándo parar), pero dentro de una estructura que impone el código y con límites explícitos.
+
+## Cómo funciona
+
+### Orquestador-workers
+
+Un modelo central (el **orquestador**) descompone la tarea dinámicamente, delega las subtareas en **workers** y **sintetiza** sus resultados. Se parece a la paralelización por secciones, pero con una diferencia clave: aquí **las subtareas no están predefinidas**; las decide el modelo en función de la entrada.
+
+Cuándo encaja: tareas complejas donde no se pueden predecir las subtareas, como cambios de código que tocan un número variable de archivos o búsquedas de información sobre varias fuentes que dependen de la pregunta.
+
+Cuatro decisiones de diseño:
+
+1. **Límite de subtareas:** acota el coste. Un orquestador sin tope puede proponer decenas de workers.
+2. **Qué recibe cada worker:** solo la subtarea y el contexto mínimo necesario; no el historial entero. Es lo que da **aislamiento**.
+3. **Qué devuelve cada worker:** un **resultado condensado** (no todo lo que exploró). La guía de context engineering de Anthropic describe este beneficio de los sub-agentes: trabajan con ventanas de contexto limpias y devuelven un resumen condensado, de modo que el contexto del coordinador no se llena del ruido de la exploración.
+4. **Fallos parciales:** si un worker falla, el orquestador debe poder seguir con los demás, registrar el fallo y decidir si reintentar, omitir o avisar. Es lo que implementas en el laboratorio.
+
+<Diagram
+  caption="El orquestador decide las subtareas en función de la entrada, los workers las ejecutan con contexto aislado y un sintetizador combina los resultados."
+  code={`flowchart LR
+  T[Tarea] --> O[Orquestador: descompone]
+  O --> W1[Worker 1]
+  O --> W2[Worker 2]
+  O --> W3[Worker n]
+  W1 --> S[Sintetizador]
+  W2 --> S
+  W3 --> S
+  S --> R[Respuesta]`}
+/>
+
+### Evaluador-optimizador
+
+Un modelo **genera** una respuesta y otro (o el mismo con otro prompt) la **evalúa** y da una crítica; el generador la usa para mejorar, y el ciclo se repite. Es el análogo en workflow de un revisor que devuelve comentarios.
+
+Cuándo encaja: hay **criterios de evaluación claros** y el refinamiento aporta valor medible. Ejemplos clásicos: traducción literaria en la que un revisor señala matices perdidos; búsquedas complejas donde un evaluador decide si hace falta seguir buscando.
+
+Su base académica es **Self-Refine** (Madaan et al., 2023): un modelo genera una salida inicial, da retroalimentación sobre ella y la usa para refinarse, de forma iterativa, sin datos de entrenamiento adicionales ni refuerzo; los autores reportan una mejora media de unos **20 puntos absolutos** en siete tareas con GPT-3.5, ChatGPT y GPT-4 frente a la generación en un paso.
+
+Hay que matizarlo con lo que viste en la lección de reflexión: Huang et al. (2023) concluyen que, **en razonamiento y sin feedback externo**, los LLM tienen dificultades para autocorregirse y a veces empeoran. No hay contradicción si se lee con cuidado: Self-Refine funciona bien en tareas donde la crítica del modelo es informativa (estilo, completitud, cumplimiento de criterios explícitos), y es poco fiable cuando la corrección exige **saber** si un razonamiento es correcto. Regla práctica: **cuanto más objetivo y externo sea el evaluador** (tests, reglas, otro modelo con criterios concretos, una persona), más fiable es el bucle.
+
+### ¿Orquestador-workers o agente?
+
+La frontera es sutil, porque ambos pueden usar modelos para decidir qué hacer. La diferencia práctica está en **cuántas decisiones de control toma el modelo y cuándo**. En orquestador-workers hay **una** decisión grande al principio (la descomposición) y después el código ejecuta, reúne y sintetiza: el flujo es corto, previsible y fácil de acotar. En un agente el modelo decide **en cada vuelta**, durante un número no acotado de pasos. Si tu tarea se puede resolver con «descomponer una vez, ejecutar y sintetizar», prefiere el workflow: es más barato, más rápido de depurar y más fácil de evaluar (puedes puntuar la descomposición, cada worker y la síntesis por separado). Si los resultados de los workers obligan a **replantear** el plan una y otra vez, estás más cerca de un agente (o de un plan con replanificación) y conviene reconocerlo y diseñar los límites y la supervisión correspondientes.
+
+### Criterios de parada
+
+Sin ellos, el evaluador-optimizador es un sumidero de dinero. Cuatro, que puedes combinar:
+
+- **Objetivo alcanzado:** la puntuación supera un umbral.
+- **Máximo de iteraciones.**
+- **Falta de mejora (*patience*):** no se mejora la mejor puntuación en $k$ vueltas seguidas.
+- **Presupuesto** de tokens o de dinero.
+
+Y una regla de devolución: **devuelve el mejor borrador visto, no el último**, porque un refinamiento puede empeorar.
+
+### Un experimento: criterios de parada y aislamiento de contexto
+
+El código simula el bucle sobre secuencias de puntuaciones **inventadas** pero realistas: una con **rendimientos decrecientes** (cada vuelta mejora menos y nunca se llega al objetivo) y otra en la que el refinamiento **empeora**. Cada vuelta cuesta 420 tokens (supuesto). Después compara el contexto de un único agente que explora cuatro fuentes con el de un orquestador con cuatro workers. Son cálculos con supuestos explícitos, no mediciones.
+
+```python
+def refinar(puntuaciones, target=0.9, patience=None, budget_tokens=None, tokens_por_vuelta=420):
+    """Bucle evaluador-optimizador sobre una secuencia de puntuaciones ya conocida (simulación)."""
+    mejor, tokens, sin_mejora = float("-inf"), 0, 0
+    for i, score in enumerate(puntuaciones, start=1):
+        tokens += tokens_por_vuelta
+        if score > mejor:
+            mejor, sin_mejora = score, 0
+        else:
+            sin_mejora += 1
+        if score >= target:
+            return "target", i, mejor, tokens
+        if patience is not None and sin_mejora >= patience:
+            return "no_improvement", i, mejor, tokens
+        if budget_tokens is not None and tokens >= budget_tokens:
+            return "budget", i, mejor, tokens
+    return "max_iters", len(puntuaciones), mejor, tokens
+
+
+rendimientos_decrecientes = [0.55, 0.72, 0.80, 0.83, 0.84, 0.84, 0.84, 0.84]
+empeora = [0.70, 0.60, 0.50, 0.40]
+print("escenario                    reglas                                   motivo          vueltas  mejor  tokens")
+for nombre, puntuaciones, reglas in (
+    ("rendimientos decrecientes", rendimientos_decrecientes, dict(target=0.9)),
+    ("rendimientos decrecientes", rendimientos_decrecientes, dict(target=0.9, patience=2)),
+    ("rendimientos decrecientes", rendimientos_decrecientes, dict(target=0.9, budget_tokens=1500)),
+    ("el refinamiento empeora", empeora, dict(target=0.9, patience=2)),
+):
+    motivo, vueltas, mejor, tokens = refinar(puntuaciones, **reglas)
+    print(f"{nombre:<28} {str(reglas):<40} {motivo:<15} {vueltas:>7}  {mejor:5.2f}  {tokens:>6}")
+
+# Orquestador-workers: el contexto del sintetizador frente al coste total.
+n_workers, tokens_exploracion, tokens_resumen = 4, 8000, 500
+print("\nun solo agente: contexto final", n_workers * tokens_exploracion, "tokens")
+print(
+    "orquestador: contexto del sintetizador",
+    n_workers * tokens_resumen,
+    "tokens | tokens totales procesados",
+    n_workers * (tokens_exploracion + tokens_resumen) + n_workers * tokens_resumen,
+)
+```
+
+Salida (determinista):
+
+```text
+escenario                    reglas                                   motivo          vueltas  mejor  tokens
+rendimientos decrecientes    {'target': 0.9}                          max_iters             8   0.84    3360
+rendimientos decrecientes    {'target': 0.9, 'patience': 2}           no_improvement        7   0.84    2940
+rendimientos decrecientes    {'target': 0.9, 'budget_tokens': 1500}   budget                4   0.83    1680
+el refinamiento empeora      {'target': 0.9, 'patience': 2}           no_improvement        3   0.70    1260
+
+un solo agente: contexto final 32000 tokens
+orquestador: contexto del sintetizador 2000 tokens | tokens totales procesados 36000
+```
+
+- **Sin regla de parada distinta del máximo**, el bucle gasta 3 360 tokens para llegar a 0,84. Con **paciencia 2** para en la vuelta 7 (2 940 tokens) con la misma calidad: ahorro modesto porque las últimas vueltas no aportan nada. Con **presupuesto de 1 500 tokens** para en la vuelta 4 con 0,83, **la mitad del coste por solo 0,01 menos de puntuación**. La decisión correcta depende del valor de esa centésima.
+- **Cuando el refinamiento empeora**, la paciencia corta en la vuelta 3 y el bucle **devuelve el mejor borrador (0,70), no el último (0,50)**. Si devolviera el último, la «mejora» sería una degradación.
+- **Orquestador-workers cuesta más en total** (36 000 tokens frente a 32 000: el 12,5 % más, por los resúmenes y la síntesis) **pero el contexto de síntesis es 16 veces menor** (2 000 frente a 32 000). Es el intercambio: pagas algo más de cómputo por mantener limpio el contexto donde se razona al final, y por la posibilidad de paralelizar los workers y reducir la latencia.
+
+## Trade-offs
+
+| Patrón | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Orquestador-workers | Descomposición adaptada a la entrada; contextos aislados; paralelizable | Coste total mayor; un mal reparto estropea el resultado |
+| Evaluador-optimizador | Mejora la calidad con criterios claros | Cada vuelta cuesta; puede estancarse o empeorar |
+| Criterio de parada por objetivo | Termina cuando basta | Exige una puntuación fiable y bien calibrada |
+| Criterio por paciencia | Evita vueltas estériles | Puede cortar justo antes de una mejora |
+| Criterio por presupuesto | Coste acotado | Puede cortar antes de alcanzar la calidad deseada |
+
+## Errores comunes en producción
+
+- **Orquestador sin límite de subtareas.** El coste se dispara y la síntesis se vuelve inmanejable.
+- **Workers que devuelven todo lo que exploraron.** Se pierde el beneficio de aislar el contexto.
+- **Un worker fallido tumba todo el flujo.** Hay que aislar los fallos y decidir qué hacer con el parcial.
+- **Evaluador que solo opina como el generador.** Si no hay criterios externos, no detecta sus propios errores.
+- **Devolver el último borrador.** Un refinamiento puede empeorar: guarda y devuelve el mejor.
+- **Bucle sin parada por falta de mejora.** Se siguen gastando vueltas cuando la puntuación ya no sube.
+- **Puntuaciones sin calibrar.** Un umbral de 0,9 no significa lo mismo con evaluadores distintos: valida con muestras.
+- **Usar estos patrones donde bastaba una cadena.** Si la descomposición es fija, un encadenado o una paralelización son más baratos y predecibles.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Qué diferencia hay entre orquestador-workers y paralelización?"_ Pista: en la paralelización las subtareas están predefinidas; en orquestador-workers las decide el modelo según la entrada, y se sintetizan después.
+- _"¿Cuándo usarías evaluador-optimizador y cómo evitas que se descontrole?"_ Pista: con criterios de evaluación claros y valor en iterar; con criterios de parada (objetivo, máximo, paciencia, presupuesto) y devolviendo el mejor borrador.
+- _"¿Qué ganas aislando el contexto de los workers?"_ Pista: cada worker explora con una ventana limpia y devuelve un resumen condensado; el contexto del orquestador se mantiene pequeño, a costa de más cómputo total.
+- _"¿Puede un modelo refinar su propia respuesta?"_ Pista: Self-Refine reporta mejoras en tareas con criterios informativos, pero sin feedback externo la autocorrección de razonamiento es poco fiable; cuanto más objetivo el evaluador, mejor.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Orquestador-workers:** el modelo decide la descomposición; workers con contexto aislado devuelven resúmenes; un sintetizador combina. Pon límite de subtareas y tolera fallos parciales.
+- **Evaluador-optimizador:** generar, criticar, mejorar. Funciona con criterios claros y evaluadores objetivos (Self-Refine: ≈ +20 puntos absolutos reportados; pero sin feedback externo la autocorrección de razonamiento es débil).
+- **Criterios de parada:** objetivo, máximo, paciencia y presupuesto; **devuelve el mejor borrador, no el último**.
+- En la simulación, un presupuesto de 1 500 tokens costó la mitad con 0,01 menos de puntuación, y el contexto de síntesis del orquestador fue 16 veces menor que el de un único agente.
+- Si la descomposición es fija, un workflow más simple basta.
+
+</KeyTakeaways>
