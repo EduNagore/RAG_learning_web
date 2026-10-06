@@ -86,7 +86,7 @@ La regla que más sorprende: **el nodo reanudado empieza otra vez desde el princ
   P1->>S: checkpoint tras cada nodo
   P1->>S: checkpoint interrumpido (espera aprobación)
   P1-->>H: pregunta (carga útil JSON)
-  Note over P1: el proceso termina; la espera es gratis
+  Note over P1: el proceso termina y la espera es gratis
   H->>P2: decisión (mismo thread_id)
   P2->>S: carga el último checkpoint
   P2->>P2: re-ejecuta el nodo interrumpido con la decisión

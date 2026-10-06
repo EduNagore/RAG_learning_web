@@ -40,6 +40,8 @@ relatedLabs:
   - agents-29-blackboard
 ---
 
+import TopologyExplorer from '../../../components/widgets/TopologyExplorer';
+
 ## Intuición: quién habla con quién
 
 Una vez decidido que un problema merece varios agentes, la pregunta siguiente es la **topología**: la estructura de comunicación y de control. La misma plantilla de agentes dispuesta de formas distintas se comporta de forma muy diferente en coste, previsibilidad y facilidad para depurarla. Esta lección recorre cinco topologías y el compromiso de fondo entre **compartir el estado** y **pasar mensajes**.
@@ -89,6 +91,10 @@ Cada agente procesa la salida del anterior en un orden fijo (investigador → re
     BB --> B2
   end`}
 />
+
+Compara las topologías con el explorador: cambia el número de agentes y fíjate en cuántos canales hay que diseñar y vigilar en cada caso.
+
+<TopologyExplorer client:visible />
 
 ### Estado compartido o paso de mensajes
 

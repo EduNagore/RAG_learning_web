@@ -2,7 +2,7 @@
 
 > **Si retomas el trabajo, lee solo este archivo primero.** Resume qué está hecho, dónde se quedó y qué hacer a continuación, para no gastar contexto en reconstruirlo. Mantenlo actualizado al cerrar cada fase o bloque importante. Especificación completa: [`PLAN.md`](PLAN.md). Decisiones y desviaciones: [`DECISIONS.md`](DECISIONS.md). Estándares de contenido: [`CONTENT_GUIDELINES.md`](CONTENT_GUIDELINES.md). Fuentes verificadas: [`SOURCES.md`](SOURCES.md).
 
-**Última actualización:** 2026-10-05 · **Sitio:** https://edunagore.github.io/RAG_learning_web/ · **Repo:** https://github.com/EduNagore/RAG_learning_web
+**Última actualización:** 2026-10-06 · **Sitio:** https://edunagore.github.io/RAG_learning_web/ · **Repo:** https://github.com/EduNagore/RAG_learning_web
 
 ## Estado por fases
 
@@ -14,11 +14,11 @@
 | F3 Laboratorios | ✅ hecha, en `main` y desplegada (verificada en producción) | 3 labs, Pyodide, CodeMirror, e2e en navegador real |
 | **Pausa de revisión tras F3** | ✅ superada | El usuario aprobó (2026-10-05, "haz todo lo que queda"): hacer F4–F7 completas |
 | F4 Contenido Parte I (RAG, M01–M09) | ✅ hecha, en `main` y desplegada | 37 lecciones, 22 labs, 287 preguntas |
-| F5 Contenido Parte II (Agentes, M10–M17) | 🟡 en curso (rama `fase-5-agentes`) | Ver "F5: avance" |
-| F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ | |
+| F5 Contenido Parte II (Agentes, M10–M17) | ✅ hecha (rama `fase-5-agentes`; fusión a `main` y despliegue: ver «F5: HECHA») | 63 lecciones en total, 35 labs, 495 preguntas |
+| F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ⬜ siguiente | |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ⬜ | |
 
-Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 preguntas, 22 labs, 76 tests unitarios, 111 tests pytest de labs, 184 mutantes de labs (todos detectados), 30 e2e, `main` = merge de `fase-4-rag` (6d54145), desplegado y verificado en producción.
+Contadores (fin de F5: 63 lecciones, 495 preguntas, 35 labs, 92 tests unitarios, 176 tests pytest, 310 mutantes, 32 e2e). Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 preguntas, 22 labs, 76 tests unitarios, 111 tests pytest de labs, 184 mutantes de labs (todos detectados), 30 e2e, `main` = merge de `fase-4-rag` (6d54145), desplegado y verificado en producción.
 
 ## F4: HECHA (rama `fase-4-rag` fusionada en `main`)
 
@@ -30,14 +30,15 @@ Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 pre
 ### Siguiente paso
 Seguir con F5 (ver «F5: avance»).
 
-## F5: avance (rama `fase-5-agentes`, commits locales; push pendiente)
+## F5: HECHA (rama `fase-5-agentes`)
 
-- ✅ M10 (4 lecciones; lab agents-22), M11 (3; labs 24–27), M12 (4; labs 28–29), M13 (3; labs 31–32), M14 (3; sin lab; volatilidad alta con Snapshot y fuentes de 9 frameworks abiertas el 2026-10-06). Lab agents-23 ya existía.
-- ⬜ **Falta:** M15 memoria, estado y control (3 lecciones; lab 30 mini grafo con checkpoint y reanudación/HITL; fuentes a verificar: MemGPT 2310.08560, Mem0, LangGraph persistence docs), M16 evaluación de agentes (3; lab 35 trayectorias; fuentes: SWE-bench Verified, GAIA, τ-bench, BFCL, Terminal-Bench, pass^k), M17 fiabilidad y seguridad (3; labs 33 guardas de bucles/coste y 34 defensa ante inyección indirecta; fuentes: Willison «lethal trifecta», OWASP LLM 2025 ya verificado, OWASP agentic), widgets AgentLoopStepper y TopologyExplorer, `docs/SOURCES.md` y `docs/DECISIONS.md`, puerta completa, push, CI, merge `--no-ff`, despliegue.
-- Hechos relevantes verificados en F5: MCP vigente 2026-07-28 (peticiones autocontenidas, `initialize` en revisiones previas), A2A 1.0, Agent Skills (≈100 tokens de metadatos por skill, <5k al activarse), MAST (14 modos en 3 categorías, 1 600+ trazas), Anthropic multiagente (+90,2 %, 4×/15× tokens), Cognition (agente lineal), RankGPT/ReWOO/LLMCompiler (cifras en lecciones).
-- Notas de trabajo: lecciones ≥1500 palabras sin código (apuntar a ≈1800 desde el principio); `description`/`objectives` sin «: » sin comillas; mutantes añadidos con Edit anclando en `]
+- M10–M17 completos: 26 lecciones nuevas (63 en total con M00–M09), quizzes de 8 preguntas por lección (495 preguntas en total), labs `agents-22` a `agents-35` (más `agents-23` de F3; 35 labs en total), widgets `AgentLoopStepper` (M10 L2) y `TopologyExplorer` (M12 L2).
+- Puerta pasada (2026-10-06): prettier, eslint, astro check (0 errores), vitest (92), `validate` (63 lecciones, 495 preguntas, 35 labs), build (130 páginas), ruff, pytest (176), mutación (310/310), snippets de lecciones (55 bloques), 32 e2e.
+- `docs/SOURCES.md` (60 fuentes de F5) y `docs/DECISIONS.md` (sección F5) actualizados. Hallazgo importante: **OWASP publicó la edición 2026 del LLM Top 10 el 2026-08-03**; M09 L2 y M17 usan la numeración 2025 con `<Snapshot>`.
+- Notas de trabajo: lecciones ≥1500 palabras sin código (apuntar a ≈1800 desde el principio); `description`/`objectives` sin «: » sin comillas; mutantes añadidos con Edit anclando en el cierre `]` de `MUTANTS`; Mermaid no admite `;` en notas; `ruff format` cambia el texto de las soluciones (formatea antes de escribir mutantes); `uv` no está en el PATH (usar `.venv/Scripts/…`).
 
-survivors = []`; `uv` no está en el PATH.
+### Siguiente paso
+F6 (rama `fase-6-profesional`): M18 system design (3–4 lecciones, casos de §7.5), `/entrevistas/` (≥80 preguntas ES/EN y ≥6 casos de system design), glosario ES/EN, `/fuentes/`, 5 proyectos en `projects/` + `/proyectos/`, playground opcional «LLM real» (clave solo en `localStorage`), hojas de resumen imprimibles. Después F7 (Lighthouse ≥90, a11y, `content-freshness.yml`, README completo, checklist PLAN §11).
 
 ## F3: HECHA (referencia histórica)
 

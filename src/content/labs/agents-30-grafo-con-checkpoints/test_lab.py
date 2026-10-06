@@ -96,7 +96,11 @@ def test_la_pausa_guarda_el_estado_y_la_reanudacion_continua(student):
     fin = g.run("h", resume="sí")
     expect_equal(fin["status"], "done", what="estado final")
     expect_equal(fin["state"], {"borrador": "texto", "aprobado": "sí"}, what="estado final")
-    expect_equal(llamadas, {"antes": 1, "aprobar": 2}, what="el nodo anterior no se repite; el interrumpido sí")
+    expect_equal(
+        llamadas,
+        {"antes": 1, "aprobar": 2},
+        what="el nodo anterior no se repite; el interrumpido sí",
+    )
 
 
 def test_un_fallo_deja_los_checkpoints_y_se_reanuda_desde_el_ultimo_nodo(student):
@@ -113,7 +117,9 @@ def test_un_fallo_deja_los_checkpoints_y_se_reanuda_desde_el_ultimo_nodo(student
 
     g.nodes["revisar"] = revisar
     expect_raises(RuntimeError, g.run, "h", {"tema": "x"}, what="el fallo se propaga")
-    expect_equal(g.history("h"), [(0, "redactar"), (1, "revisar")], what="checkpoints tras el fallo")
+    expect_equal(
+        g.history("h"), [(0, "redactar"), (1, "revisar")], what="checkpoints tras el fallo"
+    )
     estado["falla"] = False
     out = g.run("h")
     expect_equal(out["status"], "done", what="estado final")

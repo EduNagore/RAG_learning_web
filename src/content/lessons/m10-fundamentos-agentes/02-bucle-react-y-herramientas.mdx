@@ -23,7 +23,7 @@ sources:
   - title: Building effective agents
     url: https://www.anthropic.com/engineering/building-effective-agents
     type: blog
-    authors: Erik S., Barry Zhang (Anthropic)
+    authors: Schluntz, Zhang (Anthropic)
     year: 2024
   - title: Effective context engineering for AI agents
     url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
@@ -39,6 +39,8 @@ relatedLabs:
   - agents-22-registro-de-tools
   - agents-23-react
 ---
+
+import AgentLoopStepper from '../../../components/widgets/AgentLoopStepper';
 
 ## Intuición: un modelo que pide, un programa que ejecuta
 
@@ -77,6 +79,10 @@ El historial es una lista de mensajes. Una vuelta del bucle hace esto:
   M-->>A: respuesta final sin peticiones
   A-->>U: respuesta`}
 />
+
+Recorre un bucle completo paso a paso, incluido el caso de un error recuperable y el de una herramienta caída que acaba en una guarda de bucle:
+
+<AgentLoopStepper client:visible />
 
 Hay cuatro **condiciones de parada** que debes tener siempre: el modelo responde sin pedir herramientas (éxito), se alcanza el **máximo de pasos**, se agota un **presupuesto** de tokens o de tiempo, o interviene una **persona** (confirmación o cancelación). Sin ellas, un agente que no converge consume sin límite.
 
