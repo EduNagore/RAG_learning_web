@@ -309,9 +309,42 @@ for (const file of walk(glossaryDir, '.yaml')) {
 if (glossaryIds.size < 50)
   err('src/content/glossary', `hay ${glossaryIds.size} términos; el mínimo es 50`);
 
+// --- Proyectos ----------------------------------------------------------------
+const PROJECT_SECTIONS = [
+  'Objetivo',
+  'Arquitectura',
+  'Pasos',
+  'Criterios de evaluación',
+  'Extensiones',
+];
+const projectIds = [];
+const projectsDir = join(CONTENT, 'projects');
+for (const file of walk(projectsDir, '.mdx')) {
+  const id = idOf(projectsDir, file);
+  projectIds.push(id);
+  const fm = splitFrontmatter(readFileSync(file, 'utf8'));
+  if (!fm) {
+    err(rel(file), 'falta el frontmatter');
+    continue;
+  }
+  for (const l of fm.data.lessons ?? [])
+    if (!lessons.has(l)) err(rel(file), `lección relacionada inexistente: ${l}`);
+  const folder = join(ROOT, 'projects', id);
+  for (const needed of ['README.md', 'pyproject.toml', '.env.example'])
+    if (!existsSync(join(folder, needed))) err(rel(file), `falta projects/${id}/${needed}`);
+  const headings = [...stripCode(fm.body).matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
+  for (const section of PROJECT_SECTIONS)
+    if (!headings.some((h) => h.startsWith(section)))
+      err(rel(file), `falta la sección «${section}»`);
+  if (existsSync(join(folder, '.env')))
+    err(rel(file), `projects/${id}/.env no debe existir en el repositorio`);
+}
+if (projectIds.length < 5)
+  err('src/content/projects', `hay ${projectIds.length} proyectos; el mínimo es 5`);
+
 // --- Informe -----------------------------------------------------------------
 console.log(
-  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size} · Labs: ${labIds.size} · Entrevistas: ${interviewIds.size} · Casos: ${caseIds.length} · Glosario: ${glossaryIds.size}`,
+  `Módulos: ${moduleIds.size} · Lecciones: ${lessons.size} · Preguntas: ${questionIds.size} · Labs: ${labIds.size} · Entrevistas: ${interviewIds.size} · Casos: ${caseIds.length} · Glosario: ${glossaryIds.size} · Proyectos: ${projectIds.length}`,
 );
 for (const w of warnings) console.warn(`  aviso  ${w}`);
 for (const e of errors) console.error(`  ERROR  ${e}`);

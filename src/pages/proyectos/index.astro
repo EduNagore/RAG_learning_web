@@ -1,9 +1,36 @@
 ---
-import ComingSoon from '../../components/layout/ComingSoon.astro';
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { url } from '../../lib/url';
+
+const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
 ---
 
-<ComingSoon
+<BaseLayout
   title="Proyectos"
-  description="Proyectos finales para hacer en local con LLMs y herramientas reales."
-  phase="F6"
-/>
+  description="Cinco proyectos finales para construir en local con modelos y herramientas reales."
+>
+  <h1 class="text-3xl font-bold tracking-tight">Proyectos</h1>
+  <p class="mt-2 max-w-3xl text-lg text-slate-600 dark:text-slate-400">
+    Los laboratorios se ejecutan en el navegador con modelos simulados. Estos {projects.length}{' '}
+    proyectos se construyen en tu máquina con modelos y herramientas reales. Cada uno trae una
+    carpeta con código inicial (<code>projects/</code> en el repositorio) y una guía con objetivos,
+    arquitectura, pasos, criterios de evaluación y extensiones.
+  </p>
+  <ul class="mt-8 grid gap-4 md:grid-cols-2">
+    {projects.map((p) => (
+      <li>
+        <a
+          href={url(`/proyectos/${p.id}/`)}
+          class="block h-full rounded-lg border border-slate-200 p-5 hover:border-indigo-400 dark:border-slate-800"
+        >
+          <h2 class="text-lg font-semibold">{p.data.title}</h2>
+          <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">{p.data.description}</p>
+          <p class="mt-2 text-xs text-slate-500">
+            {p.data.level} · ≈ {p.data.estimatedHours} h · {p.data.stack.join(', ')}
+          </p>
+        </a>
+      </li>
+    ))}
+  </ul>
+</BaseLayout>

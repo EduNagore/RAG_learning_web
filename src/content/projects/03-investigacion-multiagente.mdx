@@ -1,0 +1,59 @@
+---
+title: Sistema multiagente de investigación
+description: Construye un orquestador con sub-agentes de búsqueda en paralelo y un sintetizador con citas verificadas, con presupuestos y comparación con un agente único.
+order: 3
+level: avanzado
+estimatedHours: 14
+stack: [asyncio, Anthropic SDK]
+lessons:
+  - m12-multi-agente/01-cuando-si-y-cuando-no
+  - m12-multi-agente/04-economia-de-tokens-y-modos-de-fallo
+  - m15-memoria-estado/03-compactacion-y-aislamiento-de-contexto
+  - m17-fiabilidad-seguridad/01-inyeccion-de-prompts-y-triada-letal
+verified: 2026-10-06
+---
+
+## Objetivo
+
+Implementar el patrón de investigación con orquestador y sub-agentes que describen las guías de ingeniería de Anthropic y medir si compensa frente a un único agente. Lo que aprendes: encargos bien definidos, contextos aislados, guardas por agente, verificación de citas y el coste real de la coordinación.
+
+Requisitos previos: Python 3.10 o superior, una clave de API y una herramienta de búsqueda y de lectura de páginas (una API de búsqueda o el servidor MCP del proyecto 4).
+
+## Arquitectura
+
+<Diagram
+  caption="El orquestador reparte encargos; cada sub-agente trabaja aislado y devuelve hallazgos estructurados."
+  code={`flowchart TD
+  Q[Pregunta] --> O[Orquestador: plan y presupuesto]
+  O --> A1[Sub-agente 1]
+  O --> A2[Sub-agente 2]
+  O --> A3[Sub-agente N]
+  A1 --> H[Hallazgos con fuente y confianza]
+  A2 --> H
+  A3 --> H
+  H --> C{Cobertura suficiente}
+  C -->|no, una ronda más| O
+  C -->|sí| S[Sintetizador]
+  S --> V[Verificador de citas]
+  V --> I[Informe]`}
+/>
+
+## Pasos
+
+1. Define el **encargo** (objetivo, formato de salida, herramientas y límites) y el formato de hallazgo.
+2. Implementa el plan: el modelo propone entre 2 y 4 encargos no solapados y adapta el número a la dificultad.
+3. Implementa el sub-agente con un bucle de herramientas, contexto aislado y guardas (pasos, tokens y misma acción repetida).
+4. Ejecuta los sub-agentes con `asyncio.gather` y recoge los hallazgos.
+5. Implementa la síntesis solo con los hallazgos y la verificación de citas.
+6. Construye una línea base de un único agente y compara sobre 10 preguntas.
+
+## Criterios de evaluación
+
+- Cada encargo contiene los cuatro elementos y los sub-agentes no duplican trabajo (compruébalo en las trazas).
+- Guardas por sub-agente y por informe, con los motivos de parada monitorizados.
+- Tabla de comparación con calidad (rúbrica con revisión humana de una muestra), exactitud de citas, tokens y tiempo, frente al agente único.
+- Análisis de seguridad: el contenido web se trata como dato y ningún sub-agente combina datos privados con un canal de salida.
+
+## Extensiones
+
+Segunda ronda de cobertura, puntuación de fiabilidad de fuentes, reimplementación con LangGraph o con un SDK de agentes (comprueba su documentación vigente) y compactación del plan para tareas largas.

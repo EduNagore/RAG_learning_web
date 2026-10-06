@@ -1,0 +1,54 @@
+---
+title: Harness de evaluación de agentes
+description: Construye un harness con dataset de tareas, intentos repetidos en entornos limpios, métricas pass@k y pass^k y análisis de fallos.
+order: 5
+level: intermedio
+estimatedHours: 8
+stack: [Python]
+lessons:
+  - m16-evaluacion-agentes/01-que-medir-en-un-agente
+  - m16-evaluacion-agentes/02-fiabilidad-pass-k-y-trayectorias
+  - m16-evaluacion-agentes/03-benchmarks-trazas-y-harness
+verified: 2026-10-06
+---
+
+## Objetivo
+
+Construir la pieza que más separa los prototipos de los sistemas fiables: un harness que ejecute tareas varias veces en entornos limpios, compruebe el resultado en el entorno, calcule fiabilidad y capacidad y permita leer los fallos. Se puede hacer solo con Python y un agente de juguete; después se conecta un agente real.
+
+Requisitos previos: Python 3.10 o superior. Para el agente real, una clave de API.
+
+## Arquitectura
+
+<Diagram
+  caption="Cada intento parte de un entorno nuevo; el grader mira el estado final y las llamadas."
+  code={`flowchart LR
+  T[Dataset de tareas] --> H[Harness]
+  H -->|entorno limpio por intento| A[Agente]
+  A --> E[(Entorno y registro de llamadas)]
+  E --> G[Graders: resultado y restricciones]
+  G --> M[Métricas: pass@1, pass@k y pass^k]
+  E --> R[Trazas para leer fallos]
+  M --> I[Informe]
+  R --> I`}
+/>
+
+## Pasos
+
+1. Implementa `pass_at_k` y `pass_hat_k` y compruébalas a mano con n=5, c=2: pass@3 vale 0,9 y pass^2 vale 0,1.
+2. Implementa el entorno nuevo por intento y la ejecución de una tarea con varios intentos.
+3. Implementa los graders: el resultado se comprueba en el **entorno** (no en el mensaje del agente) y se detectan herramientas prohibidas.
+4. Calcula el informe por tarea y las medias; usa el agente de juguete con distintas probabilidades de éxito para ver cómo se separan pass@k y pass^k.
+5. Haz el experimento del entorno compartido: ejecuta con y sin aislamiento y explica la diferencia.
+6. Amplía el dataset a 20 tareas, conecta un agente real, lee al menos 10 trazas de fallos y clasifícalas por causa.
+
+## Criterios de evaluación
+
+- Las métricas coinciden con los cálculos manuales.
+- Cada intento parte de un entorno nuevo y lo demuestras con el experimento del entorno compartido.
+- Los graders miran el estado final y las llamadas, no solo el texto de la respuesta.
+- El informe da n, k y número de tareas, y el análisis de fallos propone una mejora concreta para la causa más frecuente.
+
+## Extensiones
+
+Un grader de modelo calibrado con muestras revisadas por humanos, ejecución en integración continua con un conjunto de regresión, puntuación de trayectorias frente a una referencia (recall, precisión y orden) y comparación de dos versiones del agente con un análisis de la incertidumbre.

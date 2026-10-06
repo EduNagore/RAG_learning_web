@@ -81,3 +81,22 @@ test('Fuentes: lista las fuentes de las lecciones agrupadas por parte', async ({
     'https://www.anthropic.com/engineering/building-effective-agents',
   );
 });
+
+test('Proyectos: lista cinco guías y cada una se abre con sus secciones', async ({ page }) => {
+  await page.goto('proyectos/');
+  const cards = page.getByRole('main').getByRole('link', { name: /Código inicial|≈/ });
+  expect(await cards.count()).toBeGreaterThanOrEqual(5);
+  const ids = readdirSync(resolve(process.cwd(), 'src/content/projects')).map((f) =>
+    f.replace(/\.mdx$/, ''),
+  );
+  for (const id of ids) {
+    await page.goto(`proyectos/${id}/`);
+    for (const heading of ['Objetivo', 'Arquitectura', 'Pasos', 'Criterios de evaluación']) {
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole('link', { name: `projects/${id}` })).toHaveAttribute(
+      'href',
+      new RegExp(`projects/${id}$`),
+    );
+  }
+});

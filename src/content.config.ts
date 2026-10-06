@@ -163,4 +163,29 @@ const glossary = defineCollection({
   }),
 });
 
-export const collections = { modules, lessons, quizzes, labs, interview, cases, glossary };
+const projects = defineCollection({
+  // Guía de cada proyecto final: src/content/projects/<id>.mdx; el código inicial vive en projects/<id>/.
+  loader: glob({ pattern: '*.mdx', base: './src/content/projects' }),
+  schema: z.object({
+    title: z.string(),
+    description: z.string(),
+    order: z.number().int(),
+    level: z.enum(['intermedio', 'avanzado']),
+    estimatedHours: z.number().positive(),
+    stack: z.array(z.string()).min(1),
+    lessons: z.array(z.string()).default([]),
+    /** Fecha en que se comprobaron las versiones y las APIs contra la documentación vigente. */
+    verified: z.coerce.date(),
+  }),
+});
+
+export const collections = {
+  modules,
+  lessons,
+  quizzes,
+  labs,
+  interview,
+  cases,
+  glossary,
+  projects,
+};

@@ -1,0 +1,12 @@
+[project]
+name = "agentic-rag"
+version = "0.1.0"
+description = "Proyecto 2: agentic RAG que decide cuándo recuperar, reformula y verifica, con LangGraph."
+requires-python = ">=3.10"
+# Versiones mínimas comprobadas en PyPI el 2026-10-06; fíjalas con `uv lock`.
+dependencies = [
+  "langgraph>=1.2",
+  "anthropic>=1.11",
+  "python-dotenv>=1.2",
+  "rank-bm25>=0.2.2",
+]

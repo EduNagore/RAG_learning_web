@@ -1,0 +1,57 @@
+---
+title: Agentic RAG con LangGraph
+description: Implementa un agente que decide cuándo recuperar, reformula la consulta, valora la evidencia y se detiene con guardas, y compáralo con un RAG de un paso.
+order: 2
+level: avanzado
+estimatedHours: 10
+stack: [LangGraph, Anthropic SDK, BM25]
+lessons:
+  - m07-rag-avanzado/03-agentic-rag
+  - m10-fundamentos-agentes/02-bucle-react-y-herramientas
+  - m15-memoria-estado/01-checkpointing-y-ejecucion-duradera
+  - m17-fiabilidad-seguridad/03-coste-bucles-y-observabilidad
+verified: 2026-10-06
+---
+
+## Objetivo
+
+Comprobar con datos si un agente que decide cuándo y qué recuperar mejora a un RAG de un paso, y a qué coste. El resultado importante no es que funcione, sino **en qué preguntas gana y cuánto cuesta**.
+
+Requisitos previos: el proyecto 1 (o su recuperador), Python 3.10 o superior y una clave de API.
+
+## Arquitectura
+
+<Diagram
+  caption="Grafo de estados: decidir, recuperar, valorar la evidencia y reformular o responder."
+  code={`flowchart LR
+  S([Inicio]) --> D[Decidir si recuperar]
+  D -->|no hace falta| G[Responder]
+  D -->|sí| R[Recuperar]
+  R --> V[Valorar la evidencia]
+  V -->|suficiente o sin pasos| G
+  V -->|insuficiente| W[Reformular]
+  W --> R
+  G --> E([Fin])`}
+/>
+
+El grafo se construye con `StateGraph`, nodos, aristas y aristas condicionales, siguiendo la guía de inicio rápido de LangGraph (versión 1.2 comprobada en PyPI el 2026-10-06).
+
+## Pasos
+
+1. Define el estado (pregunta, consulta, evidencia, pasos, respuesta y motivo de parada).
+2. Implementa los cinco nodos y las dos rutas condicionales.
+3. Añade las **guardas**: máximo de pasos, presupuesto de tokens y motivo de parada registrado.
+4. Prepara un conjunto de al menos 30 preguntas con 10 de varios saltos y 5 sin respuesta.
+5. Ejecuta el RAG de un paso y el agente sobre el mismo conjunto y registra exactitud, pasos y tokens.
+6. Lee las trazas de los fallos del agente y clasifícalos (¿decisión errónea de no recuperar?, ¿reformulación inútil?, ¿bucle?).
+
+## Criterios de evaluación
+
+- No recupera en preguntas triviales y se abstiene si la evidencia no basta.
+- Respeta el límite de pasos y el presupuesto, con el motivo de parada registrado.
+- Tabla comparativa con exactitud, pasos medios y tokens medios de ambos sistemas, con el tamaño de la muestra.
+- Conclusión argumentada: en qué tipo de preguntas el agente se justifica y en cuáles no.
+
+## Extensiones
+
+Checkpoints y aprobación humana antes de responder, memoria de conversación, evaluación de trayectorias con una referencia y métricas pass@k y pass^k con varios intentos por pregunta.

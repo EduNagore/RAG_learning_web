@@ -17,6 +17,13 @@ routes.push(
     .map((f) => `entrevistas/system-design/${f.replace(/\.mdx$/, '')}/`),
 );
 
+const PROJECTS_DIR = resolve(process.cwd(), 'src/content/projects');
+routes.push(
+  ...readdirSync(PROJECTS_DIR)
+    .filter((f) => f.endsWith('.mdx'))
+    .map((f) => `proyectos/${f.replace(/\.mdx$/, '')}/`),
+);
+
 test.setTimeout(180_000);
 
 test('todos los diagramas Mermaid de las lecciones se renderizan', async ({ page }) => {

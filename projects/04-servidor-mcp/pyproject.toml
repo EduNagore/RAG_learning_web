@@ -1,0 +1,10 @@
+[project]
+name = "servidor-mcp"
+version = "0.1.0"
+description = "Proyecto 4: servidor MCP que expone un índice de RAG como herramienta, y un cliente que lo consume."
+requires-python = ">=3.10"
+# Versión mínima comprobada en PyPI el 2026-10-06 (mcp 2.3). Su API cambió entre versiones mayores: revisa el README del SDK.
+dependencies = [
+  "mcp>=2.3",
+  "python-dotenv>=1.2",
+]
