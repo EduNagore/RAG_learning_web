@@ -1,0 +1,59 @@
+---
+title: Blackboard, agentes que colaboran en una pizarra común
+description: Implementa la arquitectura de pizarra, en la que varios agentes leen y escriben contribuciones con confianza en un espacio compartido hasta alcanzar consenso, sin que nadie coordine el reparto del trabajo.
+part: agentes
+module: m12-multi-agente
+difficulty: 3
+estimatedMinutes: 40
+concepts:
+  - blackboard
+  - estado compartido
+  - consenso por quórum
+  - condiciones de parada
+packages: []
+hints:
+  - 'Guarda cada contribución como diccionario con `author`, `key`, `value`, `confidence` y `seq`. El contador `_seq` crece en cada `post`.'
+  - 'Para `read`, `max(items, key=lambda i: (i["confidence"], i["seq"]))` resuelve a la vez la confianza y el desempate por recencia.'
+  - 'Para el consenso, construye un diccionario `ultimo[autor] = contribucion` recorriendo las contribuciones en orden; así queda la última de cada autor. Luego recórrelas ordenadas por `seq` agrupando autores por valor.'
+  - 'En `run_blackboard` guarda `board.count()` antes de la ronda. Comprueba primero `done` y después si no hubo contribuciones nuevas.'
+relatedLessons:
+  - m12-multi-agente/02-topologias-y-estado-compartido
+---
+
+## Objetivo
+
+En una arquitectura **blackboard** (pizarra) no hay un coordinador que asigne tareas: varios agentes especializados **leen** de un espacio compartido, **publican** contribuciones (hechos, hipótesis, borradores, con su confianza) y reaccionan a lo que publican los demás, hasta que se alcanza una condición (consenso, solución completa, nada nuevo que aportar). Es la contraparte descentralizada del supervisor: menos control central y más flexibilidad, a cambio de un comportamiento más difícil de predecir.
+
+## Qué tienes que hacer
+
+### La clase `Blackboard`
+
+- `post(author, key, value, confidence=1.0)`: publica una contribución y devuelve su número de secuencia (1, 2, 3, ...).
+- `contributions(key)`: lista de contribuciones (diccionarios con `author`, `key`, `value`, `confidence`, `seq`) de esa clave, en orden de publicación.
+- `read(key)`: el valor de la contribución con **mayor confianza**; a igualdad, la **publicada más tarde**. `None` si no hay.
+- `count()`: número total de contribuciones.
+- `has_consensus(key, quorum)`: devuelve el valor si al menos `quorum` **autores distintos** tienen como **última** contribución a esa clave el mismo valor, o `None`. Un autor cuenta una sola vez, con su contribución más reciente. Si varios valores alcanzan el quórum, gana el que lo alcanzó antes (recorriendo las últimas contribuciones por orden de publicación).
+
+### `run_blackboard(agents, board, max_rounds=5, done=...)`
+
+En cada ronda, cada agente (una función `agente(board)`) se ejecuta, en orden, y puede publicar. Tras la ronda:
+
+1. Si `done(board)` es verdadero → `{"rounds": n, "stopped": "done"}`.
+2. Si la ronda no añadió ninguna contribución → `{"rounds": n, "stopped": "quiescent"}`.
+3. Si se agotan las rondas → `{"rounds": max_rounds, "stopped": "max_rounds"}`.
+
+## Un ejemplo para comprobar a mano
+
+```python
+pizarra = Blackboard()
+pizarra.post("a", "plazo", "14 días", confidence=0.6)
+pizarra.post("b", "plazo", "7 días", confidence=0.9)
+pizarra.read("plazo")                      # '7 días' (mayor confianza)
+pizarra.has_consensus("plazo", 2)          # None (cada autor dice una cosa distinta)
+```
+
+<Callout type="nota" title="Sin coordinador, hacen falta reglas de parada">
+
+Sin un supervisor que decida cuándo se ha terminado, el sistema necesita criterios explícitos: un consenso, una solución completa o la **quiescencia** (nadie tiene nada nuevo que aportar). Y un tope de rondas, porque dos agentes pueden pasarse la pelota para siempre. Es también el patrón más difícil de depurar: no hay un plan central que leer, solo la historia de la pizarra, y por eso conviene **registrar quién publicó qué y cuándo**.
+
+</Callout>

@@ -1170,6 +1170,104 @@ MUTANTS = [
         "draft = generate(task, feedback)",
         "draft = generate(task, None)",
     ),
+    # --- agents-28-supervisor-handoffs ---
+    (
+        "agents-28-supervisor-handoffs",
+        "el handoff consulta al supervisor",
+        "forced = out.get(\"handoff\")",
+        "forced = None",
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "repeticiones mal contadas",
+        "repeats = repeats + 1 if name == last_chosen else 1",
+        "repeats = repeats + 1",
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "detecta el bucle una vuelta tarde",
+        "if repeats >= max_repeats:",
+        "if repeats > max_repeats:",
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "agente inexistente permitido",
+        "if name not in agents:",
+        "if False:",
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "los datos no se fusionan",
+        "state[\"data\"].update(out.get(\"data\", {}))",
+        "pass",
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "None no se trata como diccionario vacío",
+        "out = agents[name](state) or {}",
+        "out = agents[name](state)",
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "el error no continúa el bucle",
+        "            continue\n        state[\"history\"].append({\"agent\": name, \"message\": out.get(\"message\", \"\")})",
+        "            break\n        state[\"history\"].append({\"agent\": name, \"message\": out.get(\"message\", \"\")})",
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "el mensaje de error pierde el tipo",
+        'f"error: {type(e).__name__}: {e}"',
+        'f"error: {e}"',
+    ),
+    (
+        "agents-28-supervisor-handoffs",
+        "turnos mal contados",
+        "        turns += 1\n",
+        "",
+    ),
+    # --- agents-29-blackboard ---
+    (
+        "agents-29-blackboard",
+        "read ignora la confianza",
+        'key=lambda i: (i["confidence"], i["seq"])',
+        'key=lambda i: i["seq"]',
+    ),
+    (
+        "agents-29-blackboard",
+        "empate de confianza gana el primero",
+        'key=lambda i: (i["confidence"], i["seq"])',
+        'key=lambda i: (i["confidence"], -i["seq"])',
+    ),
+    (
+        "agents-29-blackboard",
+        "un autor cuenta varias veces",
+        "latest[item[\"author\"]] = item  # la última de cada autor",
+        "latest[item[\"seq\"]] = item",
+    ),
+    (
+        "agents-29-blackboard",
+        "el quórum es exclusivo",
+        "if len(votes[item[\"value\"]]) >= quorum:",
+        "if len(votes[item[\"value\"]]) > quorum:",
+    ),
+    (
+        "agents-29-blackboard",
+        "no comprueba la quiescencia",
+        "if board.count() == before:",
+        "if False:",
+    ),
+    (
+        "agents-29-blackboard",
+        "la quiescencia gana a done",
+        "        if done(board):\n            return {\"rounds\": round_number, \"stopped\": \"done\"}\n        if board.count() == before:\n            return {\"rounds\": round_number, \"stopped\": \"quiescent\"}",
+        "        if board.count() == before:\n            return {\"rounds\": round_number, \"stopped\": \"quiescent\"}\n        if done(board):\n            return {\"rounds\": round_number, \"stopped\": \"done\"}",
+    ),
+    (
+        "agents-29-blackboard",
+        "la secuencia empieza en 0",
+        "        self._seq += 1\n",
+        "",
+    ),
 ]
 
 survivors = []

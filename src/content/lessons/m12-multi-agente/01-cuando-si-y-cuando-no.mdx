@@ -1,0 +1,175 @@
+---
+title: Multiagente, cuándo sí y cuándo no
+description: Los argumentos a favor (el sistema de investigación de Anthropic) y en contra (Cognition, «No construyas multiagentes») de repartir un problema entre varios agentes, el coste real en tokens y coordinación, y un criterio de decisión.
+module: m12-multi-agente
+order: 1
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Resumir los argumentos de Anthropic a favor del multiagente en investigación y los de Cognition en contra.
+  - Identificar las condiciones que favorecen un sistema multiagente (paralelización, contexto mayor que una ventana, muchas herramientas) y las que lo desaconsejan.
+  - Calcular la sobrecarga de coordinación y el coste por tarea resuelta, y el valor mínimo que justifica el multiagente.
+  - Aplicar una lista de comprobación de decisión antes de adoptar una arquitectura multiagente.
+prerequisites:
+  - m11-patrones-workflows/03-plan-and-execute-rewoo-y-llmcompiler
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: How we built our multi-agent research system
+    url: https://www.anthropic.com/engineering/multi-agent-research-system
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: Don't Build Multi-Agents
+    url: https://cognition.com/blog/dont-build-multi-agents
+    type: blog
+    authors: Walden Yan (Cognition)
+    year: 2025
+  - title: Why Do Multi-Agent LLM Systems Fail?
+    url: https://arxiv.org/abs/2503.13657
+    type: paper
+    authors: Cemri et al.
+    year: 2025
+  - title: Building effective agents
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    type: blog
+    authors: Erik S., Barry Zhang (Anthropic)
+    year: 2024
+---
+
+## Intuición: dos equipos serios, dos conclusiones opuestas
+
+En junio de 2025 se publicaron, con días de diferencia, dos textos de ingeniería de empresas que construyen agentes en producción y que parecen contradecirse:
+
+- Anthropic describió cómo construyó **un sistema multiagente de investigación** y reportó que, con Claude Opus 4 como agente líder y Claude Sonnet 4 como subagentes, **superó en un 90,2 % al agente único Claude Opus 4** en su evaluación interna de investigación.
+- Cognition (los creadores de un agente de programación) publicó **«No construyas multiagentes»**, en el que sostiene que en 2025 la colaboración entre agentes es **frágil** porque «la toma de decisiones acaba demasiado dispersa y el contexto no se puede compartir lo bastante a fondo entre los agentes».
+
+No se contradicen tanto como parece: **tratan dominios distintos** (investigación abierta frente a programación con muchas dependencias) y son una buena lección de cómo razonar sobre esta arquitectura. La pregunta no es «¿multiagente sí o no?», sino **«¿en qué condiciones compensa su coste y su complejidad?»**.
+
+## Cómo funciona
+
+### El argumento a favor
+
+Anthropic usa un patrón **orquestador-workers**: un agente líder analiza la consulta, diseña una estrategia y lanza **subagentes en paralelo** que exploran aspectos distintos, y después compila la respuesta. Según su artículo, los sistemas multiagente brillan en tareas con **mucha paralelización**, **información que excede una sola ventana de contexto** y **interacción con numerosas herramientas complejas**. La razón de fondo es la que viste en el módulo de context engineering: cada subagente trabaja con su **propia ventana limpia** y devuelve un resumen condensado, de modo que el sistema puede procesar más información de la que cabe en un contexto.
+
+### El argumento en contra
+
+Walden Yan (Cognition) propone dos principios para construir agentes fiables:
+
+1. **Comparte el contexto y comparte las trazas completas del agente, no solo mensajes sueltos.**
+2. **Las acciones llevan decisiones implícitas y las decisiones en conflicto dan malos resultados.**
+
+El ejemplo del artículo es una tarea del tipo «construye un clon de Flappy Bird» repartida en subtareas: un subagente entiende mal la instrucción y construye un fondo al estilo de Super Mario, otro crea un pájaro visualmente incoherente, y el agente final tiene que combinar dos piezas que parten de interpretaciones contradictorias. Su recomendación para la mayoría de los casos es un **agente lineal de un solo hilo** que mantiene un contexto continuo y, para tareas muy largas, un **modelo de compresión** que condense el historial de acciones y conversación en detalles, eventos y decisiones clave.
+
+### Dónde coinciden
+
+Leídos con cuidado, ambos textos señalan lo mismo desde lados opuestos:
+
+- El multiagente funciona cuando las subtareas son **independientes** (explorar fuentes distintas) y lo que se devuelve es **información condensada** que no exige que cada agente comparta las decisiones de los demás.
+- El propio artículo de Anthropic dice que son **malos candidatos** los dominios que exigen que **todos los agentes compartan el mismo contexto** o que tienen **muchas dependencias entre agentes**, y pone la programación como ejemplo, porque los LLM aún no son buenos coordinando y delegando en tiempo real.
+- Ambos coinciden en que un **mal reparto del contexto** es la fuente de los fallos.
+
+### Qué cuesta
+
+El artículo de Anthropic aporta un dato de coste: los agentes individuales consumen unas **4 veces más tokens que un chat**, y los sistemas multiagente, unas **15 veces más**. Además de tokens, el multiagente añade:
+
+- **Sobrecarga de coordinación:** más agentes, más canales de comunicación posibles (entre pares crecen como $n(n-1)/2$; con un supervisor, como $n-1$).
+- **Dificultad de depuración y de evaluación:** hay más piezas, más interacciones y más no determinismo.
+- **Complejidad operativa:** estado, ejecución reanudable, despliegues que no interrumpan agentes en curso (Anthropic cuenta que usaron despliegues «arcoíris» para no romper ejecuciones en marcha).
+- **Nuevos modos de fallo**, sistematizados en la taxonomía MAST que verás en la última lección del módulo. Su estudio observa que, pese al entusiasmo, **las mejoras de rendimiento de los sistemas multiagente en benchmarks populares suelen ser mínimas**.
+
+### Un cálculo: coordinación y valor mínimo
+
+El código calcula los canales de comunicación según la topología, el coste por tarea **resuelta** y el valor mínimo de una tarea para que compense el multiagente. Los multiplicadores de tokens (1, 4 y 15) son los del artículo de Anthropic; las **tasas de éxito (70 % y 90 %) son hipotéticas** y están ahí para ilustrar el razonamiento.
+
+```python
+print("agentes  canales entre pares  canales con supervisor")
+for n in (2, 3, 5, 8):
+    print(f"{n:>7}  {n * (n - 1) // 2:>18}  {n - 1:>22}")
+
+# Coste por tarea resuelta: sistema de un agente frente a multiagente.
+# Los multiplicadores de tokens (4x y 15x frente a un chat) son los que cita Anthropic para su
+# sistema de investigación; las tasas de éxito son hipotéticas.
+chat, agente, multi = 1, 4, 15
+exito_agente, exito_multi = 0.70, 0.90
+print("\ncoste por tarea resuelta (unidades de un chat):")
+print(f"  un agente : {agente / exito_agente:5.1f}")
+print(f"  multiagente: {multi / exito_multi:5.1f}")
+
+# ¿A partir de qué valor de una tarea resuelta compensa el multiagente?
+# V*exito_multi - multi >= V*exito_agente - agente  ->  V >= (multi - agente) / (exito_multi - exito_agente)
+umbral = (multi - agente) / (exito_multi - exito_agente)
+print(f"el multiagente compensa si una tarea resuelta vale al menos {umbral:.0f} chats")
+```
+
+Salida (determinista):
+
+```text
+agentes  canales entre pares  canales con supervisor
+      2                   1                       1
+      3                   3                       2
+      5                  10                       4
+      8                  28                       7
+
+coste por tarea resuelta (unidades de un chat):
+  un agente :   5.7
+  multiagente:  16.7
+el multiagente compensa si una tarea resuelta vale al menos 55 chats
+```
+
+- **La coordinación crece rápido entre pares** (28 canales con 8 agentes) y **linealmente con un supervisor** (7): una razón para preferir topologías jerárquicas cuando hay muchos agentes.
+- **Con estos supuestos, cada tarea resuelta cuesta 2,9 veces más con multiagente** (16,7 frente a 5,7 unidades), aunque tenga más éxito. Compensa solo si **resolver la tarea vale mucho más que lo que cuesta**: aquí, al menos 55 veces el coste de un chat. Es una investigación profunda o un análisis caro, no una consulta de soporte.
+- Los números de éxito son inventados: el ejercicio útil es **hacer este cálculo con tus propias medidas** antes de comprometer la arquitectura.
+
+### Lista de comprobación antes de adoptar multiagente
+
+| Pregunta | Favorece multiagente si… | Desaconseja si… |
+| --- | --- | --- |
+| ¿Las subtareas son independientes? | Sí, se pueden explorar en paralelo | Cada decisión depende de las anteriores |
+| ¿Cabe todo el contexto en una ventana? | No: excede una sola ventana | Sí: un agente con compactación basta |
+| ¿Hay muchas herramientas diferentes? | Sí, con dominios separables | Pocas herramientas |
+| ¿Hace falta compartir las decisiones? | No: basta devolver información | Sí: todos deben ver el mismo contexto |
+| ¿El valor por tarea es alto? | Sí: compensa 4 a 15 veces el coste | Tareas baratas y de alto volumen |
+| ¿Se puede evaluar bien? | Hay conjunto de pruebas y rúbricas | No hay forma de medir mejoras |
+
+La alternativa intermedia que sirve a menudo es **un agente único con subagentes puntuales para exploración** (un agente principal que lanza sub-agentes solo para tareas de lectura o investigación, con resultados condensados) y **sin** subagentes que modifiquen el mismo recurso a la vez.
+
+## Trade-offs
+
+| Arquitectura | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Agente único con contexto continuo | Decisiones coherentes; fácil de depurar | Límite de contexto en tareas muy largas |
+| Agente único con compactación | Cubre tareas largas | El resumen puede perder detalles |
+| Orquestador con subagentes de lectura | Paraleliza exploración con contextos limpios | Más tokens y coordinación |
+| Multiagente con escritura concurrente | Paralelismo máximo | Decisiones en conflicto; fallos de integración |
+| Pares sin supervisor | Flexible | Canales y comportamiento difíciles de controlar |
+
+## Errores comunes en producción
+
+- **Multiagente por moda.** Un diseño con cinco agentes para un problema que un agente resolvería con herramientas.
+- **Repartir tareas con decisiones acopladas.** Agentes que escriben a la vez sobre el mismo recurso producen resultados incoherentes.
+- **Pasar solo mensajes sueltos entre agentes.** Sin la traza o un resumen suficiente, cada agente decide sobre una versión incompleta de los hechos.
+- **No medir el coste por tarea resuelta.** Los 15 veces más de tokens pueden no compensar la mejora de éxito.
+- **No evaluar el sistema frente a una base de un agente.** Sin comparación no sabes si la complejidad aporta algo.
+- **Despliegues que interrumpen ejecuciones en curso.** Un agente largo no se reinicia sin perder su trabajo; hace falta ejecución reanudable.
+- **Dar a los subagentes más permisos de los necesarios.** Cada agente es una superficie de ataque y de error.
+- **Suponer que más agentes es mejor.** Más agentes implican más coordinación y más modos de fallo.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Cuándo usarías un sistema multiagente y cuándo no?"_ Pista: sí con tareas muy paralelizables, información mayor que una ventana y muchas herramientas, y valor alto por tarea; no con dependencias fuertes, contexto compartido necesario o tareas baratas.
+- _"Resume el debate Anthropic frente a Cognition."_ Pista: Anthropic reporta un +90,2 % de un sistema orquestador-subagentes en investigación a unos 15× tokens; Cognition recomienda un agente lineal con contexto compartido y compresión porque las decisiones dispersas entran en conflicto; son dominios distintos.
+- _"¿Qué cuesta un multiagente además de tokens?"_ Pista: coordinación, depuración y evaluación más difíciles, ejecución reanudable y modos de fallo propios.
+- _"¿Cómo decidirías con datos?"_ Pista: comparar con un agente único en un conjunto de pruebas, calcular el coste por tarea resuelta y el valor mínimo que justifica el multiplicador de coste.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **Anthropic** (+90,2 % sobre un agente único en investigación, a ≈15× tokens) y **Cognition** (agente lineal de un solo hilo, contexto compartido) tratan dominios distintos y coinciden en el diagnóstico: el contexto mal repartido causa los fallos.
+- El multiagente compensa con **subtareas independientes, información mayor que una ventana y muchas herramientas**; no con dependencias fuertes ni cuando todos deben compartir el mismo contexto.
+- Cuesta tokens (≈4× un agente, ≈15× un multiagente frente a un chat), coordinación (n(n−1)/2 canales entre pares) y complejidad operativa.
+- Con los supuestos del ejemplo, la tarea resuelta cuesta 2,9× más y solo compensa si vale ≥ 55 chats: **calcula con tus datos**.
+- Alternativa frecuente: un agente único con subagentes puntuales de lectura.
+
+</KeyTakeaways>

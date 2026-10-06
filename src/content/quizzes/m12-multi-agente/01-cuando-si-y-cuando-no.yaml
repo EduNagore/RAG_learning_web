@@ -1,0 +1,98 @@
+lesson: m12-multi-agente/01-cuando-si-y-cuando-no
+questions:
+  - id: m12-01-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué reportó Anthropic sobre su sistema multiagente de investigación frente a un agente único?'
+    options:
+      - 'Que era peor en todos los casos.'
+      - 'Que con un agente líder y subagentes superó en un 90,2 % al agente único en su evaluación interna de investigación.'
+      - 'Que consumía menos tokens que un chat.'
+      - 'Que no necesitaba herramientas.'
+    answer: [1]
+    explanation: 'Con Claude Opus 4 como líder y Claude Sonnet 4 como subagentes superó en un 90,2 % al agente único Claude Opus 4 en su evaluación interna, a costa de unas 15 veces más tokens que un chat.'
+    ref: '#intuición-dos-equipos-serios-dos-conclusiones-opuestas'
+
+  - id: m12-01-q2
+    type: single
+    difficulty: 2
+    prompt: '¿Cuáles son los dos principios que propone Cognition (Walden Yan) en «No construyas multiagentes»?'
+    options:
+      - 'Usar siempre más agentes y repartir el contexto.'
+      - 'Compartir el contexto y las trazas completas, y asumir que las acciones llevan decisiones implícitas cuyo conflicto da malos resultados.'
+      - 'Evitar las herramientas y reducir los prompts.'
+      - 'Cada agente debe ignorar lo que hacen los demás.'
+    answer: [1]
+    explanation: 'Principio 1: compartir contexto y trazas, no solo mensajes. Principio 2: las acciones implican decisiones y las decisiones en conflicto dan malos resultados.'
+    ref: '#el-argumento-en-contra'
+
+  - id: m12-01-q3
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué condiciones favorecen un sistema multiagente según el artículo de Anthropic? Marca todas las correctas.'
+    options:
+      - 'Mucha paralelización posible.'
+      - 'Información que excede una sola ventana de contexto.'
+      - 'Interacción con numerosas herramientas complejas.'
+      - 'Muchas dependencias entre agentes y necesidad de que todos compartan el mismo contexto.'
+    answer: [0, 1, 2]
+    explanation: 'La paralelización, la información que excede una ventana y las muchas herramientas favorecen el multiagente. Las dependencias fuertes y el contexto compartido necesario lo desaconsejan (el ejemplo es la programación).'
+    ref: '#el-argumento-a-favor'
+
+  - id: m12-01-q4
+    type: code-output
+    difficulty: 2
+    prompt: '¿Cuántos canales de comunicación posibles hay entre 8 agentes que pueden hablar entre pares?'
+    code: |-
+      n = 8
+      print(n * (n - 1) // 2)
+    options:
+      - '7'
+      - '8'
+      - '28'
+      - '64'
+    answer: [2]
+    explanation: 'n(n−1)/2 = 8·7/2 = 28. Con un supervisor central serían 7, de ahí que las topologías jerárquicas escalen mejor.'
+    ref: '#un-cálculo-coordinación-y-valor-mínimo'
+
+  - id: m12-01-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el cálculo, la tarea resuelta cuesta 2,9 veces más con multiagente aunque tenga más éxito. ¿Cuándo compensa?'
+    options:
+      - 'Siempre, porque tiene más éxito.'
+      - 'Nunca, porque cuesta más.'
+      - 'Solo si resolver la tarea vale mucho más que lo que cuesta (aquí, al menos unos 55 chats).'
+      - 'Solo si se usan más de 10 agentes.'
+    answer: [2]
+    explanation: 'El valor mínimo V cumple V·0,9 − 15 ≥ V·0,7 − 4, es decir V ≥ 55. Las tasas de éxito son hipotéticas: lo importante es repetir el cálculo con medidas propias.'
+    ref: '#un-cálculo-coordinación-y-valor-mínimo'
+
+  - id: m12-01-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué alternativa intermedia suele funcionar bien cuando no está claro que haga falta un multiagente completo?'
+    options:
+      - 'Un agente único con subagentes puntuales para lectura o exploración, con resultados condensados, y sin escrituras concurrentes sobre el mismo recurso.'
+      - 'Varios agentes escribiendo a la vez en el mismo archivo.'
+      - 'Quitar todas las herramientas.'
+      - 'Duplicar el prompt.'
+    answer: [0]
+    explanation: 'Los subagentes de lectura aíslan el ruido de la exploración y devuelven resúmenes sin generar decisiones en conflicto.'
+    ref: '#lista-de-comprobación-antes-de-adoptar-multiagente'
+
+  - id: m12-01-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Los estudios sobre fallos de sistemas multiagente observan que sus mejoras de rendimiento en benchmarks populares suelen ser mínimas.'
+    answer: [0]
+    explanation: 'Es verdadero según el artículo sobre la taxonomía MAST (Cemri et al., 2025), que analiza más de 1 600 trazas de siete frameworks.'
+    ref: '#qué-cuesta'
+
+  - id: m12-01-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Para una tarea barata y de alto volumen, como una consulta de soporte, un sistema multiagente es la opción más rentable.'
+    answer: [1]
+    explanation: 'Es falso. El multiplicador de coste (hasta ≈15× un chat) solo compensa en tareas de alto valor; para tareas baratas y frecuentes conviene un workflow o un agente simple.'
+    ref: '#lista-de-comprobación-antes-de-adoptar-multiagente'

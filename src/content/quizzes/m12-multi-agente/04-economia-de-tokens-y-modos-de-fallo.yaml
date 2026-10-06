@@ -1,0 +1,99 @@
+lesson: m12-multi-agente/04-economia-de-tokens-y-modos-de-fallo
+questions:
+  - id: m12-04-q1
+    type: single
+    difficulty: 1
+    prompt: '¿Qué es MAST?'
+    options:
+      - 'Un framework de agentes de código abierto.'
+      - 'Una taxonomía de los modos de fallo de los sistemas multiagente de LLM.'
+      - 'Un benchmark de programación.'
+      - 'Un protocolo de comunicación.'
+    answer: [1]
+    explanation: 'MAST (Multi-Agent System Failure Taxonomy) clasifica los fallos de sistemas multiagente en 14 modos y 3 categorías, a partir de trazas anotadas.'
+    ref: '#la-taxonomía-mast'
+
+  - id: m12-04-q2
+    type: multiple
+    difficulty: 2
+    prompt: '¿Cuáles son las tres categorías de MAST? Marca todas las correctas.'
+    options:
+      - 'Problemas de diseño del sistema.'
+      - 'Desalineación entre agentes.'
+      - 'Verificación de la tarea.'
+      - 'Tamaño del vocabulario.'
+    answer: [0, 1, 2]
+    explanation: 'Las categorías son diseño del sistema, desalineación entre agentes y verificación de la tarea.'
+    ref: '#la-taxonomía-mast'
+
+  - id: m12-04-q3
+    type: single
+    difficulty: 3
+    prompt: '¿Qué observan los autores de MAST sobre el rendimiento de los sistemas multiagente en benchmarks populares?'
+    options:
+      - 'Que siempre superan con mucho a un agente único.'
+      - 'Que sus mejoras suelen ser mínimas, y que los fallos requieren soluciones más sofisticadas que mejorar el modelo o el prompt.'
+      - 'Que fallan siempre.'
+      - 'Que solo funcionan con un framework concreto.'
+    answer: [1]
+    explanation: 'El estudio analiza más de 1 600 trazas de 7 frameworks y concluye que las ganancias suelen ser mínimas; de ahí que haya que comparar con una línea base de un agente.'
+    ref: '#la-taxonomía-mast'
+
+  - id: m12-04-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué condición es necesaria para aplicar detectores de fallos (bucles, falta de verificación) a un sistema multiagente?'
+    options:
+      - 'Que use un modelo grande.'
+      - 'Que registre trazas estructuradas con eventos (quién, tipo, contenido, tokens).'
+      - 'Que no tenga herramientas.'
+      - 'Que todos los agentes usen el mismo prompt.'
+    answer: [1]
+    explanation: 'Sin trazas estructuradas no hay nada que analizar: la observabilidad es un requisito previo.'
+    ref: '#convertir-trazas-en-diagnóstico'
+
+  - id: m12-04-q5
+    type: code-output
+    difficulty: 2
+    prompt: '¿Qué imprime este detector de bucles sobre las asignaciones de una traza?'
+    code: |-
+      from collections import Counter
+      asignaciones = ["buscar plazo", "buscar plazo", "buscar plazo", "redactar"]
+      print(any(n >= 3 for n in Counter(asignaciones).values()))
+    options:
+      - 'True'
+      - 'False'
+      - '3'
+      - 'None'
+    answer: [0]
+    explanation: '«buscar plazo» aparece tres veces, así que alguna asignación se repite 3 o más veces: el detector marca un posible bucle.'
+    ref: '#convertir-trazas-en-diagnóstico'
+
+  - id: m12-04-q6
+    type: single
+    difficulty: 3
+    prompt: '¿Qué defensa de diseño recomienda Anthropic para evitar que los subagentes dupliquen trabajo o dejen huecos?'
+    options:
+      - 'Dar a cada subagente una instrucción corta y general.'
+      - 'Dar a cada subagente un objetivo, un formato de salida, guía sobre herramientas y fuentes, y límites de tarea claros.'
+      - 'Eliminar los subagentes.'
+      - 'Que todos hagan exactamente la misma tarea.'
+    answer: [1]
+    explanation: 'Sin descripciones detalladas, los agentes duplican trabajo, dejan huecos o no encuentran la información necesaria; el ejemplo de la investigación sobre la escasez de semiconductores lo ilustra.'
+    ref: '#defensas-de-diseño-frente-a-los-fallos-más-comunes'
+
+  - id: m12-04-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Medir el coste por llamada es suficiente para decidir si un sistema multiagente compensa; no hace falta medir el coste por tarea resuelta.'
+    answer: [1]
+    explanation: 'Es falso. Lo relevante es cuánto cuesta resolver una tarea, que depende de cuántas llamadas hacen falta y de cuántas veces se acierta.'
+    ref: '#economía-de-tokens-las-cifras-del-módulo'
+
+  - id: m12-04-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'El agente que produce la respuesta final es el mejor candidato para verificarla, porque conoce todo el contexto.'
+    answer: [1]
+    explanation: 'Es falso. Un verificador independiente con criterios externos atrapa mejor los fallos de verificación; el mismo agente tiende a dar por buena su propia respuesta.'
+    ref: '#errores-comunes-en-producción'

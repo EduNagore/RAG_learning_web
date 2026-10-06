@@ -1,0 +1,99 @@
+lesson: m12-multi-agente/03-debate-roles-y-procedimientos
+questions:
+  - id: m12-03-q1
+    type: single
+    difficulty: 1
+    prompt: '¿En qué consiste el debate multiagente de Du et al.?'
+    options:
+      - 'En que una instancia del modelo se corrige a sí misma una vez.'
+      - 'En que varias instancias del modelo proponen y debaten respuestas y razonamientos durante varias rondas hasta una respuesta común.'
+      - 'En que un humano elige entre varias respuestas.'
+      - 'En entrenar agentes con refuerzo.'
+    answer: [1]
+    explanation: 'Cada agente ve las respuestas de los demás en cada ronda y puede corregir la suya; funciona con modelos de caja negra y el mismo procedimiento en todas las tareas.'
+    ref: '#debate-multiagente'
+
+  - id: m12-03-q2
+    type: code-output
+    difficulty: 3
+    prompt: 'Un debate de 3 agentes y 3 rondas con 200 tokens de pregunta y 300 por respuesta: ¿cuántos tokens de entrada se consumen (la ronda 1 solo lee la pregunta; las siguientes leen la pregunta y las respuestas de los otros dos)?'
+    code: |-
+      agentes, rondas, q, r = 3, 3, 200, 300
+      entrada = agentes * q + (rondas - 1) * agentes * (q + (agentes - 1) * r)
+      print(entrada)
+    options:
+      - '1800'
+      - '5400'
+      - '2700'
+      - '8100'
+    answer: [1]
+    explanation: 'Ronda 1: 3·200 = 600. Rondas 2 y 3: 3·(200 + 2·300) = 2 400 cada una. Total 5 400 tokens de entrada (más 2 700 de salida).'
+    ref: '#procedimientos-operativos-estándar-metagpt-y-chatdev'
+
+  - id: m12-03-q3
+    type: single
+    difficulty: 2
+    prompt: '¿Qué problema busca atacar MetaGPT con sus procedimientos operativos estándar?'
+    options:
+      - 'La falta de memoria de los modelos.'
+      - 'Las alucinaciones en cascada de cadenas de LLM, mediante roles especializados y verificación de resultados intermedios.'
+      - 'La latencia de red.'
+      - 'El tamaño del vocabulario.'
+    answer: [1]
+    explanation: 'Codifica SOPs en secuencias de prompts, como una cadena de montaje con roles que verifican los resultados intermedios, para que los errores no se propaguen.'
+    ref: '#procedimientos-operativos-estándar-metagpt-y-chatdev'
+
+  - id: m12-03-q4
+    type: single
+    difficulty: 2
+    prompt: '¿Qué aporta CAMEL con su role-playing e inception prompting?'
+    options:
+      - 'Cooperación autónoma entre agentes con roles, guiada para completar la tarea sin intervención humana continua.'
+      - 'Un nuevo algoritmo de embeddings.'
+      - 'Un sistema de caché semántica.'
+      - 'Un lenguaje de programación.'
+    answer: [0]
+    explanation: 'Dos agentes asumen roles y se guían con inception prompting para completar una tarea de forma coherente con la intención humana; también sirve para generar conversaciones con las que estudiar el comportamiento multiagente.'
+    ref: '#role-playing-camel'
+
+  - id: m12-03-q5
+    type: single
+    difficulty: 3
+    prompt: 'En el ejemplo de SOP, la puerta rechazó el artefacto del diseñador por faltar el campo «interfaces». ¿Qué ventaja ilustra?'
+    options:
+      - 'Que los modelos nunca omiten campos.'
+      - 'Que una comprobación barata entre roles evita que el siguiente construya sobre un artefacto incompleto, frenando errores en cascada.'
+      - 'Que no hacen falta tests.'
+      - 'Que el programador puede ignorar al diseñador.'
+    answer: [1]
+    explanation: 'Las puertas de validación sobre artefactos estructurados son baratas y detienen la propagación de errores. Aun así solo validan la forma: conviene comprobar también el contenido.'
+    ref: '#procedimientos-operativos-estándar-metagpt-y-chatdev'
+
+  - id: m12-03-q6
+    type: multiple
+    difficulty: 3
+    prompt: '¿Qué riesgos tiene el debate entre agentes? Marca todos los correctos.'
+    options:
+      - 'Coste elevado en tokens, porque cada ronda cada agente lee a los demás.'
+      - 'Conformidad: los agentes pueden converger a una respuesta equivocada.'
+      - 'Que funcione solo con un modelo concreto.'
+      - 'Que sea innecesario para preguntas que una sola llamada ya resuelve bien.'
+    answer: [0, 1, 3]
+    explanation: 'El debate es caro, puede converger al error y es poco útil si una llamada basta. El método de Du et al. funciona con modelos de caja negra, no con uno concreto.'
+    ref: '#debate-multiagente'
+
+  - id: m12-03-q7
+    type: truefalse
+    difficulty: 2
+    prompt: 'Los agentes generativos de Park et al. combinan un flujo de memoria, reflexión y planificación para producir comportamiento creíble en una simulación.'
+    answer: [0]
+    explanation: 'Es verdadero. Almacenan experiencias en lenguaje natural, las sintetizan en reflexiones de más alto nivel y las recuperan dinámicamente para planificar su conducta.'
+    ref: '#generative-agents-memoria-reflexión-y-planificación'
+
+  - id: m12-03-q8
+    type: truefalse
+    difficulty: 2
+    prompt: 'Una puerta que solo comprueba que un campo existe garantiza que su contenido es correcto.'
+    answer: [1]
+    explanation: 'Es falso. Valida la forma, no la veracidad; hacen falta comprobaciones de contenido (tests, reglas) o revisión para que la puerta sea realmente eficaz.'
+    ref: '#errores-comunes-en-producción'

@@ -1,0 +1,205 @@
+---
+title: Economía de tokens y modos de fallo (MAST)
+description: Cuánto cuesta cada patrón en tokens, qué dice la taxonomía MAST sobre cómo y por qué fallan los sistemas multiagente, y cómo convertir las trazas en diagnósticos y las lecciones en defensas de diseño.
+module: m12-multi-agente
+order: 4
+level: avanzado
+estimatedMinutes: 19
+objectives:
+  - Comparar el coste relativo en tokens de los patrones de la parte de agentes con las cifras de las lecciones anteriores.
+  - Describir la taxonomía MAST (tres categorías, catorce modos de fallo, más de 1 600 trazas anotadas) y su conclusión principal.
+  - Diagnosticar una traza con detectores baratos (bucles, falta de verificación, desalineación, presupuesto).
+  - Aplicar defensas de diseño frente a los fallos más comunes (especificaciones claras, comunicación estructurada, verificación y presupuestos).
+prerequisites:
+  - m12-multi-agente/03-debate-roles-y-procedimientos
+volatility: medium
+lastReviewed: 2026-10-06
+sources:
+  - title: Why Do Multi-Agent LLM Systems Fail?
+    url: https://arxiv.org/abs/2503.13657
+    type: paper
+    authors: Cemri et al.
+    year: 2025
+  - title: How we built our multi-agent research system
+    url: https://www.anthropic.com/engineering/multi-agent-research-system
+    type: blog
+    authors: Anthropic
+    year: 2025
+  - title: Don't Build Multi-Agents
+    url: https://cognition.com/blog/dont-build-multi-agents
+    type: blog
+    authors: Walden Yan (Cognition)
+    year: 2025
+relatedLabs:
+  - agents-28-supervisor-handoffs
+---
+
+## Intuición: los sistemas multiagente fallan de formas que se pueden clasificar
+
+Cuando un sistema multiagente da una mala respuesta, la tentación es culpar al modelo. Pero la mayoría de los fallos se parecen mucho entre sí, y no son fallos de inteligencia sino de **organización**: se repite una tarea sin avanzar, se ignora una instrucción del compañero, se termina antes de tiempo, se da por buena una respuesta sin comprobarla. Igual que en un equipo humano, la mejor defensa es **nombrar** los fallos, **detectarlos** en las trazas y **diseñar** para evitarlos.
+
+La segunda mitad de la lección trata de dinero: cada patrón de las lecciones anteriores tiene un coste característico en tokens, y conviene tener las cifras delante antes de elegir arquitectura.
+
+## Cómo funciona
+
+### La taxonomía MAST
+
+El trabajo *Why Do Multi-Agent LLM Systems Fail?* (Cemri et al., 2025) presenta **MAST** (*Multi-Agent System Failure Taxonomy*), descrita como la primera clasificación de los fallos de los sistemas multiagente de LLM. Se construyó analizando **150 trazas con anotación experta** (con un acuerdo entre anotadores de $\kappa = 0{,}88$) y comprende **14 modos de fallo** agrupados en **3 categorías**:
+
+1. **Problemas de diseño del sistema** (qué roles, qué reglas, qué flujo).
+2. **Desalineación entre agentes** (se entienden mal, no comparten lo necesario, no tienen en cuenta lo que dice otro).
+3. **Verificación de la tarea** (no se comprueba, o se comprueba mal, el resultado).
+
+Los autores acompañan la taxonomía con **MAST-Data**, más de **1 600 trazas anotadas** de **7 frameworks multiagente** populares, y concluyen dos cosas importantes: que, pese al entusiasmo, **las mejoras de rendimiento de los sistemas multiagente en benchmarks populares suelen ser mínimas**, y que los fallos identificados **requieren soluciones más sofisticadas**, no basta con mejorar el modelo o ajustar el prompt. Dicho de otro modo: gran parte del problema es **arquitectónico**.
+
+Esta lección no repasa los catorce modos uno por uno (consulta el artículo para el detalle), sino cómo **usar la idea** en tu sistema.
+
+### Convertir trazas en diagnóstico
+
+Lo que hace útil una taxonomía es poder **buscar** esos fallos en tus trazas. Hay detectores muy baratos que cubren una parte importante: **bucles** (la misma asignación repetida), **falta de verificación** (respuesta final sin un paso de comprobación), **desalineación** (un agente produce un dato que no tiene relación con lo que recibió) y **presupuesto superado**. El código siguiente los aplica a tres trazas escritas a mano: una sana, una con bucle y una que no verifica y se contradice. Son análogos sencillos a las categorías de MAST, no una implementación de la taxonomía.
+
+```python
+from collections import Counter
+
+# Una traza es una lista de eventos (agente, tipo, contenido, tokens).
+TRAZAS = {
+    "sano": [
+        ("supervisor", "asigna", "buscar plazo de devolución", 120),
+        ("investigador", "resultado", "14 días naturales (doc-001)", 300),
+        ("verificador", "verifica", "cita doc-001 existe y respalda", 150),
+        ("supervisor", "final", "El plazo es de 14 días [doc-001]", 100),
+    ],
+    "bucle": [
+        ("supervisor", "asigna", "buscar plazo", 120),
+        ("investigador", "resultado", "no encontrado", 200),
+        ("supervisor", "asigna", "buscar plazo", 120),
+        ("investigador", "resultado", "no encontrado", 200),
+        ("supervisor", "asigna", "buscar plazo", 120),
+        ("investigador", "resultado", "no encontrado", 200),
+        ("supervisor", "final", "No he podido encontrarlo", 100),
+    ],
+    "sin verificar y contradicción": [
+        ("supervisor", "asigna", "buscar plazo", 120),
+        ("investigador", "resultado", "14 días", 300),
+        ("redactor", "resultado", "El plazo es de 30 días", 300),
+        ("supervisor", "final", "El plazo es de 30 días", 100),
+    ],
+}
+
+
+def diagnosticar(traza, presupuesto_tokens=1000):
+    """Detectores baratos sobre una traza. Devuelve una lista de alertas legibles."""
+    alertas = []
+    repetidos = Counter((a, t, c) for a, t, c, _ in traza)
+    if any(n >= 3 for (_, t, _), n in repetidos.items() if t == "asigna"):
+        alertas.append("bucle: la misma asignación se repite 3 o más veces")
+    if not any(t == "verifica" for _, t, _, _ in traza):
+        alertas.append("sin verificación antes de la respuesta final")
+    resultados = [c for a, t, c, _ in traza if t == "resultado" and a != "investigador"]
+    datos = [c for a, t, c, _ in traza if t == "resultado" and a == "investigador"]
+    if resultados and datos and not any(d.split()[0] in r for r in resultados for d in datos):
+        alertas.append("desalineación: un agente produce un dato que no aparece en lo que recibió")
+    if sum(tokens for *_, tokens in traza) > presupuesto_tokens:
+        alertas.append("presupuesto de tokens superado")
+    return alertas or ["sin alertas"]
+
+
+for nombre, traza in TRAZAS.items():
+    total = sum(tokens for *_, tokens in traza)
+    print(f"{nombre} ({len(traza)} eventos, {total} tokens):")
+    for alerta in diagnosticar(traza, presupuesto_tokens=800):
+        print("   -", alerta)
+```
+
+Salida (determinista):
+
+```text
+sano (4 eventos, 670 tokens):
+   - sin alertas
+bucle (7 eventos, 1060 tokens):
+   - bucle: la misma asignación se repite 3 o más veces
+   - sin verificación antes de la respuesta final
+   - presupuesto de tokens superado
+sin verificar y contradicción (4 eventos, 820 tokens):
+   - sin verificación antes de la respuesta final
+   - desalineación: un agente produce un dato que no aparece en lo que recibió
+   - presupuesto de tokens superado
+```
+
+- La traza **sana** no dispara nada; las otras dos muestran **fallos distintos con la misma traza**: el bucle y la contradicción (el redactor escribe «30 días» cuando el investigador encontró «14 días») se ven sin necesidad de entender el contenido en detalle.
+- **Solo funcionan si hay trazas**, con eventos estructurados (quién, qué tipo, contenido, tokens). Es la razón de que la observabilidad de la lección anterior sea una condición previa de cualquier sistema multiagente en producción.
+- Los detectores son **heurísticos**: tendrán falsos positivos y negativos. Su valor es **priorizar qué trazas mirar a mano**.
+
+### Economía de tokens: las cifras del módulo
+
+Reúne lo visto hasta ahora, con la aclaración de que cada cifra depende de sus supuestos y de que **las tuyas serán otras**:
+
+| Patrón | Coste relativo | De dónde sale |
+| --- | --- | --- |
+| Un chat | 1× | Referencia |
+| Agente con herramientas | ≈ 4× | Cifra de Anthropic (agentes frente a chats) |
+| Sistema multiagente | ≈ 15× | Cifra de Anthropic (multiagente frente a chats) |
+| Agente de 20 pasos (contexto creciente) | 5,75× el de 20 llamadas independientes | Cálculo de la primera lección de agentes |
+| Debate de 3 agentes y 3 rondas | ≈ 16× una llamada | Cálculo de la lección anterior |
+| Votación con 9 muestras | 9× | Una llamada por muestra |
+| Plan tipo ReWOO frente a ReAct | ≈ 0,5× (2,08× menos entrada) | Cálculo de plan-and-execute, con supuestos |
+| Estado compartido frente a mensajes | ≈ 3,7× | Cálculo de topologías |
+
+Principios para **gobernar** el coste: un **presupuesto de tokens por tarea y por agente** con corte, **escalar el esfuerzo con la complejidad** (Anthropic incluye en sus prompts reglas del tipo: una consulta simple, un agente con pocas llamadas; una investigación compleja, muchos subagentes), **modelos pequeños para tareas auxiliares**, **resultados compactos** y **caché de prefijos** para las instrucciones comunes. Y **medir el coste por tarea resuelta**, no por llamada.
+
+### Cómo introducir el diagnóstico en el ciclo de trabajo
+
+Un uso práctico de la taxonomía es incorporarla a la **evaluación continua**. Cada semana, toma una muestra aleatoria de trazas de producción y otra de las peores según tus detectores; léelas y **etiquétalas** con el modo de fallo que observes (puedes usar los nombres de MAST o los tuyos). Con unas decenas de trazas verás que dos o tres modos concentran la mayoría de los problemas, y ahí es donde compensa invertir: un cambio de diseño que elimina un modo frecuente vale más que diez ajustes de prompt. Cada fallo etiquetado se convierte en un **caso de prueba** del conjunto de evaluación (la traza con el resultado esperado) para que no vuelva a aparecer. Y conviene repetir el ejercicio tras cada cambio importante de modelo, de herramienta o de arquitectura, porque los modos de fallo cambian con ellos.
+
+### Defensas de diseño frente a los fallos más comunes
+
+| Fallo típico | Defensa |
+| --- | --- |
+| Tareas duplicadas o con huecos entre subagentes | Encargos con objetivo, formato de salida, herramientas y límites explícitos (Anthropic) |
+| Decisiones en conflicto entre agentes | Compartir contexto o trazas relevantes, o evitar escrituras concurrentes (Cognition) |
+| Bucles y repetición | Máximo de turnos, detección de repeticiones sin cambio de estado |
+| Respuesta final sin comprobar | Un agente o puerta de verificación independiente y con criterios externos |
+| Un agente ignora lo que dijo otro | Mensajes estructurados con campos obligatorios, y resumen del estado antes de cada decisión |
+| Terminar antes de tiempo o seguir sin parar | Criterios de finalización explícitos y comprobables |
+| Coste imprevisible | Presupuestos por agente y global |
+| Fallos que no se pueden investigar | Trazas estructuradas y evaluación continua sobre ellas |
+
+## Trade-offs
+
+| Decisión | Ventaja | Inconveniente |
+| --- | --- | --- |
+| Más agentes especializados | Cada uno hace menos | Más desalineación y más tokens |
+| Verificador independiente | Atrapa fallos de verificación de la tarea | Otra llamada y otra pieza que puede equivocarse |
+| Comunicación estructurada | Menos malentendidos | Rigidez y esquemas que mantener |
+| Presupuestos estrictos | Costes acotados | Cortes que dejan tareas a medias |
+| Detectores heurísticos sobre trazas | Baratos y rápidos | Falsos positivos y negativos |
+
+## Errores comunes en producción
+
+- **Culpar al modelo de un fallo de arquitectura.** Si los agentes no comparten lo necesario, un modelo mejor no lo arregla.
+- **No tener trazas estructuradas.** Sin ellas no se puede aplicar ninguna taxonomía ni detector.
+- **No verificar el resultado final de forma independiente.** El agente que produce la respuesta no es el mejor juez de sí mismo.
+- **Criterios de terminación vagos.** «Termina cuando esté bien» provoca cortes prematuros o bucles.
+- **Asumir que el multiagente mejora los resultados.** Compáralo siempre con una línea base de un agente en tu propio conjunto de pruebas (el estudio MAST observa mejoras mínimas en benchmarks populares).
+- **Presupuestos solo globales.** Un agente descontrolado consume todo antes de que se note; fija límites por agente.
+- **Evaluar solo la respuesta final.** Los fallos se ven en la trayectoria: pasos, repeticiones, verificaciones omitidas.
+- **No revisar a mano una muestra de trazas.** Los detectores priorizan, pero la comprensión viene de leerlas.
+
+<Callout type="entrevista" title="Preguntas típicas">
+
+- _"¿Por qué fallan los sistemas multiagente?"_ Pista: la taxonomía MAST agrupa 14 modos en tres categorías: diseño del sistema, desalineación entre agentes y verificación de la tarea; sugiere que el problema es sobre todo arquitectónico.
+- _"¿Cómo depurarías un sistema multiagente que da respuestas malas?"_ Pista: trazas estructuradas, detectores de bucles, falta de verificación, desalineación y presupuesto, y revisión manual de una muestra.
+- _"¿Cuánto cuesta un sistema multiagente?"_ Pista: del orden de 15 veces los tokens de un chat y 4 de un agente en el sistema de Anthropic; se mide como coste por tarea resuelta.
+- _"¿Qué defensas de diseño aplicarías?"_ Pista: encargos explícitos, contexto compartido o sin escrituras concurrentes, comunicación estructurada, verificador independiente, criterios de finalización, presupuestos y trazas.
+
+</Callout>
+
+<KeyTakeaways>
+
+- **MAST:** 14 modos de fallo en 3 categorías (diseño del sistema, desalineación entre agentes, verificación de la tarea), a partir de 150 trazas anotadas (κ = 0,88) y más de 1 600 trazas de 7 frameworks; los autores observan mejoras mínimas en benchmarks populares y que hacen falta soluciones más sofisticadas.
+- Los fallos se **detectan en las trazas** con detectores baratos (bucles, falta de verificación, desalineación, presupuesto); exige trazas estructuradas.
+- Coste relativo de referencia: ≈ 4× un agente y ≈ 15× un multiagente frente a un chat (Anthropic); un debate de 3×3 ≈ 16×.
+- Las defensas son de **diseño**: encargos explícitos, contexto compartido o sin escrituras concurrentes, comunicación estructurada, verificación independiente, criterios de finalización y presupuestos.
+- Compara siempre con una línea base de un solo agente y mide el **coste por tarea resuelta**.
+
+</KeyTakeaways>
