@@ -17,7 +17,7 @@
 | F5 Contenido Parte II (Agentes, M10–M17) | ✅ hecha (en `main` y desplegada) | 63 lecciones en total, 35 labs, 495 preguntas |
 | F6 Profesional y extras (M18, entrevistas, glosario, proyectos) | ✅ hecha, en `main` y desplegada | 66 lecciones, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos |
 | F7 Pulido (Lighthouse, a11y, freshness workflow, README) | ✅ hecha, en `main` y desplegada | axe en e2e, Lighthouse ≥92, workflow de frescura, README completo |
-| F8 Sincronización del progreso por usuario (opcional, `docs/PROMPT_SYNC.md`) | 🟡 implementada en `fase-8-sync` con backend simulado; falta crear el proyecto de Supabase y probarla en real | Desactivada por ausencia de variables |
+| F8 Sincronización del progreso por usuario (opcional, `docs/PROMPT_SYNC.md`) | 🟡 implementada y fusionada en `main` (merge c7fbeb5, desplegada) con la función DESACTIVADA; falta crear el proyecto de Supabase y probarla en real | Desactivada por ausencia de variables |
 
 Contadores finales (F7): 66 lecciones, 519 preguntas de quiz, 35 labs, 108 tests unitarios, 176 tests pytest, 310 mutantes, 46 e2e, 80 preguntas de entrevista, 6 casos, 69 términos, 5 proyectos. Contadores (fin de F5: 63 lecciones, 495 preguntas, 35 labs, 92 tests unitarios, 176 tests pytest, 310 mutantes, 32 e2e). Contadores (fin de F4): 19 módulos definidos, 37 lecciones (M00–M09), 287 preguntas, 22 labs, 76 tests unitarios, 111 tests pytest de labs, 184 mutantes de labs (todos detectados), 30 e2e, `main` = merge de `fase-4-rag` (6d54145), desplegado y verificado en producción.
 
@@ -60,7 +60,7 @@ Hecho: ver «F6: HECHA».
 ### Mantenimiento
 Cada mes llega el informe de frescura; al revisar una lección actualiza sus fuentes y `lastReviewed`. Si aparece una nueva edición de un estándar (como OWASP), mira primero si hay `<Snapshot>` que actualizar.
 
-## F8: sincronización del progreso (rama `fase-8-sync`)
+## F8: sincronización del progreso (rama `fase-8-sync`, fusionada en `main`: merge c7fbeb5)
 
 - ✅ Implementado: esquema v2 con migración desde la v1 (`src/lib/progress.ts`), fusión pura y probada por propiedades (`src/lib/merge.ts`), motor de sincronización con backend inyectable (`src/lib/sync.ts`), adaptador de Supabase (`src/lib/supabase.ts`), orquestación (`src/lib/syncClient.ts`), panel en `/progreso/` (`SyncPanel`) e indicador en la cabecera (`SyncBadge`), `supabase/schema.sql`, `.env.example`, variables en `deploy.yml`, `pnpm test:e2e:sync` (9 e2e con backend HTTP simulado; build aparte `dist-sync`; también en CI), README y `docs/DECISIONS.md` (sección F8) y `docs/SOURCES.md`.
 - **Lo que falta y solo puede hacer el usuario** (no se fusiona con la función activa hasta entonces; ahora está desactivada por ausencia de variables): 1) crear el proyecto en Supabase; 2) ejecutar `supabase/schema.sql` en el editor SQL; 3) configurar *Site URL* y *Redirect URLs* y añadir `{{ .Token }}` a la plantilla del correo; 4) darme la *Project URL* y la clave pública (nunca la `service_role`) para ponerlas en `.env` y en las variables del repositorio; 5) probar juntos: iniciar sesión, dos navegadores, sin red, borrar la copia, y comprobar las políticas RLS con el bloque de comentarios de `schema.sql`.
