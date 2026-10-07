@@ -8,6 +8,7 @@ export default defineConfig(
   {
     ignores: [
       'dist/',
+      'dist-sync/',
       '.astro/',
       'node_modules/',
       '.venv/',

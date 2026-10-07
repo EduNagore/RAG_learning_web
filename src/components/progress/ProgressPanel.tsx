@@ -4,12 +4,13 @@ import {
   $progress,
   exportProgress,
   hydrateProgress,
+  importIntoProgress,
   importProgress,
   moduleCompletion,
-  replaceProgress,
   resetProgress,
 } from '../../lib/progress';
 import { boxCounts, dueQuestionIds } from '../../lib/srs';
+import { $sync } from '../../lib/sync';
 import { url } from '../../lib/url';
 
 interface Props {
@@ -22,6 +23,7 @@ const dateFmt = (iso: string) =>
 
 export default function ProgressPanel({ modules, lessonTitles }: Props) {
   const progress = useStore($progress);
+  const sync = useStore($sync);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -48,8 +50,11 @@ export default function ProgressPanel({ modules, lessonTitles }: Props) {
   const onImport = async (file: File | undefined) => {
     if (!file) return;
     try {
-      replaceProgress(importProgress(await file.text()));
-      setMessage({ tone: 'ok', text: 'Progreso importado: ha sustituido al anterior.' });
+      importIntoProgress(importProgress(await file.text()));
+      setMessage({
+        tone: 'ok',
+        text: 'Progreso importado y fusionado con el que ya tenías: no se ha perdido nada.',
+      });
     } catch (e) {
       setMessage({
         tone: 'bad',
@@ -63,8 +68,9 @@ export default function ProgressPanel({ modules, lessonTitles }: Props) {
   return (
     <div className="space-y-8">
       <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
-        Tu progreso se guarda <strong>solo en este navegador</strong> (no hay cuentas ni servidor).
-        Descarga una copia de seguridad si cambias de equipo o borras los datos del sitio.
+        Tu progreso se guarda <strong>en este navegador</strong>
+        {sync.email !== null ? ' y, como has iniciado sesión, también en la nube' : ''}. Descarga
+        una copia de seguridad si cambias de equipo o borras los datos del sitio.
       </p>
 
       <section aria-labelledby="resumen" className="grid gap-4 sm:grid-cols-3">
@@ -189,11 +195,15 @@ export default function ProgressPanel({ modules, lessonTitles }: Props) {
               aria-label="Confirmar reinicio"
               className="flex items-center gap-2"
             >
-              <span className="text-sm">Se borrará todo el progreso. ¿Seguro?</span>
+              <span className="text-sm">
+                Se borrará todo el progreso
+                {sync.email !== null ? ' (también en la nube y en tus otros dispositivos)' : ''}.
+                ¿Seguro?
+              </span>
               <button
                 type="button"
                 onClick={() => {
-                  resetProgress();
+                  resetProgress($sync.get().email !== null);
                   setConfirmReset(false);
                   setMessage({ tone: 'ok', text: 'Progreso reiniciado.' });
                 }}

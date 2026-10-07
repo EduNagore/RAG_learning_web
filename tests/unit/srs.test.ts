@@ -22,7 +22,7 @@ describe('Leitner', () => {
 
   it('un fallo nuevo entra en la caja 1 y vuelve en 1 día', () => {
     const s = applyResult({}, 'q1', false, T0);
-    expect(s.q1).toEqual({ box: 1, due: addDays(T0, 1) });
+    expect(s.q1).toEqual({ box: 1, due: addDays(T0, 1), reviewedAt: T0.toISOString() });
   });
 
   it('un acierto en una pregunta que no está en el sistema no crea tarjeta', () => {
@@ -45,7 +45,7 @@ describe('Leitner', () => {
   it('la caja 5 es el tope y se mantiene a 16 días', () => {
     let s: SrsState = { q: { box: 5, due: T0.toISOString() } };
     s = applyResult(s, 'q', true, T0);
-    expect(s.q).toEqual({ box: 5, due: addDays(T0, 16) });
+    expect(s.q).toEqual({ box: 5, due: addDays(T0, 16), reviewedAt: T0.toISOString() });
   });
 
   it('un fallo en cualquier caja vuelve a la 1', () => {
@@ -115,7 +115,12 @@ describe('integración con el progreso', () => {
       },
       T0,
     );
-    expect(p.quizScores['m0/01']).toEqual({ best: 50, last: 50, attempts: 1 });
+    expect(p.quizScores['m0/01']).toEqual({
+      best: 50,
+      last: 50,
+      attempts: 1,
+      updatedAt: T0.toISOString(),
+    });
     expect(Object.keys(p.srs)).toEqual(['q2']);
 
     p = withQuizOutcome(
@@ -129,7 +134,12 @@ describe('integración con el progreso', () => {
       },
       daysLater(1),
     );
-    expect(p.quizScores['m0/01']).toEqual({ best: 100, last: 100, attempts: 2 });
+    expect(p.quizScores['m0/01']).toEqual({
+      best: 100,
+      last: 100,
+      attempts: 2,
+      updatedAt: daysLater(1).toISOString(),
+    });
     expect(p.srs.q2.box).toBe(2); // acertó la fallada: sube de caja
 
     p = withQuizOutcome(
@@ -143,7 +153,12 @@ describe('integración con el progreso', () => {
       },
       daysLater(2),
     );
-    expect(p.quizScores['m0/01']).toEqual({ best: 100, last: 50, attempts: 3 }); // el mejor no baja
+    expect(p.quizScores['m0/01']).toEqual({
+      best: 100,
+      last: 50,
+      attempts: 3,
+      updatedAt: daysLater(2).toISOString(),
+    }); // el mejor no baja
   });
 
   it('withReview solo toca el repaso, no las notas', () => {

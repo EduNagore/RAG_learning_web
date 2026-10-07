@@ -1,14 +1,21 @@
 import { atom } from 'nanostores';
 import { applyResults } from './srs';
+import { mergeProgress, restampAfter } from './merge';
 
-/** Clave de localStorage; el sufijo es la versión del esquema. */
+/**
+ * Clave de localStorage. Se mantiene estable entre versiones del esquema para no dejar datos
+ * huérfanos; la versión del esquema va dentro del JSON (`version`).
+ */
 export const STORAGE_KEY = 'rma:progress:v1';
-export const SCHEMA_VERSION = 1;
+/** v2 añade marcas de tiempo por entrada (para fusionar copias de varios dispositivos). */
+export const SCHEMA_VERSION = 2;
 
 export interface QuizScore {
   best: number;
   last: number;
   attempts: number;
+  /** Momento del último intento (ISO). Ausente en datos de la v1. */
+  updatedAt?: string;
 }
 
 export interface LabState {
@@ -20,6 +27,8 @@ export interface LabState {
 export interface SrsCard {
   box: 1 | 2 | 3 | 4 | 5;
   due: string;
+  /** Momento de la última respuesta (ISO). Ausente en datos de la v1. */
+  reviewedAt?: string;
 }
 
 export interface ExamResult {
@@ -31,15 +40,28 @@ export interface ExamResult {
 
 export interface Progress {
   version: typeof SCHEMA_VERSION;
+  /** Lección → momento en que se marcó como leída (ISO). */
   lessonsRead: Record<string, string>;
+  /** Lección → momento en que se desmarcó. Permite que «no leída» gane a una copia antigua. */
+  unread: Record<string, string>;
   quizScores: Record<string, QuizScore>;
   labs: Record<string, LabState>;
   srs: Record<string, SrsCard>;
   exams: ExamResult[];
+  /** Momento del último «reiniciar progreso»: lo anterior no debe resucitar al fusionar. */
+  resetAt?: string;
 }
 
 export function emptyProgress(): Progress {
-  return { version: SCHEMA_VERSION, lessonsRead: {}, quizScores: {}, labs: {}, srs: {}, exams: [] };
+  return {
+    version: SCHEMA_VERSION,
+    lessonsRead: {},
+    unread: {},
+    quizScores: {},
+    labs: {},
+    srs: {},
+    exams: [],
+  };
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -61,14 +83,18 @@ export function parseProgress(raw: string | null | undefined): Progress {
   if (!isRecord(data)) return base;
   const pick = <T>(key: string): Record<string, T> =>
     isRecord(data[key]) ? (data[key] as Record<string, T>) : {};
-  return {
+  // Acepta la v1 (sin `unread` ni marcas de tiempo) y la v2: la migración es rellenar lo que falta.
+  const progress: Progress = {
     version: SCHEMA_VERSION,
     lessonsRead: pick<string>('lessonsRead'),
+    unread: pick<string>('unread'),
     quizScores: pick<QuizScore>('quizScores'),
     labs: pick<LabState>('labs'),
     srs: pick<SrsCard>('srs'),
     exams: Array.isArray(data.exams) ? (data.exams as ExamResult[]) : [],
   };
+  if (typeof data.resetAt === 'string') progress.resetAt = data.resetAt;
+  return progress;
 }
 
 /** Acceso defensivo a localStorage (puede lanzar o no existir: modo privado, SSR, tests). */
@@ -99,13 +125,15 @@ export function saveProgress(p: Progress, storage: Storage | null = getStorage()
 // --- Transformaciones puras -------------------------------------------------
 
 export function withLessonRead(p: Progress, lessonId: string, now = new Date()): Progress {
-  return { ...p, lessonsRead: { ...p.lessonsRead, [lessonId]: now.toISOString() } };
+  const unread = { ...p.unread };
+  delete unread[lessonId];
+  return { ...p, lessonsRead: { ...p.lessonsRead, [lessonId]: now.toISOString() }, unread };
 }
 
-export function withLessonUnread(p: Progress, lessonId: string): Progress {
+export function withLessonUnread(p: Progress, lessonId: string, now = new Date()): Progress {
   const lessonsRead = { ...p.lessonsRead };
   delete lessonsRead[lessonId];
-  return { ...p, lessonsRead };
+  return { ...p, lessonsRead, unread: { ...p.unread, [lessonId]: now.toISOString() } };
 }
 
 export interface QuizOutcome {
@@ -131,6 +159,7 @@ export function withQuizOutcome(p: Progress, outcome: QuizOutcome, now = new Dat
         best: Math.max(prev?.best ?? 0, pct),
         last: pct,
         attempts: (prev?.attempts ?? 0) + 1,
+        updatedAt: now.toISOString(),
       },
     },
     srs: applyResults(p.srs, outcome.results, now),
@@ -226,7 +255,25 @@ export const markLabPassed = (labId: string, code: string) =>
 export const recordExam = (exam: ExamResult) => updateProgress((p) => withExam(p, exam));
 export const markLessonRead = (id: string) => updateProgress((p) => withLessonRead(p, id));
 export const markLessonUnread = (id: string) => updateProgress((p) => withLessonUnread(p, id));
-export const resetProgress = () => updateProgress(() => emptyProgress());
+/**
+ * Reinicia el progreso. Con `propagate` (por defecto) deja una marca `resetAt` para que el
+ * reinicio llegue a la nube y a otros dispositivos al sincronizar; sin ella, solo se vacía lo local.
+ */
+export const resetProgress = (propagate = true) =>
+  updateProgress(() =>
+    propagate ? { ...emptyProgress(), resetAt: new Date().toISOString() } : emptyProgress(),
+  );
 
-/** Sustituye todo el progreso (importación de una copia de seguridad). */
+/** Sustituye todo el progreso. La importación de copias usa `mergeIntoProgress` (no pierde nada). */
 export const replaceProgress = (p: Progress) => updateProgress(() => p);
+
+/**
+ * Importa una copia de seguridad: se fusiona con lo local (no se pierde nada) y, si hubo un
+ * reinicio, lo importado se re-sella para que no lo descarte la siguiente sincronización.
+ */
+export const importIntoProgress = (imported: Progress) =>
+  updateProgress((p) => mergeProgress(p, restampAfter(imported, p.resetAt, new Date())));
+
+/** Fusiona un progreso externo (otro dispositivo, la nube) con el local. */
+export const mergeIntoProgress = (other: Progress) =>
+  updateProgress((p) => mergeProgress(p, other));

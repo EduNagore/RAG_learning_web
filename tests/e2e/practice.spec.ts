@@ -105,7 +105,8 @@ test('mini-test de lección: respondiendo todo bien se aprueba y se guarda la no
   await expect(page.getByText('Aprobado')).toBeVisible();
 
   const progress = await readProgress(page);
-  expect(progress.quizScores[LESSON]).toEqual({ best: 100, last: 100, attempts: 1 });
+  expect(progress.quizScores[LESSON]).toMatchObject({ best: 100, last: 100, attempts: 1 });
+  expect(progress.quizScores[LESSON].updatedAt).toBeTruthy(); // la marca de tiempo permite fusionar
   expect(progress.srs).toEqual({}); // sin fallos no se crea ninguna tarjeta de repaso
 });
 

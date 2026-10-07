@@ -15,7 +15,7 @@ Web estática para aprender y practicar **RAG** y **sistemas de agentes y multia
 | **Glosario, fuentes y hojas**     | Glosario ES/EN, bibliografía agrupada por parte y hojas de resumen imprimibles.                                                                                                                                                                                             |
 | **Progreso** (`/progreso/`)       | Lecciones leídas, notas y repaso. Todo se guarda en tu navegador; hay copia de seguridad (exportar e importar).                                                                                                                                                             |
 
-No hay servidor ni cuentas: todo el estado vive en `localStorage`.
+Sin configurar nada, no hay servidor ni cuentas: todo el estado vive en `localStorage`. Opcionalmente se puede activar la **sincronización del progreso por usuario** (ver más abajo).
 
 ## Desarrollo local
 
@@ -33,6 +33,7 @@ pnpm dev                     # http://localhost:4321/RAG_learning_web/
 | `pnpm test`                                               | Tests unitarios (Vitest)                                                                                                                              |
 | `pnpm validate`                                           | Validación del contenido (ver más abajo)                                                                                                              |
 | `pnpm build`                                              | Construye `dist/` e indexa con Pagefind                                                                                                               |
+| `pnpm test:e2e:sync`                                      | E2E de la sincronización (construye `dist-sync` con una URL de Supabase falsa y simula el backend; no llama a ningún servicio real)                   |
 | `pnpm exec playwright install chromium` y `pnpm test:e2e` | Tests de extremo a extremo (necesitan `pnpm build` antes y usan `astro preview`; solo admite uno a la vez: `pnpm astro preview stop` si queda alguno) |
 | `uv sync` y `uv run pytest`                               | Tests de los laboratorios (la solución pasa y el _starter_ falla)                                                                                     |
 | `uv run ruff check .` y `uv run ruff format --check .`    | Lint y formato de Python                                                                                                                              |
@@ -54,6 +55,7 @@ src/content/
   cases/<caso>.mdx                   Casos de system design
   glossary/*.yaml                    Glosario ES/EN
   projects/<id>.mdx                  Guía de cada proyecto final
+supabase/schema.sql                  Tabla, RLS y trigger de la sincronización del progreso (opcional)
 projects/<id>/                       Código inicial de cada proyecto (proyectos uv independientes)
 public/py/ragkit/                    Librería de los laboratorios (se ejecuta en Pyodide y en CI)
 public/data/nimbus/                  Corpus ficticio (42 documentos) y conjunto de oro (31 preguntas)
@@ -95,9 +97,35 @@ uv run python scripts/mutate_labs.py      # añade antes los mutantes de tu lab:
 - Glosario: `src/content/glossary/*.yaml` (`id`, `es`, `en`, `def`, `lessons`).
 - Proyectos: guía en `src/content/projects/<id>.mdx` y carpeta `projects/<id>/` con `README.md`, `pyproject.toml` y `.env.example`. Nunca subas un `.env`. Comprueba versiones y APIs contra la documentación vigente y anota la fecha en `verified`.
 
+## Sincronización del progreso por usuario (opcional)
+
+Con la función activada, cada persona puede iniciar sesión con su correo (enlace mágico o código de 6 dígitos) y recuperar su progreso en cualquier dispositivo. **Sin sesión, o sin configurar el backend, la web funciona exactamente igual** y el progreso se guarda solo en el navegador. Funciona con [Supabase](https://supabase.com) (Auth y Postgres con Row Level Security).
+
+Cómo está montada:
+
+- **Local primero:** el progreso se guarda siempre en `localStorage`; la nube se sincroniza en segundo plano (con espera de unos segundos tras cada cambio y al ocultar la pestaña). Sin red, nada se pierde y se sube al volver.
+- **Fusión, nunca sobrescritura:** `src/lib/merge.ts` fusiona dos copias campo a campo (lecciones leídas con la marca más reciente, mejor nota = máximo, lab superado no vuelve atrás, repaso espaciado por la respuesta más reciente, exámenes sin duplicados). Es una función pura, conmutativa, idempotente y asociativa (con una excepción documentada en `docs/DECISIONS.md` tras un «reiniciar»), y se prueba con propiedades.
+- **Concurrencia:** cada fila tiene una `revision`; la subida solo se acepta si nadie cambió la fila entre medias, y si no, se vuelve a fusionar y se reintenta.
+- **Esquema v2** del progreso, con migración automática desde la v1 (la clave de `localStorage` no cambia).
+
+### Puesta en marcha (una vez)
+
+1. Crea un proyecto en [supabase.com](https://supabase.com). En el plan gratuito (a octubre de 2026): 500 MB de base de datos, 50 000 usuarios activos al mes, 2 proyectos activos y **los proyectos gratuitos se pausan tras una semana sin actividad** (se reactivan a mano desde el panel).
+2. En _SQL Editor_, pega y ejecuta [`supabase/schema.sql`](supabase/schema.sql): crea la tabla `progress`, activa RLS (cada persona solo accede a su fila), el trigger de revisión y un tope de tamaño.
+3. En _Authentication → URL Configuration_: pon como _Site URL_ `https://edunagore.github.io/RAG_learning_web/` y añade a _Redirect URLs_ `https://edunagore.github.io/RAG_learning_web/progreso/` y, para desarrollo, `http://localhost:4321/RAG_learning_web/progreso/`.
+4. En _Authentication → Email Templates → Magic Link_, incluye también `{{ .Token }}` en el mensaje (por ejemplo «Tu código: {{ .Token }}»). Así las personas pueden entrar con el código si el escáner de su correo ha gastado el enlace (los enlaces son de un solo uso, caducan a la hora y se puede pedir uno nuevo cada 60 segundos). El correo que envía Supabase por defecto tiene límites bajos; para uso real conviene configurar un SMTP propio.
+5. Copia la _Project URL_ y la clave pública (`anon`/_publishable_, **nunca la `service_role`**) de _Project Settings → API_:
+   - En local: `cp .env.example .env` y rellena `PUBLIC_SUPABASE_URL` y `PUBLIC_SUPABASE_ANON_KEY`.
+   - En el despliegue: _Settings → Secrets and variables → Actions → Variables_ del repositorio, con esos mismos dos nombres. `deploy.yml` las lee al construir.
+6. Comprueba las políticas RLS con el bloque de comentarios del final de `supabase/schema.sql` (un usuario no debe ver la fila de otro).
+
+### Privacidad
+
+Se guarda el correo (en el sistema de acceso de Supabase) y el progreso (lecciones leídas, notas, repaso, exámenes y el código de los laboratorios). No se guardan claves de API. La persona puede cerrar sesión (conservando o borrando el progreso de ese dispositivo) y «borrar mi copia en la nube». Eliminar también el correo del sistema de acceso lo hace quien administra el proyecto (panel de Supabase, _Authentication → Users_): el cliente no puede borrar usuarios.
+
 ## Calidad
 
-- **CI** (`.github/workflows/ci.yml`, en cada _push_): `astro check`, ESLint, Prettier, Vitest, validación de contenido, build, Playwright, y por otro lado Ruff y pytest de los laboratorios.
+- **CI** (`.github/workflows/ci.yml`, en cada _push_): `astro check`, ESLint, Prettier, Vitest, validación de contenido, build, Playwright (también el de sincronización), y por otro lado Ruff y pytest de los laboratorios.
 - **Validación de contenido** (`pnpm validate`): módulos, orden y prerrequisitos; frontmatter de las lecciones y longitud mínima; anclas de los quizzes y equilibrio de respuestas; laboratorios completos; entrevistas (≥ 80, ids únicos, niveles repartidos), casos (secciones, longitud y diagrama), glosario y proyectos.
 - **Accesibilidad**: `tests/e2e/a11y.spec.ts` ejecuta axe (WCAG A y AA) sobre las páginas representativas con tema claro y oscuro, y comprueba `prefers-reduced-motion`.
 - **Rendimiento**: Lighthouse en local (octubre de 2026) sobre lecciones, laboratorios, entrevistas y fuentes: en móvil, Performance entre 92 y 100 y 100 en Accessibility, Best Practices y SEO; en escritorio, 100 en todo. Pyodide solo se descarga en los laboratorios (hay un test que lo comprueba).

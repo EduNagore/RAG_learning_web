@@ -205,3 +205,20 @@ Las fuentes de las lecciones de M18 ya constan en las secciones anteriores (guí
 | [Claude API overview](https://platform.claude.com/docs/en/api/overview) | N1 | docs | Playground | Endpoint `POST /v1/messages`, cabeceras `x-api-key`, `anthropic-version: 2023-06-01`, `content-type` |
 | [anthropic-sdk-typescript](https://github.com/anthropics/anthropic-sdk-typescript) | N1 | docs | Playground | Uso en navegador desactivado por defecto; `dangerouslyAllowBrowser` y aviso sobre credenciales |
 | [Claude's API now supports CORS requests](https://simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access) (Willison) | N2 | blog | Playground | Cabecera `anthropic-dangerous-direct-browser-access: true` (fuente secundaria de 2024; el playground gestiona el fallo de CORS con un mensaje) |
+
+
+## Verificadas en F8 (sincronización del progreso con Supabase)
+
+Documentación abierta el 2026-10-07. Se usa solo lo que dicen estas páginas.
+
+| Fuente | Nivel | Tipo | Qué se comprobó |
+| ------ | ----- | ---- | --------------- |
+| [Supabase JS: signInWithOtp](https://supabase.com/docs/reference/javascript/auth-signinwithotp) | N1 | docs | `signInWithOtp({ email, options: { emailRedirectTo } })`; la URL de redirección debe estar en la lista de permitidas; enlace o código según la plantilla; puede crear la cuenta |
+| [Supabase JS: initializing](https://supabase.com/docs/reference/javascript/initializing) | N1 | docs | `createClient(url, key, options)` y las opciones de auth `persistSession`, `autoRefreshToken`, `detectSessionInUrl`, `storage`. `storageKey` y `flowType` no figuraban en esa página: se usan por el tipado de `@supabase/supabase-js` 2.117 (`astro check` los acepta) |
+| [Supabase JS: onAuthStateChange](https://supabase.com/docs/reference/javascript/auth-onauthstatechange) | N1 | docs | Eventos `INITIAL_SESSION`, `SIGNED_IN`, `SIGNED_OUT`, `TOKEN_REFRESHED`; `data.subscription.unsubscribe()`. La página no avisa de no llamar a Supabase dentro del callback; se aplaza a otro turno por prudencia |
+| [Supabase: Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security) | N1 | docs | Sintaxis de las cuatro políticas con `to authenticated` y `(select auth.uid()) = user_id`; sin políticas no hay acceso con la clave pública; una tabla expuesta sin RLS es legible y escribible |
+| [Supabase: email passwordless / magic links](https://supabase.com/docs/guides/auth/auth-email-passwordless) | N1 | docs | Un enlace por usuario cada 60 s, caducidad de 1 hora, redirecciones permitidas, y el aviso de que los escáneres de correo pueden consumir los enlaces |
+| [Supabase: redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls) | N1 | docs | Site URL y lista de redirecciones; comodines `*` y `**` |
+| [Supabase: pricing](https://supabase.com/pricing) | N1 | docs | Plan gratuito: 500 MB, 50 000 usuarios activos al mes, 5 GB de salida, 2 proyectos activos y pausa tras 1 semana de inactividad |
+| [Supabase: gestión de datos de usuario](https://supabase.com/docs/guides/auth/managing-user-data) | N1 | docs | La documentación solo menciona `auth.admin.deleteUser()` (servidor); no documenta el borrado de la propia cuenta desde el cliente. Por eso la web solo borra la fila de progreso y lo explica |
+| `@supabase/supabase-js` 2.117.2 | N1 | registro | Versión vigente en npm (2026-10-07) |

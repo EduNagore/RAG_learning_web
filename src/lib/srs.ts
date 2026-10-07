@@ -27,10 +27,13 @@ export function applyResult(
   now: Date,
 ): SrsState {
   const card = state[questionId];
-  if (!correct) return { ...state, [questionId]: { box: 1, due: addDays(now, INTERVAL_DAYS[0]) } };
+  const reviewedAt = now.toISOString();
+  if (!correct) {
+    return { ...state, [questionId]: { box: 1, due: addDays(now, INTERVAL_DAYS[0]), reviewedAt } };
+  }
   if (!card) return state;
   const box = Math.min(card.box + 1, MAX_BOX) as Box;
-  return { ...state, [questionId]: { box, due: addDays(now, INTERVAL_DAYS[box - 1]) } };
+  return { ...state, [questionId]: { box, due: addDays(now, INTERVAL_DAYS[box - 1]), reviewedAt } };
 }
 
 export function applyResults(

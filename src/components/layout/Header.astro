@@ -1,6 +1,8 @@
 ---
 import Search from 'astro-pagefind/components/Search.astro';
 import ThemeToggle from './ThemeToggle.astro';
+import SyncBadge from '../progress/SyncBadge';
+import { isSyncConfigured } from '../../lib/supabase';
 import { url } from '../../lib/url';
 
 const nav = [
@@ -50,6 +52,9 @@ const isActive = (href: string) => path.startsWith(href);
     >
       Buscar
     </a>
+    {isSyncConfigured() && (
+      <SyncBadge client:only="react" href={url('/progreso/#sincronizacion')} />
+    )}
     <ThemeToggle />
   </div>
 </header>
