@@ -1,4 +1,5 @@
 dist/
+dist-sync/
 .astro/
 node_modules/
 .venv/

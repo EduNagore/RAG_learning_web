@@ -1,6 +1,8 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import ProgressPanel from '../../components/progress/ProgressPanel';
+import SyncPanel from '../../components/progress/SyncPanel';
+import { isSyncConfigured } from '../../lib/supabase';
 import { getLessonsByModule, getModules } from '../../lib/content';
 
 const [modules, byModule] = await Promise.all([getModules(), getLessonsByModule()]);
@@ -19,6 +21,11 @@ for (const m of modules) titles[`module:${m.id}`] = `Módulo: ${m.data.title}`;
   description="Tu avance: lecciones, notas, exámenes y copia de seguridad."
 >
   <h1 class="text-3xl font-bold tracking-tight">Mi progreso</h1>
+  {isSyncConfigured() && (
+    <div class="mt-6">
+      <SyncPanel client:only="react" />
+    </div>
+  )}
   <div class="mt-6">
     <ProgressPanel client:only="react" modules={panelModules} lessonTitles={titles} />
   </div>

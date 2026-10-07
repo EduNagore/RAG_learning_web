@@ -31,6 +31,8 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      # Sincronización: build aparte con una URL de Supabase falsa; el backend se simula en los tests.
+      - run: pnpm test:e2e:sync
 
   labs:
     name: Labs de Python (ruff + pytest)

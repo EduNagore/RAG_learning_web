@@ -62,3 +62,12 @@ test('El sitemap incluye las secciones de F6', async ({ request, baseURL }) => {
     expect(xml).toContain(path);
   }
 });
+
+test('Sin configurar la sincronización, la web funciona como siempre y no muestra nada de la nube', async ({
+  page,
+}) => {
+  await page.goto('progreso/');
+  await expect(page.getByRole('heading', { name: 'Mi progreso' })).toBeVisible();
+  await expect(page.getByText('Guardar mi progreso en la nube')).toHaveCount(0);
+  await expect(page.getByTestId('sync-badge')).toHaveCount(0);
+});

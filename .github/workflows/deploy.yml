@@ -17,6 +17,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Sincronización del progreso (opcional): variables PÚBLICAS del repositorio
+    # (Settings > Secrets and variables > Actions > Variables). Sin ellas la función no aparece.
+    env:
+      PUBLIC_SUPABASE_URL: ${{ vars.PUBLIC_SUPABASE_URL }}
+      PUBLIC_SUPABASE_ANON_KEY: ${{ vars.PUBLIC_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: withastro/action@v6
