@@ -21,6 +21,9 @@ const PAGES = [
   'proyectos/',
   'proyectos/04-servidor-mcp/',
   'progreso/',
+  'corpus/',
+  'corpus/doc-001/',
+  'teoria/m06-generacion-contexto/01-prompt-citas-y-grounding/',
 ];
 
 test.setTimeout(240_000);
