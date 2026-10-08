@@ -1,0 +1,97 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/layout/Breadcrumbs.astro';
+import { ACCESS_LABELS, KIND_LABELS, corpus, docHref, questionsForDoc } from '../../lib/corpus';
+import { url } from '../../lib/url';
+
+export function getStaticPaths() {
+  const sorted = [...corpus].sort((a, b) => a.id.localeCompare(b.id));
+  return sorted.map((doc, i) => ({
+    params: { id: doc.id },
+    props: { doc, prev: sorted[i - 1], next: sorted[i + 1] },
+  }));
+}
+
+const { doc, prev, next } = Astro.props;
+const questions = questionsForDoc(doc.id);
+const paragraphs = doc.text.split(/\n{2,}/);
+const link = 'text-indigo-700 underline underline-offset-2 dark:text-indigo-300';
+---
+
+<BaseLayout
+  title={`${doc.id}: ${doc.title}`}
+  description={`Documento ficticio del corpus de ejemplo de Nimbus Logística: ${doc.title} (${doc.department}).`}
+>
+  <Breadcrumbs items={[{ label: 'Corpus de ejemplo', href: url('/corpus/') }, { label: doc.id }]} />
+  <article class="max-w-3xl">
+    <h1 class="text-3xl font-bold tracking-tight">{doc.title}</h1>
+    <p class="mt-2 font-mono text-sm text-slate-600 dark:text-slate-400">{doc.id}</p>
+    <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-slate-200 p-4 text-sm sm:grid-cols-4 dark:border-slate-800">
+      <div>
+        <dt class="text-slate-600 dark:text-slate-400">Departamento</dt>
+        <dd class="font-medium">{doc.department}</dd>
+      </div>
+      <div>
+        <dt class="text-slate-600 dark:text-slate-400">Tipo</dt>
+        <dd class="font-medium">{KIND_LABELS[doc.kind]}</dd>
+      </div>
+      <div>
+        <dt class="text-slate-600 dark:text-slate-400">Acceso</dt>
+        <dd class="font-medium">{ACCESS_LABELS[doc.access]}</dd>
+      </div>
+      <div>
+        <dt class="text-slate-600 dark:text-slate-400">Actualizado</dt>
+        <dd class="font-medium tabular-nums">{doc.updated}</dd>
+      </div>
+    </dl>
+
+    <div class="mt-6 space-y-3" data-testid="corpus-text">
+      {paragraphs.map((p) => (
+        <p class="leading-relaxed">{p}</p>
+      ))}
+    </div>
+    <p class="mt-4 text-xs text-slate-600 dark:text-slate-400">
+      Documento ficticio, inventado para el curso.
+      {doc.access !== 'public' &&
+        ` Nivel de acceso «${ACCESS_LABELS[doc.access].toLowerCase()}»: en los laboratorios de permisos solo lo ven los perfiles autorizados.`}
+    </p>
+
+    {questions.length > 0 && (
+      <section class="mt-8" aria-labelledby="preguntas">
+        <h2 id="preguntas" class="text-lg font-semibold">
+          Preguntas de evaluación que lo usan
+        </h2>
+        <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
+          {questions.map((q) => (
+            <li>
+              <a class={link} href={`${url('/corpus/')}#${q.id}`}>
+                <span class="font-mono">{q.id}</span>
+              </a>
+              : {q.question}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+
+    <nav aria-label="Documentos" class="mt-10 flex justify-between gap-4 text-sm">
+      {prev ? (
+        <a class={link} href={docHref(prev.id)}>
+          ← {prev.id}
+        </a>
+      ) : (
+        <span />
+      )}
+      <a class={link} href={url('/corpus/')}>
+        Todos los documentos
+      </a>
+      {next ? (
+        <a class={link} href={docHref(next.id)}>
+          {next.id} →
+        </a>
+      ) : (
+        <span />
+      )}
+    </nav>
+  </article>
+</BaseLayout>
